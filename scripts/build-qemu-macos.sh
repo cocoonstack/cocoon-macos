@@ -132,18 +132,21 @@ boot_to_recovery() {  # picker -> macOS Base System -> Recovery window
   screendump "inst-01-recovery"
 }
 
-stage_install() {  # M2: open Disk Utility via absolute mouse clicks (validates the click approach)
-  local i
+open_disk_utility() {  # Recovery chooser -> Disk Utility -> Continue
+  log "opening Disk Utility (click row + Continue)"
+  click 600 465; sleep 1; click 815 525
+  sleep 35
+  screendump "du-00-open"
+}
+
+stage_install() {  # M2: identify which sidebar disk is the 80G target (the OpenCore disk must NOT be erased)
   boot_to_recovery
-  log "clicking Disk Utility row, then Continue (1280x800 coords)"
-  click 600 465; sleep 1; screendump "inst-02-du-clicked"
-  click 815 525   # Continue
-  for ((i = 1; i <= 6; i++)); do
-    sleep 20
-    screendump "inst-03-du-$(printf '%02d' "$i")"
-    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at DU step $i"; return 1; }
-  done
-  log "Disk Utility click recon done — inspect inst-*.png"
+  open_disk_utility
+  log "clicking each Internal sidebar entry to read its capacity"
+  click 220 230; sleep 2; screendump "du-01-row1"
+  click 220 261; sleep 2; screendump "du-02-row2"
+  click 220 293; sleep 2; screendump "du-03-row3"
+  log "disk-id recon done — inspect du-*.png for the 80 GB target's sidebar position"
 }
 
 stage_image() {  # M3

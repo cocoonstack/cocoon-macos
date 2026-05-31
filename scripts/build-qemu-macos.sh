@@ -27,6 +27,8 @@ MEMORY=${MEMORY:-8192}            # MiB
 SSH_PORT=${SSH_PORT:-2222}
 VNC_DISP=${VNC_DISP:-1}           # host 127.0.0.1:590<VNC_DISP>
 MON_SOCK="$WORKDIR/monitor.sock"
+QMP_SOCK="$WORKDIR/qmp.sock"
+QMP_PY="$ROOT_DIR/scripts/qmp-input.py"
 BOOT_SCREENSHOT_MINS=${BOOT_SCREENSHOT_MINS:-6}
 
 GHCR_REPO=${GHCR_REPO:-"ghcr.io/cocoonstack/cocoon-macos/tahoe"}
@@ -53,6 +55,8 @@ require_kvm() {
 }
 
 mon() { echo "$*" | socat - "UNIX-CONNECT:$MON_SOCK" >/dev/null 2>&1 || true; }
+click() { python3 "$QMP_PY" "$QMP_SOCK" click "$1" "$2" 2>/dev/null || true; }
+dclick() { python3 "$QMP_PY" "$QMP_SOCK" dclick "$1" "$2" 2>/dev/null || true; }
 
 screendump() {  # screendump <label>
   local ppm="$WORKDIR/$1.ppm" png="$ARTIFACT_DIR/$1.png"
@@ -103,6 +107,7 @@ launch_qemu() {
     -device vmware-svga \
     -display none -vnc 127.0.0.1:"$VNC_DISP" \
     -monitor unix:"$MON_SOCK",server,nowait \
+    -qmp unix:"$QMP_SOCK",server,nowait \
     -daemonize -pidfile "$WORKDIR/qemu.pid"
   QEMU_PID="$(cat "$WORKDIR/qemu.pid")"
   log "QEMU pid $QEMU_PID"
@@ -127,19 +132,18 @@ boot_to_recovery() {  # picker -> macOS Base System -> Recovery window
   screendump "inst-01-recovery"
 }
 
-stage_install() {  # M2: open Disk Utility via keyboard nav and observe (recon for the erase choreography)
+stage_install() {  # M2: open Disk Utility via absolute mouse clicks (validates the click approach)
   local i
   boot_to_recovery
-  log "navigating Recovery chooser to Disk Utility (down x3, enter)"
-  mon "sendkey down"; sleep 1; mon "sendkey down"; sleep 1; mon "sendkey down"; sleep 1
-  screendump "inst-02-du-selected"
-  mon "sendkey ret"
+  log "clicking Disk Utility row, then Continue (1280x800 coords)"
+  click 600 465; sleep 1; screendump "inst-02-du-clicked"
+  click 815 525   # Continue
   for ((i = 1; i <= 6; i++)); do
     sleep 20
     screendump "inst-03-du-$(printf '%02d' "$i")"
-    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at DU recon step $i"; return 1; }
+    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at DU step $i"; return 1; }
   done
-  log "Disk Utility recon done — inspect inst-*.png to design the erase"
+  log "Disk Utility click recon done — inspect inst-*.png"
 }
 
 stage_image() {  # M3

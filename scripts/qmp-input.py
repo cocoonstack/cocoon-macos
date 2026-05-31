@@ -102,22 +102,31 @@ class QMP:
             else:
                 self._combo(ch)
 
+    SCALE = 2
+
     def ocr_find(self, word, ymin=0, ymax=10 ** 9):
+        from PIL import Image, ImageOps
         ppm = "/tmp/_ocr.ppm"
         self.cmd("screendump", filename=ppm)
         time.sleep(1)
-        out = subprocess.run(
-            ["tesseract", ppm, "stdout", "--psm", "11", "tsv"],
-            capture_output=True, text=True,
-        ).stdout
+        img = Image.open(ppm).convert("L")
+        # upscale + autocontrast so tesseract reads small / light-background button text
+        img = ImageOps.autocontrast(img.resize((img.width * self.SCALE, img.height * self.SCALE)))
+        proc = "/tmp/_ocr.png"
+        img.save(proc)
         hits = []
-        for ln in out.splitlines()[1:]:
-            f = ln.split("\t")
-            if len(f) >= 12 and f[11].strip().lower() == word.lower():
-                left, top, w, h, conf = (int(f[6]), int(f[7]), int(f[8]), int(f[9]), float(f[10]))
-                cx, cy = left + w // 2, top + h // 2
-                if conf >= 30 and ymin <= cy <= ymax:
-                    hits.append((cx, cy, conf))
+        for psm in ("11", "6"):
+            out = subprocess.run(
+                ["tesseract", proc, "stdout", "--psm", psm, "tsv"],
+                capture_output=True, text=True,
+            ).stdout
+            for ln in out.splitlines()[1:]:
+                f = ln.split("\t")
+                if len(f) >= 12 and f[11].strip().lower() == word.lower():
+                    left, top, w, h, conf = (int(f[6]), int(f[7]), int(f[8]), int(f[9]), float(f[10]))
+                    cx, cy = (left + w // 2) // self.SCALE, (top + h // 2) // self.SCALE
+                    if conf >= 30 and ymin <= cy <= ymax:
+                        hits.append((cx, cy, conf))
         hits.sort(key=lambda t: -t[2])  # highest confidence first
         return hits
 

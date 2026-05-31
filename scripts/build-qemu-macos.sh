@@ -165,7 +165,10 @@ stage_install() {  # M2: OCR-driven Reinstall click-through, then start the inst
   ocrclick Reinstall; sleep 1; ocrclick Continue; sleep 6; screendump "oc-00-intro"
   keys ret; sleep 6; screendump "oc-01-license"                   # intro: blue 'Continue' = Return
   ocrclick Agree 600 720; sleep 4; screendump "oc-02-confirm"      # license Agree (dark theme)
-  ocrclick Agree 392 412; sleep 6; screendump "oc-03-disksel"      # confirm-sheet Agree (button row only; preprocessed OCR)
+  # confirm sheet (Disagree=blue default): try keyboard Tab->Agree then Space (position-independent),
+  # then also the PIL pixel as backup.
+  keys tab; sleep 1; keys spc; sleep 2; screendump "oc-02b-tab"
+  click 676 399; sleep 6; screendump "oc-03-disksel"
   log "disk-select: pick Macintosh, then Continue/Install"
   ocrclick Macintosh; sleep 1; keys ret; ocrclick Install; ocrclick Continue; sleep 10
   screendump "oc-04-installing"

@@ -45,6 +45,9 @@ trap cleanup EXIT
 
 require_kvm() {
   [[ -e /dev/kvm ]] || { log "FATAL: /dev/kvm missing — host has no KVM"; exit 1; }
+  # GHA runners ship /dev/kvm as root:kvm 0660 and the runner user is not in the
+  # kvm group, so QEMU gets EACCES; open it up (same as Docker-OSX's CI).
+  sudo chmod 666 /dev/kvm 2>/dev/null || true
   log "KVM present: $(ls -l /dev/kvm)"
   echo 1 | sudo tee /sys/module/kvm/parameters/ignore_msrs >/dev/null 2>&1 || true
 }

@@ -218,6 +218,25 @@ stage_install() {  # M2: OCR-driven Reinstall click-through, then start the inst
     kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at install monitor $i"; return 1; }
   done
   log "install monitor done — inspect oc-05-*.png for completion + Setup Assistant (display kept awake)"
+  capture_and_push "$GHCR_TAG-base"
+}
+
+capture_and_push() {  # stop QEMU, compress the installed macOS qcow2, push it to ghcr as a reusable base
+  local tag="$1"
+  log "stopping QEMU + capturing installed macOS qcow2"
+  mon "quit"; sleep 10
+  [[ -f "$WORKDIR/qemu.pid" ]] && kill "$(cat "$WORKDIR/qemu.pid")" 2>/dev/null || true
+  sleep 3
+  local out="$ARTIFACT_DIR/$QCOW2_NAME"
+  qemu-img convert -O qcow2 -c "$OSX_KVM_DIR/$QCOW2_NAME" "$out"
+  log "captured $(du -h "$out" | cut -f1); pushing -> $GHCR_REPO:$tag"
+  if command -v oras >/dev/null 2>&1; then
+    ( cd "$ARTIFACT_DIR" && oras push "$GHCR_REPO:$tag" \
+        --artifact-type application/vnd.cocoon.macos.disk \
+        "$QCOW2_NAME:application/octet-stream" ) || log "oras push failed (check ghcr perms)"
+  else
+    log "oras not installed; skipping push"
+  fi
 }
 
 stage_image() {  # M3

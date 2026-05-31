@@ -51,7 +51,7 @@ jobs:
           kvm-ok || true
 
       - name: Log in to ghcr
-        if: ${{ github.event.inputs.stage == 'image' }}
+        if: ${{ github.event.inputs.stage != 'boot' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -59,7 +59,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install oras
-        if: ${{ github.event.inputs.stage == 'image' }}
+        if: ${{ github.event.inputs.stage != 'boot' }}
         run: |
           ORAS_VERSION=1.2.0
           curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz" \

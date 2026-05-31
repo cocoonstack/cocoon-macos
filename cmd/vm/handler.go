@@ -26,7 +26,7 @@ func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 	mem, _ := cmd.Flags().GetString("memory")
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	sshPort, _ := cmd.Flags().GetInt("ssh-port")
-	spec := qemu.Spec{Name: name, Image: args[0], CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: sshPort}
+	spec := qemu.Spec{Name: name, Disk: args[0], CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: sshPort}
 	_ = spec.Args() // P2: launch qemu-system-x86_64 with these args
 	return todo("vm run", "P2: create per-VM overlay from %q + launch QEMU (spec=%+v)", args[0], spec)
 }

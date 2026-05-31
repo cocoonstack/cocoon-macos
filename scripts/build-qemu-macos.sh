@@ -126,30 +126,33 @@ PY
 launch_qemu() {
   cd "$OSX_KVM_DIR"
   log "launching QEMU headless (VNC 127.0.0.1:590$VNC_DISP, ssh :$SSH_PORT, monitor $MON_SOCK)"
-  qemu-system-x86_64 \
-    -enable-kvm -m "$MEMORY" \
-    -cpu Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt,check \
-    -machine q35 \
-    -smp "$CPUS",cores=2,sockets=1 \
-    -device qemu-xhci,id=xhci -device usb-kbd,bus=xhci.0 -device usb-tablet,bus=xhci.0 \
-    -device isa-applesmc,osk="$OSK" \
-    -drive if=pflash,format=raw,readonly=on,file=OVMF_CODE_4M.fd \
-    -drive if=pflash,format=raw,file=OVMF_VARS.fd \
-    -smbios type=2 \
-    -device ich9-ahci,id=sata \
-    -drive id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,file=OpenCore/OpenCore.qcow2 \
-    -device ide-hd,bus=sata.2,drive=OpenCoreBoot \
-    -drive id=InstallMedia,if=none,file=BaseSystem.img,format=raw \
-    -device ide-hd,bus=sata.3,drive=InstallMedia \
-    -drive id=MacHDD,if=none,file="$QCOW2_NAME",format=qcow2 \
-    -device ide-hd,bus=sata.4,drive=MacHDD \
-    -netdev user,id=net0,hostfwd=tcp::"$SSH_PORT"-:22 \
-    -device virtio-net-pci,netdev=net0,id=net0,mac=52:54:00:c9:18:27 \
-    -device vmware-svga \
-    -display none -vnc 127.0.0.1:"$VNC_DISP" \
-    -monitor unix:"$MON_SOCK",server,nowait \
-    -qmp unix:"$QMP_SOCK",server,nowait \
+  local args=(
+    -enable-kvm -m "$MEMORY"
+    -cpu Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt,check
+    -machine q35
+    -smp "$CPUS",cores=2,sockets=1
+    -device qemu-xhci,id=xhci -device usb-kbd,bus=xhci.0 -device usb-tablet,bus=xhci.0
+    -device isa-applesmc,osk="$OSK"
+    -drive if=pflash,format=raw,readonly=on,file=OVMF_CODE_4M.fd
+    -drive if=pflash,format=raw,file=OVMF_VARS.fd
+    -smbios type=2
+    -device ich9-ahci,id=sata
+    -drive id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,file=OpenCore/OpenCore.qcow2
+    -device ide-hd,bus=sata.2,drive=OpenCoreBoot
+    -drive id=MacHDD,if=none,file="$QCOW2_NAME",format=qcow2
+    -device ide-hd,bus=sata.4,drive=MacHDD
+    -netdev user,id=net0,hostfwd=tcp::"$SSH_PORT"-:22
+    -device virtio-net-pci,netdev=net0,id=net0,mac=52:54:00:c9:18:27
+    -device vmware-svga
+    -display none -vnc 127.0.0.1:"$VNC_DISP"
+    -monitor unix:"$MON_SOCK",server,nowait
+    -qmp unix:"$QMP_SOCK",server,nowait
     -daemonize -pidfile "$WORKDIR/qemu.pid"
+  )
+  if [[ -f BaseSystem.img ]]; then  # install stage only; setup/boot of an installed image omits it
+    args+=(-drive id=InstallMedia,if=none,file=BaseSystem.img,format=raw -device ide-hd,bus=sata.3,drive=InstallMedia)
+  fi
+  qemu-system-x86_64 "${args[@]}"
   QEMU_PID="$(cat "$WORKDIR/qemu.pid")"
   log "QEMU pid $QEMU_PID"
 }
@@ -240,23 +243,48 @@ capture_and_push() {  # stop QEMU, compress the installed macOS qcow2, push it t
   fi
 }
 
-stage_image() {  # M3
-  log "compacting + capturing $QCOW2_NAME"
-  qemu-img convert -O qcow2 -c "$OSX_KVM_DIR/$QCOW2_NAME" "$ARTIFACT_DIR/$QCOW2_NAME"
-  log "TODO(M3): oras push $ARTIFACT_DIR/$QCOW2_NAME -> $GHCR_REPO:$GHCR_TAG"
+pull_base_image() {  # fetch the installed macOS base from ghcr as the boot disk (fast: skips the ~50min install)
+  cd "$OSX_KVM_DIR"
+  log "pulling base image $GHCR_REPO:${BASE_TAG:-$GHCR_TAG-base}"
+  oras pull "$GHCR_REPO:${BASE_TAG:-$GHCR_TAG-base}" -o .
+  [[ -f "$QCOW2_NAME" ]] || { log "FATAL: base image $QCOW2_NAME not pulled"; exit 1; }
+  log "base image present: $(du -h "$QCOW2_NAME" | cut -f1)"
+  [[ -f OVMF_VARS.fd ]] || cp OVMF_VARS-1920x1080.fd OVMF_VARS.fd
+}
+
+boot_installed() {  # OpenCore picker -> installed macOS (2nd entry, right of EFI) -> Setup Assistant
+  sleep 75
+  screendump "setup-00-picker"
+  log "booting installed macOS (1x right + repeated ret)"
+  mon "sendkey right"; sleep 2
+  local t
+  for t in 1 2 3 4 5; do mon "sendkey ret"; sleep 8; done
+}
+
+stage_setup() {  # M2b: boot the installed base image and verify it reaches Setup Assistant fast (recon)
+  boot_installed
+  local i
+  for ((i = 1; i <= 10; i++)); do
+    python3 "$QMP_PY" "$QMP_SOCK" move $((420 + i % 180)) 420 2>/dev/null || true  # jiggle: keep display awake
+    sleep 30
+    screendump "setup-01-$(printf '%02d' "$i")"
+    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at setup recon $i"; return 1; }
+  done
+  log "setup recon done — verify fast boot to Setup Assistant (setup-01-*.png)"
 }
 
 main() {
   require_kvm
   setup_osx_kvm
-  fetch_recovery
-  [[ "$STAGE" == "install" || "$STAGE" == "image" ]] && configure_opencore
-  launch_qemu
   case "$STAGE" in
-    boot) stage_boot ;;
-    install) stage_install ;;
-    image) stage_image ;;
-    *) log "unknown STAGE=$STAGE"; exit 2 ;;
+    boot)
+      fetch_recovery; launch_qemu; stage_boot ;;
+    install)
+      fetch_recovery; configure_opencore; launch_qemu; stage_install ;;
+    setup)
+      pull_base_image; configure_opencore; launch_qemu; stage_setup ;;
+    *)
+      log "unknown STAGE=$STAGE"; exit 2 ;;
   esac
   log "done (stage=$STAGE)"
 }

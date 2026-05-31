@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       stage:
-        description: "boot (M1) | install (M2) | image (M3)"
+        description: "boot (M1) | install (M2) | setup (M2b: pull base, automate Setup Assistant)"
         required: true
         default: "boot"
       version_tag:

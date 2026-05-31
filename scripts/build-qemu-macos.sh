@@ -139,14 +139,14 @@ open_disk_utility() {  # Recovery chooser -> Disk Utility -> Continue
   screendump "du-00-open"
 }
 
-stage_install() {  # M2: identify which sidebar disk is the 80G target (the OpenCore disk must NOT be erased)
+stage_install() {  # M2: select 85.9GB target (disk0 = 1st sidebar row) and open the Erase sheet (recon)
   boot_to_recovery
   open_disk_utility
-  log "clicking each Internal sidebar entry to read its capacity"
-  click 220 230; sleep 2; screendump "du-01-row1"
-  click 220 261; sleep 2; screendump "du-02-row2"
-  click 220 293; sleep 2; screendump "du-03-row3"
-  log "disk-id recon done — inspect du-*.png for the 80 GB target's sidebar position"
+  log "selecting disk0 (85.9GB uninitialized target) + opening Erase sheet"
+  click 220 230; sleep 2; screendump "er-00-selected"   # 1st row = QEMU HARDDISK 85.9GB disk0
+  click 987 155; sleep 3; screendump "er-01-sheet"        # Erase toolbar button
+  sleep 2; screendump "er-02-sheet"
+  log "erase-sheet recon — read format default + Erase/Cancel button positions"
 }
 
 stage_image() {  # M3

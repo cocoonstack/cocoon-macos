@@ -142,15 +142,24 @@ open_disk_utility() {  # Recovery chooser -> Disk Utility -> Continue
   screendump "du-00-open"
 }
 
-stage_install() {  # M2: open Recovery Terminal via Shift-Cmd-T, erase disk0 as APFS via diskutil
+erase_target() {  # open Terminal (Shift-Cmd-T), erase disk0 as APFS "Macintosh"
+  log "erasing disk0 via Terminal"
+  chord shift meta_l t; sleep 4
+  typestr "diskutil eraseDisk APFS Macintosh disk0"; keys ret; sleep 30
+  screendump "ri-00-erased"
+  chord meta_l q; sleep 3   # quit Terminal -> back to Recovery chooser
+}
+
+stage_install() {  # M2: recon the Reinstall macOS Tahoe GUI flow (intro/license/disk-select)
   boot_to_recovery
-  log "opening Terminal (Shift-Cmd-T)"
-  chord shift meta_l t; sleep 4; screendump "t-00-terminal"
-  log "diskutil list (confirm disk0 = 85.9GB target)"
-  typestr "diskutil list"; keys ret; sleep 3; screendump "t-01-list"
-  log "erasing disk0 as APFS volume 'Macintosh'"
-  typestr "diskutil eraseDisk APFS Macintosh disk0"; keys ret; sleep 30; screendump "t-02-erased"
-  log "terminal erase attempted — verify APFS volume created on disk0"
+  erase_target
+  screendump "ri-01-chooser"
+  log "starting Reinstall macOS Tahoe (row 2 + Continue)"
+  click 600 280; sleep 1; click 815 525; sleep 6; screendump "ri-02-intro"
+  keys ret; sleep 4; screendump "ri-03-ret1"
+  keys ret; sleep 4; screendump "ri-04-ret2"
+  keys ret; sleep 4; screendump "ri-05-ret3"
+  log "reinstall flow recon — inspect ri-*.png for the click-through layout"
 }
 
 stage_image() {  # M3

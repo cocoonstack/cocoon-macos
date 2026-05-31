@@ -42,7 +42,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            qemu-system-x86 qemu-utils dmg2img socat netpbm python3-pip oras
+            qemu-system-x86 qemu-utils dmg2img socat netpbm python3-pip
 
       - name: Verify KVM (load-bearing — gates the whole build)
         run: |
@@ -57,6 +57,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install oras
+        if: ${{ github.event.inputs.stage == 'image' }}
+        run: |
+          ORAS_VERSION=1.2.0
+          curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin oras
+          oras version
 
       - name: Build (stage=${{ github.event.inputs.stage }})
         run: bash scripts/build-qemu-macos.sh

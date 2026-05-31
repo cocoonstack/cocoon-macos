@@ -42,7 +42,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            qemu-system-x86 qemu-utils dmg2img socat netpbm python3-pip
+            qemu-system-x86 qemu-utils dmg2img socat netpbm python3-pip tesseract-ocr
 
       - name: Verify KVM (load-bearing — gates the whole build)
         run: |

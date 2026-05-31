@@ -15,6 +15,7 @@ Screen size defaults to 1280x800; override with QMP_W / QMP_H env vars.
 import json
 import os
 import socket
+import subprocess
 import sys
 import time
 
@@ -101,6 +102,35 @@ class QMP:
             else:
                 self._combo(ch)
 
+    def ocr_find(self, word, ymin=0, ymax=10 ** 9):
+        ppm = "/tmp/_ocr.ppm"
+        self.cmd("screendump", filename=ppm)
+        time.sleep(1)
+        out = subprocess.run(
+            ["tesseract", ppm, "stdout", "--psm", "11", "tsv"],
+            capture_output=True, text=True,
+        ).stdout
+        hits = []
+        for ln in out.splitlines()[1:]:
+            f = ln.split("\t")
+            if len(f) >= 12 and f[11].strip().lower() == word.lower():
+                left, top, w, h, conf = (int(f[6]), int(f[7]), int(f[8]), int(f[9]), float(f[10]))
+                cx, cy = left + w // 2, top + h // 2
+                if conf >= 30 and ymin <= cy <= ymax:
+                    hits.append((cx, cy, conf))
+        hits.sort(key=lambda t: -t[2])  # highest confidence first
+        return hits
+
+    def ocrclick(self, word, ymin=0, ymax=10 ** 9):
+        hits = self.ocr_find(word, ymin, ymax)
+        if not hits:
+            print("NOTFOUND %s" % word)
+            return False
+        cx, cy, conf = hits[0]
+        self.click(cx, cy)
+        print("CLICK %s (%d,%d) conf=%.0f" % (word, cx, cy, conf))
+        return True
+
 
 def main():
     sock, op = sys.argv[1], sys.argv[2]
@@ -117,6 +147,11 @@ def main():
         q._combo(*sys.argv[3:])
     elif op == "type":
         q.type(sys.argv[3])
+    elif op == "ocrclick":
+        word = sys.argv[3]
+        ymin = int(sys.argv[4]) if len(sys.argv) > 4 else 0
+        ymax = int(sys.argv[5]) if len(sys.argv) > 5 else 10 ** 9
+        sys.exit(0 if q.ocrclick(word, ymin, ymax) else 3)
     elif op == "screendump":
         q.cmd("screendump", filename=sys.argv[3])
     else:

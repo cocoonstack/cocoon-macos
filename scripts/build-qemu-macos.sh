@@ -60,6 +60,7 @@ dclick() { python3 "$QMP_PY" "$QMP_SOCK" dclick "$1" "$2" 2>/dev/null || true; }
 typestr() { python3 "$QMP_PY" "$QMP_SOCK" type "$1" 2>/dev/null || true; }
 keys() { python3 "$QMP_PY" "$QMP_SOCK" key "$@" 2>/dev/null || true; }
 chord() { python3 "$QMP_PY" "$QMP_SOCK" chord "$@" 2>/dev/null || true; }
+ocrclick() { python3 "$QMP_PY" "$QMP_SOCK" ocrclick "$@" 2>&1 | sed 's/^/[ocr] /' || true; }   # WORD [ymin ymax]
 
 screendump() {  # screendump <label>
   local ppm="$WORKDIR/$1.ppm" png="$ARTIFACT_DIR/$1.png"
@@ -157,21 +158,23 @@ start_reinstall_to_license() {  # chooser -> Reinstall -> intro -> license
   keys ret; sleep 5                                  # intro Continue (default) -> license
 }
 
-agree_license() {  # license Agree (685,650) -> confirm sheet Agree (690,405)
-  click 685 650; sleep 3      # license "Agree"
-  click 690 405; sleep 6      # confirm-sheet "Agree" (Disagree is the blue default, so must click)
-}
-
-stage_install() {  # M2: reach disk-select, try to start the install, observe first-reboot behavior
+stage_install() {  # M2: OCR-driven Reinstall click-through, then start the install + observe
   boot_to_recovery
-  erase_target
-  start_reinstall_to_license
-  agree_license
-  screendump "in-00-disksel"
-  log "try Return to start install (single eligible disk may be preselected)"
-  keys ret; sleep 8; screendump "in-01-afterret"
-  sleep 5; screendump "in-02"
-  log "disk-select recon + install-start attempt — inspect in-*.png"
+  erase_target            # Terminal: erase disk0 -> APFS "Macintosh"; back at chooser
+  log "Reinstall macOS Tahoe (OCR click-through)"
+  ocrclick Reinstall; sleep 1; ocrclick Continue; sleep 6; screendump "oc-00-intro"
+  ocrclick Continue; sleep 5; screendump "oc-01-license"           # intro
+  ocrclick Agree 600 720; sleep 3; screendump "oc-02-confirm"      # license Agree (button band)
+  ocrclick Agree 360 470; sleep 6; screendump "oc-03-disksel"      # confirm-sheet Agree
+  log "disk-select: pick Macintosh, then Continue/Install"
+  ocrclick Macintosh; sleep 1; ocrclick Continue; ocrclick Install; sleep 10
+  screendump "oc-04-installing"
+  local i
+  for ((i = 1; i <= 10; i++)); do
+    sleep 30; screendump "oc-05-$(printf '%02d' "$i")"
+    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at install monitor $i"; return 1; }
+  done
+  log "OCR install flow attempted — inspect oc-*.png (did the ~15GB install start?)"
 }
 
 stage_image() {  # M3

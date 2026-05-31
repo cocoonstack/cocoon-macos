@@ -1,0 +1,8 @@
+/work/
+/bin/
+/cocoon-macos
+*.qcow2
+*.img
+*.dmg
+*.fd
+/os-image/**/OpenCore.qcow2

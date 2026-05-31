@@ -1,0 +1,41 @@
+name: lint
+
+on:
+  push:
+    branches: ['*']
+    paths-ignore:
+      - 'os-image/**'
+      - 'scripts/**'
+  pull_request:
+    paths-ignore:
+      - 'os-image/**'
+      - 'scripts/**'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout cocoon-macos
+        uses: actions/checkout@v5
+
+      - name: Checkout cocoon (dependency)
+        uses: actions/checkout@v5
+        with:
+          repository: cocoonstack/cocoon
+          path: _cocoon
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Point replace at in-workspace cocoon
+        run: go mod edit -replace github.com/cocoonstack/cocoon=./_cocoon
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.9.0
+
+      - name: Check formatting
+        run: golangci-lint fmt --diff

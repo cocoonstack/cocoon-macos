@@ -1,0 +1,64 @@
+name: build-macos-image
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Image tag under ghcr.io/cocoonstack/cocoon-macos/tahoe"
+        required: true
+        default: "26"
+      disk_size:
+        description: "Disk image size"
+        required: true
+        default: "80G"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      MACOS_VERSION: tahoe
+      QCOW2_NAME: macos-tahoe-26.qcow2
+      GHCR_TAG: ${{ github.event.inputs.version_tag }}
+      DISK_SIZE: ${{ github.event.inputs.disk_size }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/share/boost /opt/ghc \
+            /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Install QEMU/OVMF/tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 qemu-utils ovmf dmg2img python3 python3-pip oras
+
+      - name: Verify KVM (load-bearing — gates the whole build)
+        run: |
+          ls -l /dev/kvm
+          kvm-ok || true
+
+      - name: Log in to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push golden macOS image
+        run: bash scripts/build-qemu-macos.sh
+
+      - name: Upload build artifacts (logs/screenshots) on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: work/qemu-build/artifacts/
+          if-no-files-found: ignore

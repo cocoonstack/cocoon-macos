@@ -150,16 +150,22 @@ erase_target() {  # open Terminal (Shift-Cmd-T), erase disk0 as APFS "Macintosh"
   chord meta_l q; sleep 3   # quit Terminal -> back to Recovery chooser
 }
 
-stage_install() {  # M2: recon the Reinstall macOS Tahoe GUI flow (intro/license/disk-select)
+start_reinstall_to_license() {  # chooser -> Reinstall -> intro -> license
+  click 600 280; sleep 1; click 815 525; sleep 6   # Reinstall row + Continue -> intro
+  keys ret; sleep 5                                  # intro Continue (default) -> license
+}
+
+stage_install() {  # M2: recon Agree / confirm-sheet / disk-select coords (stop before the 15GB download)
   boot_to_recovery
   erase_target
-  screendump "ri-01-chooser"
-  log "starting Reinstall macOS Tahoe (row 2 + Continue)"
-  click 600 280; sleep 1; click 815 525; sleep 6; screendump "ri-02-intro"
-  keys ret; sleep 4; screendump "ri-03-ret1"
-  keys ret; sleep 4; screendump "ri-04-ret2"
-  keys ret; sleep 4; screendump "ri-05-ret3"
-  log "reinstall flow recon — inspect ri-*.png for the click-through layout"
+  start_reinstall_to_license
+  screendump "ri-10-license"
+  log "click Agree on license"
+  click 744 646; sleep 3; screendump "ri-11-confirm"     # license Agree -> confirm sheet
+  log "click Agree on confirm sheet (guess)"
+  click 744 360; sleep 5; screendump "ri-12-disksel"      # confirm Agree -> disk-select
+  sleep 3; screendump "ri-13-disksel"
+  log "recon done — inspect ri-1*.png for Agree/confirm/disk-select layout (download NOT started)"
 }
 
 stage_image() {  # M3

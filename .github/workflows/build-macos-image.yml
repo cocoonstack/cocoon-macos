@@ -3,6 +3,10 @@ name: build-macos-image
 on:
   workflow_dispatch:
     inputs:
+      stage:
+        description: "boot (M1) | install (M2) | image (M3)"
+        required: true
+        default: "boot"
       version_tag:
         description: "Image tag under ghcr.io/cocoonstack/cocoon-macos/tahoe"
         required: true
@@ -21,10 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
-      MACOS_VERSION: tahoe
-      QCOW2_NAME: macos-tahoe-26.qcow2
+      STAGE: ${{ github.event.inputs.stage }}
       GHCR_TAG: ${{ github.event.inputs.version_tag }}
       DISK_SIZE: ${{ github.event.inputs.disk_size }}
+      QCOW2_NAME: macos-tahoe-26.qcow2
     steps:
       - uses: actions/checkout@v5
 
@@ -34,31 +38,33 @@ jobs:
             /usr/local/lib/android /opt/hostedtoolcache/CodeQL
           df -h /
 
-      - name: Install QEMU/OVMF/tools
+      - name: Install QEMU + tools
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            qemu-system-x86 qemu-utils ovmf dmg2img python3 python3-pip oras
+            qemu-system-x86 qemu-utils dmg2img socat netpbm python3-pip oras
 
       - name: Verify KVM (load-bearing — gates the whole build)
         run: |
-          ls -l /dev/kvm
+          ls -l /dev/kvm || { echo "::error::/dev/kvm absent on this runner"; exit 1; }
+          sudo apt-get install -y cpu-checker || true
           kvm-ok || true
 
       - name: Log in to ghcr
+        if: ${{ github.event.inputs.stage == 'image' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build + push golden macOS image
+      - name: Build (stage=${{ github.event.inputs.stage }})
         run: bash scripts/build-qemu-macos.sh
 
-      - name: Upload build artifacts (logs/screenshots) on failure
+      - name: Upload artifacts (screenshots / logs)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts
+          name: macos-build-${{ github.event.inputs.stage }}
           path: work/qemu-build/artifacts/
-          if-no-files-found: ignore
+          if-no-files-found: warn

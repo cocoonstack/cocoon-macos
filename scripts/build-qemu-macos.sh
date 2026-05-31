@@ -1,113 +1,143 @@
 #!/usr/bin/env bash
 # Build a golden macOS (Tahoe 26) qcow2 on an x86 Linux/KVM host and push it to
-# ghcr. Modeled on cocoonstack/windows scripts/build-qemu.sh, but macOS has no
-# autounattend equivalent — the install step (automate_install) is the R&D spike.
+# ghcr. Leans on kholia/OSX-KVM (which already integrates LongQT-sea's Tahoe
+# OpenCore): it provides fetch-macOS-v2.py, OVMF, OpenCore.qcow2 and the OSK.
+#
+# STAGE controls how far we go (the macOS install has no autounattend, so it is
+# the iterated R&D spike — driven via the Action with retries):
+#   boot    — M1: boot headless to the macOS Recovery/installer, screenshot proof
+#   install — M2: drive Recovery -> erase -> startosinstall headlessly (sendkey)
+#   image   — M3: capture + push the golden qcow2 to ghcr
 set -euo pipefail
 
+STAGE=${STAGE:-boot}
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 WORKDIR=${WORKDIR:-"$ROOT_DIR/work/qemu-build"}
 ARTIFACT_DIR=${ARTIFACT_DIR:-"$WORKDIR/artifacts"}
+OSX_KVM_DIR="$WORKDIR/OSX-KVM"
 
-MACOS_VERSION=${MACOS_VERSION:-"tahoe"}     # OSX-KVM fetch-macOS-v2.py product
+OSX_KVM_REPO=${OSX_KVM_REPO:-"https://github.com/kholia/OSX-KVM.git"}
+TAHOE_BOARD_ID=${TAHOE_BOARD_ID:-"Mac-CFF7D910A743CAAF"}   # macOS Tahoe (26), from OSX-KVM boards.json
+OSK="ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
+
 QCOW2_NAME=${QCOW2_NAME:-"macos-tahoe-26.qcow2"}
 DISK_SIZE=${DISK_SIZE:-80G}
 CPUS=${CPUS:-4}
-MEMORY=${MEMORY:-8G}
+MEMORY=${MEMORY:-8192}            # MiB
 SSH_PORT=${SSH_PORT:-2222}
-VNC_DISP=${VNC_DISP:-1}
-QMP_SOCK="$WORKDIR/qmp.sock"
+VNC_DISP=${VNC_DISP:-1}           # host 127.0.0.1:590<VNC_DISP>
+MON_SOCK="$WORKDIR/monitor.sock"
+BOOT_SCREENSHOT_MINS=${BOOT_SCREENSHOT_MINS:-6}
+
 GHCR_REPO=${GHCR_REPO:-"ghcr.io/cocoonstack/cocoon-macos/tahoe"}
 GHCR_TAG=${GHCR_TAG:-"26"}
-
-# OpenCore EFI for Tahoe — vendored from LongQT-sea/OpenCore-ISO (the Tahoe upstream of record).
-OPENCORE_IMG=${OPENCORE_IMG:-"$ROOT_DIR/os-image/tahoe/OpenCore.qcow2"}
-OVMF_CODE=${OVMF_CODE:-"/usr/share/OVMF/OVMF_CODE.fd"}
-OVMF_VARS_SRC=${OVMF_VARS_SRC:-"/usr/share/OVMF/OVMF_VARS.fd"}
 
 QEMU_PID=""
 mkdir -p "$WORKDIR" "$ARTIFACT_DIR"
 
 log() { printf '[build-macos] %s\n' "$*"; }
-cleanup() { set +e; [[ -n "$QEMU_PID" ]] && { kill "$QEMU_PID" 2>/dev/null; wait "$QEMU_PID" 2>/dev/null; }; }
+cleanup() {
+  set +e
+  [[ -n "$QEMU_PID" ]] && kill "$QEMU_PID" 2>/dev/null
+  [[ -f "$WORKDIR/qemu.pid" ]] && kill "$(cat "$WORKDIR/qemu.pid")" 2>/dev/null
+}
 trap cleanup EXIT
 
 require_kvm() {
-  [[ -e /dev/kvm ]] || { log "FATAL: /dev/kvm missing — need a host with KVM (incl. GitHub ubuntu-latest)"; exit 1; }
+  [[ -e /dev/kvm ]] || { log "FATAL: /dev/kvm missing — host has no KVM"; exit 1; }
   log "KVM present: $(ls -l /dev/kvm)"
+  echo 1 | sudo tee /sys/module/kvm/parameters/ignore_msrs >/dev/null 2>&1 || true
+}
+
+mon() { echo "$*" | socat - "UNIX-CONNECT:$MON_SOCK" >/dev/null 2>&1 || true; }
+
+screendump() {  # screendump <label>
+  local ppm="$WORKDIR/$1.ppm" png="$ARTIFACT_DIR/$1.png"
+  mon "screendump $ppm"
+  sleep 1
+  [[ -f "$ppm" ]] && { pnmtopng "$ppm" >"$png" 2>/dev/null || cp "$ppm" "$png"; rm -f "$ppm"; log "screenshot -> $1.png"; }
+}
+
+setup_osx_kvm() {
+  [[ -d "$OSX_KVM_DIR" ]] || git clone --depth 1 "$OSX_KVM_REPO" "$OSX_KVM_DIR"
+  python3 -m pip install --quiet --user requests click 2>/dev/null || true
 }
 
 fetch_recovery() {
-  # OSX-KVM fetch-macOS-v2.py pulls the recovery dmg from Apple's CDN, then BaseSystem.img.
-  log "fetching macOS $MACOS_VERSION recovery from Apple CDN"
-  # TODO(P0): vendor OSX-KVM's fetch-macOS-v2.py and call:
-  #   python3 fetch-macOS-v2.py --action download --board-id <Tahoe> -o "$WORKDIR/BaseSystem.dmg"
-  #   dmg2img "$WORKDIR/BaseSystem.dmg" "$WORKDIR/BaseSystem.img"
-  :
-}
-
-prepare_disk() {
-  log "creating blank install target qcow2 ($DISK_SIZE)"
-  qemu-img create -f qcow2 "$WORKDIR/$QCOW2_NAME" "$DISK_SIZE"
-  cp "$OVMF_VARS_SRC" "$WORKDIR/OVMF_VARS.fd"
+  cd "$OSX_KVM_DIR"
+  if [[ ! -f BaseSystem.img ]]; then
+    log "fetching macOS Tahoe recovery (board-id $TAHOE_BOARD_ID) from Apple CDN"
+    python3 fetch-macOS-v2.py --board-id "$TAHOE_BOARD_ID"
+    log "converting BaseSystem.dmg -> BaseSystem.img"
+    dmg2img -i BaseSystem.dmg BaseSystem.img
+  fi
+  [[ -f "$QCOW2_NAME" ]] || qemu-img create -f qcow2 "$QCOW2_NAME" "$DISK_SIZE"
+  [[ -f OVMF_VARS.fd ]] || cp OVMF_VARS-1920x1080.fd OVMF_VARS.fd
 }
 
 launch_qemu() {
-  log "launching QEMU (headless, VNC :$VNC_DISP, ssh :$SSH_PORT, QMP $QMP_SOCK)"
-  # TODO(P0/P1): finalize the arg vector (mirror qemu/launch.go Spec.Args):
-  #   -machine q35,accel=kvm -cpu Skylake-Client-v4,vendor=GenuineIntel,+invtsc
-  #   -smp "$CPUS" -m "$MEMORY"
-  #   -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE"
-  #   -drive if=pflash,format=raw,file="$WORKDIR/OVMF_VARS.fd"
-  #   -drive id=opencore,if=none,file="$OPENCORE_IMG",format=qcow2  -device ide-hd,bus=...,drive=opencore
-  #   -drive id=basesystem,if=none,file="$WORKDIR/BaseSystem.img",format=raw -device ...
-  #   -drive id=macos,if=none,file="$WORKDIR/$QCOW2_NAME",format=qcow2 -device virtio-blk-pci,drive=macos
-  #   -device virtio-tablet-pci
-  #   -netdev user,id=net0,hostfwd=tcp::"$SSH_PORT"-:22 -device virtio-net-pci,netdev=net0
-  #   -vnc :"$VNC_DISP" -qmp unix:"$QMP_SOCK",server,nowait -daemonize
-  :
+  cd "$OSX_KVM_DIR"
+  log "launching QEMU headless (VNC 127.0.0.1:590$VNC_DISP, ssh :$SSH_PORT, monitor $MON_SOCK)"
+  qemu-system-x86_64 \
+    -enable-kvm -m "$MEMORY" \
+    -cpu Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt,check \
+    -machine q35 \
+    -smp "$CPUS",cores=2,sockets=1 \
+    -device qemu-xhci,id=xhci -device usb-kbd,bus=xhci.0 -device usb-tablet,bus=xhci.0 \
+    -device isa-applesmc,osk="$OSK" \
+    -drive if=pflash,format=raw,readonly=on,file=OVMF_CODE_4M.fd \
+    -drive if=pflash,format=raw,file=OVMF_VARS.fd \
+    -smbios type=2 \
+    -device ich9-ahci,id=sata \
+    -drive id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,file=OpenCore/OpenCore.qcow2 \
+    -device ide-hd,bus=sata.2,drive=OpenCoreBoot \
+    -drive id=InstallMedia,if=none,file=BaseSystem.img,format=raw \
+    -device ide-hd,bus=sata.3,drive=InstallMedia \
+    -drive id=MacHDD,if=none,file="$QCOW2_NAME",format=qcow2 \
+    -device ide-hd,bus=sata.4,drive=MacHDD \
+    -netdev user,id=net0,hostfwd=tcp::"$SSH_PORT"-:22 \
+    -device virtio-net-pci,netdev=net0,id=net0,mac=52:54:00:c9:18:27 \
+    -device vmware-svga \
+    -display none -vnc 127.0.0.1:"$VNC_DISP" \
+    -monitor unix:"$MON_SOCK",server,nowait \
+    -daemonize -pidfile "$WORKDIR/qemu.pid"
+  QEMU_PID="$(cat "$WORKDIR/qemu.pid")"
+  log "QEMU pid $QEMU_PID"
 }
 
-automate_install() {
-  # *** THE SPIKE (P0) ***  macOS has no autounattend.
-  # Candidate A: drive Recovery's Disk Utility + installer via QMP `sendkey` + VNC-screenshot OCR.
-  # Candidate B: open Recovery > Utilities > Terminal, then script:
-  #     diskutil eraseDisk APFS Macintosh disk0
-  #     "/Volumes/.../startosinstall" --agreetolicense --nointeraction --volume /Volumes/Macintosh
-  #   driven keystroke-by-keystroke over QMP sendkey.
-  # Candidate C (fallback, if P0 spike stalls): a one-time manually-built golden qcow2,
-  #   committed/cached so CI only derives + provisions from it.
-  log "TODO(P0): automate the macOS install — load-bearing spike, gates the whole pipeline"
+stage_boot() {  # M1: capture screenshots over time to prove OpenCore -> Recovery boot
+  local i
+  for ((i = 1; i <= BOOT_SCREENSHOT_MINS; i++)); do
+    sleep 60
+    screendump "boot-${i}min"
+    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited early"; return 1; }
+  done
+  log "M1 boot stage done — inspect artifacts/boot-*.png for the Recovery screen"
+}
+
+stage_install() {  # M2: TODO — headless install via sendkey/screendump choreography
+  log "TODO(M2): drive Recovery -> Disk Utility erase -> startosinstall via mon 'sendkey ...'"
   return 1
 }
 
-provision_via_ssh() {
-  # After install + first boot, enable Remote Login and provision (cocoon-agent, etc.) over SSH.
-  log "TODO(P1): wait for SSH on :$SSH_PORT, enable Remote Login, provision guest"
-  :
-}
-
-capture_image() {
+stage_image() {  # M3
   log "compacting + capturing $QCOW2_NAME"
-  qemu-img convert -O qcow2 -c "$WORKDIR/$QCOW2_NAME" "$ARTIFACT_DIR/$QCOW2_NAME"
-}
-
-push_ghcr() {
-  log "pushing $ARTIFACT_DIR/$QCOW2_NAME -> $GHCR_REPO:$GHCR_TAG"
-  # TODO(P3): align OCI layout with cocoon/epoch image pull. Likely:
-  #   oras push "$GHCR_REPO:$GHCR_TAG" "$ARTIFACT_DIR/$QCOW2_NAME:application/vnd.cocoon.macos.qcow2"
-  :
+  qemu-img convert -O qcow2 -c "$OSX_KVM_DIR/$QCOW2_NAME" "$ARTIFACT_DIR/$QCOW2_NAME"
+  log "TODO(M3): oras push $ARTIFACT_DIR/$QCOW2_NAME -> $GHCR_REPO:$GHCR_TAG"
 }
 
 main() {
   require_kvm
+  setup_osx_kvm
   fetch_recovery
-  prepare_disk
   launch_qemu
-  automate_install
-  provision_via_ssh
-  capture_image
-  push_ghcr
-  log "done"
+  case "$STAGE" in
+    boot) stage_boot ;;
+    install) stage_install ;;
+    image) stage_image ;;
+    *) log "unknown STAGE=$STAGE"; exit 2 ;;
+  esac
+  log "done (stage=$STAGE)"
 }
 
 main "$@"

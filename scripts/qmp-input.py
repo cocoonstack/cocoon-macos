@@ -21,6 +21,19 @@ import time
 W = int(os.environ.get("QMP_W", "1280"))
 H = int(os.environ.get("QMP_H", "800"))
 
+CHARMAP = {
+    " ": "spc", "\n": "ret", "\t": "tab", "-": "minus", "=": "equal",
+    ".": "dot", ",": "comma", "/": "slash", ";": "semicolon",
+    "'": "apostrophe", "\\": "backslash", "[": "bracket_left",
+    "]": "bracket_right", "`": "grave_accent",
+}
+SHIFTMAP = {
+    "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7",
+    "*": "8", "(": "9", ")": "0", "_": "minus", "+": "equal", ":": "semicolon",
+    '"': "apostrophe", "<": "comma", ">": "dot", "?": "slash", "~": "grave_accent",
+    "{": "bracket_left", "}": "bracket_right", "|": "backslash",
+}
+
 
 def abs_axis(px, py):
     return int(px * 32767 / W), int(py * 32767 / H)
@@ -73,6 +86,21 @@ class QMP:
             self.cmd("send-key", keys=[{"type": "qcode", "data": k}])
             time.sleep(0.05)
 
+    def _combo(self, *qcodes):
+        self.cmd("send-key", keys=[{"type": "qcode", "data": q} for q in qcodes])
+        time.sleep(0.06)
+
+    def type(self, s):
+        for ch in s:
+            if ch in CHARMAP:
+                self._combo(CHARMAP[ch])
+            elif ch in SHIFTMAP:
+                self._combo("shift", SHIFTMAP[ch])
+            elif ch.isalpha() and ch.isupper():
+                self._combo("shift", ch.lower())
+            else:
+                self._combo(ch)
+
 
 def main():
     sock, op = sys.argv[1], sys.argv[2]
@@ -85,6 +113,8 @@ def main():
         q.move(int(sys.argv[3]), int(sys.argv[4]))
     elif op == "key":
         q.key(sys.argv[3:])
+    elif op == "type":
+        q.type(sys.argv[3])
     elif op == "screendump":
         q.cmd("screendump", filename=sys.argv[3])
     else:

@@ -57,6 +57,8 @@ require_kvm() {
 mon() { echo "$*" | socat - "UNIX-CONNECT:$MON_SOCK" >/dev/null 2>&1 || true; }
 click() { python3 "$QMP_PY" "$QMP_SOCK" click "$1" "$2" 2>/dev/null || true; }
 dclick() { python3 "$QMP_PY" "$QMP_SOCK" dclick "$1" "$2" 2>/dev/null || true; }
+typestr() { python3 "$QMP_PY" "$QMP_SOCK" type "$1" 2>/dev/null || true; }
+keys() { python3 "$QMP_PY" "$QMP_SOCK" key "$@" 2>/dev/null || true; }
 
 screendump() {  # screendump <label>
   local ppm="$WORKDIR/$1.ppm" png="$ARTIFACT_DIR/$1.png"
@@ -139,13 +141,15 @@ open_disk_utility() {  # Recovery chooser -> Disk Utility -> Continue
   screendump "du-00-open"
 }
 
-stage_install() {  # M2: locate the Utilities menu + Terminal in the menu bar (fixed top, position-independent)
+stage_install() {  # M2: open Recovery Terminal (Utilities menu ~x250) and test diskutil + typing
   boot_to_recovery
-  log "probing menu bar (y=14) to locate the Utilities menu"
-  click 197 14; sleep 1; screendump "menu-a-197"
-  click 250 14; sleep 1; screendump "menu-b-250"
-  click 160 14; sleep 1; screendump "menu-c-160"
-  log "menu recon — find Utilities menu x + Terminal item position"
+  log "opening Utilities menu -> Terminal"
+  click 250 14; sleep 1; screendump "ut-00-menu"     # Utilities dropdown (read Terminal's y)
+  click 250 56; sleep 3; screendump "ut-01-after"      # ~2nd item (Terminal, best guess)
+  log "typing 'diskutil list' to verify Terminal + QMP typing"
+  typestr "diskutil list"; sleep 1; keys ret; sleep 3
+  screendump "ut-02-listed"
+  log "terminal recon done — verify Terminal opened + typing + disk layout"
 }
 
 stage_image() {  # M3

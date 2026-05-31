@@ -126,11 +126,11 @@ stage_boot() {  # M1: capture screenshots over time to prove OpenCore -> Recover
   log "M1 boot stage done — inspect artifacts/boot-*.png for the Recovery screen"
 }
 
-boot_to_recovery() {  # picker -> macOS Base System -> Recovery window
+boot_to_recovery() {  # OpenCore picker -> macOS Base System -> Recovery window
   sleep 90
   screendump "inst-00-picker"
-  log "selecting 'macOS Base System' at OpenCore picker"
-  mon "sendkey right"; sleep 2; mon "sendkey ret"
+  log "booting 'macOS Base System' via OpenCanopy mouse double-click (HMP sendkey was flaky)"
+  dclick 715 388        # macOS Base System icon (right entry); QMP pointer is reliable
   sleep 180
   screendump "inst-01-recovery"
 }

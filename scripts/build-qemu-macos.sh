@@ -164,10 +164,10 @@ stage_install() {  # M2: OCR-driven Reinstall click-through, then start the inst
   log "Reinstall macOS Tahoe (OCR + Return for blue default buttons)"
   ocrclick Reinstall; sleep 1; ocrclick Continue; sleep 6; screendump "oc-00-intro"
   keys ret; sleep 6; screendump "oc-01-license"                   # intro: blue 'Continue' = Return
-  ocrclick Agree 600 720; sleep 4; screendump "oc-02-confirm"      # license Agree (gray, dark theme)
-  ocrclick Agree 360 470; sleep 6; screendump "oc-03-disksel"      # confirm-sheet Agree (gray on light)
+  ocrclick Agree 600 720; sleep 4; screendump "oc-02-confirm"      # license Agree (OCR works, dark theme)
+  click 705 399; sleep 6; screendump "oc-03-disksel"               # confirm Agree (PIL-located; OCR misses light sheet)
   log "disk-select: pick Macintosh, then Continue/Install"
-  ocrclick Macintosh; sleep 1; keys ret; ocrclick Continue; ocrclick Install; sleep 10
+  ocrclick Macintosh; sleep 1; keys ret; ocrclick Install; ocrclick Continue; sleep 10
   screendump "oc-04-installing"
   local i
   for ((i = 1; i <= 10; i++)); do

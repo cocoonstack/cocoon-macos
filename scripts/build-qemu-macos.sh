@@ -169,15 +169,16 @@ stage_install() {  # M2: OCR-driven Reinstall click-through, then start the inst
   # then also the PIL pixel as backup.
   keys tab; sleep 1; keys spc; sleep 2; screendump "oc-02b-tab"
   click 676 399; sleep 6; screendump "oc-03-disksel"
-  log "disk-select: pick Macintosh, then Continue/Install"
-  ocrclick Macintosh; sleep 1; keys ret; ocrclick Install; ocrclick Continue; sleep 10
+  log "disk-select: pick Macintosh, then Continue (clean — no menu-bar misclick)"
+  ocrclick Macintosh; sleep 2; ocrclick Continue 620 690; sleep 12
   screendump "oc-04-installing"
+  log "monitoring install (~15GB download + prepare + first reboot) to observe behavior"
   local i
-  for ((i = 1; i <= 10; i++)); do
-    sleep 30; screendump "oc-05-$(printf '%02d' "$i")"
+  for ((i = 1; i <= 30; i++)); do
+    sleep 60; screendump "oc-05-$(printf '%02d' "$i")"
     kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at install monitor $i"; return 1; }
   done
-  log "OCR install flow attempted — inspect oc-*.png (did the ~15GB install start?)"
+  log "install monitor done — inspect oc-05-*.png for download/prepare/reboot progress"
 }
 
 stage_image() {  # M3

@@ -157,17 +157,17 @@ start_reinstall_to_license() {  # chooser -> Reinstall -> intro -> license
   keys ret; sleep 5                                  # intro Continue (default) -> license
 }
 
-stage_install() {  # M2: recon Agree / confirm-sheet / disk-select coords (stop before the 15GB download)
+stage_install() {  # M2: license Agree (685,650 via PIL) -> confirm sheet (try Return) -> disk-select recon
   boot_to_recovery
   erase_target
   start_reinstall_to_license
-  screendump "ri-10-license"
-  log "click Agree on license"
-  click 744 646; sleep 3; screendump "ri-11-confirm"     # license Agree -> confirm sheet
-  log "click Agree on confirm sheet (guess)"
-  click 744 360; sleep 5; screendump "ri-12-disksel"      # confirm Agree -> disk-select
-  sleep 3; screendump "ri-13-disksel"
-  log "recon done — inspect ri-1*.png for Agree/confirm/disk-select layout (download NOT started)"
+  screendump "ri-20-license"
+  log "click Agree (685,650) on license"
+  click 685 650; sleep 3; screendump "ri-21-confirm"      # confirm sheet
+  log "try Return on confirm sheet (Agree is often the default button)"
+  keys ret; sleep 5; screendump "ri-22-afterret"
+  sleep 4; screendump "ri-23-disksel"
+  log "recon — inspect ri-2*.png for confirm sheet + disk-select (download NOT started)"
 }
 
 stage_image() {  # M3

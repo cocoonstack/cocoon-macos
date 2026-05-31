@@ -17,7 +17,7 @@ ARTIFACT_DIR=${ARTIFACT_DIR:-"$WORKDIR/artifacts"}
 OSX_KVM_DIR="$WORKDIR/OSX-KVM"
 
 OSX_KVM_REPO=${OSX_KVM_REPO:-"https://github.com/kholia/OSX-KVM.git"}
-TAHOE_BOARD_ID=${TAHOE_BOARD_ID:-"Mac-CFF7D910A743CAAF"}   # macOS Tahoe (26), from OSX-KVM boards.json
+MACOS_SHORTNAME=${MACOS_SHORTNAME:-"tahoe"}   # fetch-macOS-v2.py --shortname (non-interactive; tahoe = macOS 26)
 OSK="ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
 
 QCOW2_NAME=${QCOW2_NAME:-"macos-tahoe-26.qcow2"}
@@ -66,8 +66,8 @@ setup_osx_kvm() {
 fetch_recovery() {
   cd "$OSX_KVM_DIR"
   if [[ ! -f BaseSystem.img ]]; then
-    log "fetching macOS Tahoe recovery (board-id $TAHOE_BOARD_ID) from Apple CDN"
-    python3 fetch-macOS-v2.py --board-id "$TAHOE_BOARD_ID"
+    log "fetching macOS recovery (--shortname $MACOS_SHORTNAME) from Apple CDN"
+    python3 fetch-macOS-v2.py --shortname "$MACOS_SHORTNAME"
     log "converting BaseSystem.dmg -> BaseSystem.img"
     dmg2img -i BaseSystem.dmg BaseSystem.img
   fi

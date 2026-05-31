@@ -59,6 +59,7 @@ click() { python3 "$QMP_PY" "$QMP_SOCK" click "$1" "$2" 2>/dev/null || true; }
 dclick() { python3 "$QMP_PY" "$QMP_SOCK" dclick "$1" "$2" 2>/dev/null || true; }
 typestr() { python3 "$QMP_PY" "$QMP_SOCK" type "$1" 2>/dev/null || true; }
 keys() { python3 "$QMP_PY" "$QMP_SOCK" key "$@" 2>/dev/null || true; }
+chord() { python3 "$QMP_PY" "$QMP_SOCK" chord "$@" 2>/dev/null || true; }
 
 screendump() {  # screendump <label>
   local ppm="$WORKDIR/$1.ppm" png="$ARTIFACT_DIR/$1.png"
@@ -141,15 +142,15 @@ open_disk_utility() {  # Recovery chooser -> Disk Utility -> Continue
   screendump "du-00-open"
 }
 
-stage_install() {  # M2: open Recovery Terminal (Utilities menu ~x250) and test diskutil + typing
+stage_install() {  # M2: open Recovery Terminal via Shift-Cmd-T, erase disk0 as APFS via diskutil
   boot_to_recovery
-  log "opening Utilities menu -> Terminal"
-  click 250 14; sleep 1; screendump "ut-00-menu"     # Utilities dropdown (read Terminal's y)
-  click 250 56; sleep 3; screendump "ut-01-after"      # ~2nd item (Terminal, best guess)
-  log "typing 'diskutil list' to verify Terminal + QMP typing"
-  typestr "diskutil list"; sleep 1; keys ret; sleep 3
-  screendump "ut-02-listed"
-  log "terminal recon done — verify Terminal opened + typing + disk layout"
+  log "opening Terminal (Shift-Cmd-T)"
+  chord shift meta_l t; sleep 4; screendump "t-00-terminal"
+  log "diskutil list (confirm disk0 = 85.9GB target)"
+  typestr "diskutil list"; keys ret; sleep 3; screendump "t-01-list"
+  log "erasing disk0 as APFS volume 'Macintosh'"
+  typestr "diskutil eraseDisk APFS Macintosh disk0"; keys ret; sleep 30; screendump "t-02-erased"
+  log "terminal erase attempted — verify APFS volume created on disk0"
 }
 
 stage_image() {  # M3

@@ -113,6 +113,8 @@ def main():
         q.move(int(sys.argv[3]), int(sys.argv[4]))
     elif op == "key":
         q.key(sys.argv[3:])
+    elif op == "chord":
+        q._combo(*sys.argv[3:])
     elif op == "type":
         q.type(sys.argv[3])
     elif op == "screendump":

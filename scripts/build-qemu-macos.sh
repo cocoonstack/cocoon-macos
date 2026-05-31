@@ -60,7 +60,11 @@ dclick() { python3 "$QMP_PY" "$QMP_SOCK" dclick "$1" "$2" 2>/dev/null || true; }
 typestr() { python3 "$QMP_PY" "$QMP_SOCK" type "$1" 2>/dev/null || true; }
 keys() { python3 "$QMP_PY" "$QMP_SOCK" key "$@" 2>/dev/null || true; }
 chord() { python3 "$QMP_PY" "$QMP_SOCK" chord "$@" 2>/dev/null || true; }
-ocrclick() { python3 "$QMP_PY" "$QMP_SOCK" ocrclick "$@" 2>&1 | sed 's/^/[ocr] /' || true; }   # WORD [ymin ymax]
+ocrclick() {  # WORD [ymin ymax]; wakes the display (neutral move) before OCR so it doesn't read a slept-black screen
+  python3 "$QMP_PY" "$QMP_SOCK" move 60 400 2>/dev/null || true
+  sleep 1
+  python3 "$QMP_PY" "$QMP_SOCK" ocrclick "$@" 2>&1 | sed 's/^/[ocr] /' || true
+}
 
 screendump() {  # screendump <label>
   local ppm="$WORKDIR/$1.ppm" png="$ARTIFACT_DIR/$1.png"
@@ -265,7 +269,10 @@ sa_shot() { sleep "${2:-4}"; screendump "su-$1"; kill -0 "$QEMU_PID" 2>/dev/null
 
 stage_setup() {  # M2b: drive the installed system's Setup Assistant (best-effort; dense screenshots to refine)
   boot_installed
-  sleep 35; screendump "su-00-region"
+  log "waiting for Setup Assistant (jiggle to keep display awake while macOS boots)"
+  local w
+  for w in 1 2 3 4 5; do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 30)) 400 2>/dev/null || true; sleep 25; done
+  screendump "su-00-region"
   log "Setup Assistant click-through (best-effort)"
   typestr "United States"; sleep 1; ocrclick Continue 600 720; sa_shot 01 6   # Country/Region
   ocrclick Continue 600 720; sa_shot 02 5                                       # Written/Spoken Languages

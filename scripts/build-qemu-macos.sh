@@ -161,13 +161,13 @@ start_reinstall_to_license() {  # chooser -> Reinstall -> intro -> license
 stage_install() {  # M2: OCR-driven Reinstall click-through, then start the install + observe
   boot_to_recovery
   erase_target            # Terminal: erase disk0 -> APFS "Macintosh"; back at chooser
-  log "Reinstall macOS Tahoe (OCR click-through)"
+  log "Reinstall macOS Tahoe (OCR + Return for blue default buttons)"
   ocrclick Reinstall; sleep 1; ocrclick Continue; sleep 6; screendump "oc-00-intro"
-  ocrclick Continue; sleep 5; screendump "oc-01-license"           # intro
-  ocrclick Agree 600 720; sleep 3; screendump "oc-02-confirm"      # license Agree (button band)
-  ocrclick Agree 360 470; sleep 6; screendump "oc-03-disksel"      # confirm-sheet Agree
+  keys ret; sleep 6; screendump "oc-01-license"                   # intro: blue 'Continue' = Return
+  ocrclick Agree 600 720; sleep 4; screendump "oc-02-confirm"      # license Agree (gray, dark theme)
+  ocrclick Agree 360 470; sleep 6; screendump "oc-03-disksel"      # confirm-sheet Agree (gray on light)
   log "disk-select: pick Macintosh, then Continue/Install"
-  ocrclick Macintosh; sleep 1; ocrclick Continue; ocrclick Install; sleep 10
+  ocrclick Macintosh; sleep 1; keys ret; ocrclick Continue; ocrclick Install; sleep 10
   screendump "oc-04-installing"
   local i
   for ((i = 1; i <= 10; i++)); do

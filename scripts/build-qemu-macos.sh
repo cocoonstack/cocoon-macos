@@ -86,6 +86,43 @@ fetch_recovery() {
   [[ -f OVMF_VARS.fd ]] || cp OVMF_VARS-1920x1080.fd OVMF_VARS.fd
 }
 
+configure_opencore() {  # make OpenCore follow the installer's bless across reboots (else reboot loops to recovery)
+  local oc="$OSX_KVM_DIR/OpenCore/OpenCore.qcow2"
+  [[ -f "$oc" ]] || { log "OpenCore.qcow2 missing; skip OC patch"; return 0; }
+  log "patching OpenCore config.plist: RequestBootVarRouting=true + Timeout (qemu-nbd)"
+  sudo modprobe nbd max_part=8 2>/dev/null || { log "no nbd module; skip OC patch"; return 0; }
+  sudo qemu-nbd --connect=/dev/nbd0 -f qcow2 "$oc" 2>/dev/null || { log "qemu-nbd connect failed; skip"; return 0; }
+  sleep 3
+  sudo partprobe /dev/nbd0 2>/dev/null || true
+  sudo mkdir -p /mnt/oc
+  local part mounted=""
+  for part in /dev/nbd0p1 /dev/nbd0p2 /dev/nbd0; do
+    if sudo mount "$part" /mnt/oc 2>/dev/null; then mounted=1; break; fi
+  done
+  if [[ -n "$mounted" ]]; then
+    local cfg
+    cfg=$(sudo find /mnt/oc -iname config.plist 2>/dev/null | head -1)
+    if [[ -n "$cfg" ]]; then
+      sudo python3 - "$cfg" <<'PY' || true
+import plistlib, sys
+p = sys.argv[1]
+d = plistlib.load(open(p, "rb"))
+d.setdefault("Booter", {}).setdefault("Quirks", {})["RequestBootVarRouting"] = True
+b = d.setdefault("Misc", {}).setdefault("Boot", {})
+b["Timeout"] = 8
+plistlib.dump(d, open(p, "wb"))
+print("[oc] patched RequestBootVarRouting+Timeout in", p)
+PY
+    else
+      log "config.plist not found on OpenCore EFI"
+    fi
+    sudo umount /mnt/oc 2>/dev/null || true
+  else
+    log "could not mount OpenCore EFI partition"
+  fi
+  sudo qemu-nbd --disconnect /dev/nbd0 2>/dev/null || true
+}
+
 launch_qemu() {
   cd "$OSX_KVM_DIR"
   log "launching QEMU headless (VNC 127.0.0.1:590$VNC_DISP, ssh :$SSH_PORT, monitor $MON_SOCK)"
@@ -193,6 +230,7 @@ main() {
   require_kvm
   setup_osx_kvm
   fetch_recovery
+  [[ "$STAGE" == "install" || "$STAGE" == "image" ]] && configure_opencore
   launch_qemu
   case "$STAGE" in
     boot) stage_boot ;;

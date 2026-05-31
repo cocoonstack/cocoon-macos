@@ -172,13 +172,13 @@ stage_install() {  # M2: OCR-driven Reinstall click-through, then start the inst
   log "disk-select: pick Macintosh, then Continue (clean — no menu-bar misclick)"
   ocrclick Macintosh; sleep 2; ocrclick Continue 620 690; sleep 12
   screendump "oc-04-installing"
-  log "monitoring install (~15GB download + prepare + first reboot) to observe behavior"
+  log "monitoring install to completion (~55min: prepare + reboots auto-continue + Setup Assistant)"
   local i
-  for ((i = 1; i <= 30; i++)); do
+  for ((i = 1; i <= 75; i++)); do
     sleep 60; screendump "oc-05-$(printf '%02d' "$i")"
     kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at install monitor $i"; return 1; }
   done
-  log "install monitor done — inspect oc-05-*.png for download/prepare/reboot progress"
+  log "install monitor done — inspect oc-05-*.png for completion + Setup Assistant"
 }
 
 stage_image() {  # M3

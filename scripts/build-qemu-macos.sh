@@ -118,20 +118,28 @@ stage_boot() {  # M1: capture screenshots over time to prove OpenCore -> Recover
   log "M1 boot stage done — inspect artifacts/boot-*.png for the Recovery screen"
 }
 
-stage_install() {  # M2 recon: select installer at the picker, capture the Recovery boot sequence
-  local steps=${INSTALL_RECON_STEPS:-22} i
+boot_to_recovery() {  # picker -> macOS Base System -> Recovery window
   sleep 90
-  screendump "install-00-picker"
-  log "selecting 'macOS Base System' at OpenCore picker (right, enter)"
-  mon "sendkey right"; sleep 2
-  screendump "install-01-selected"
+  screendump "inst-00-picker"
+  log "selecting 'macOS Base System' at OpenCore picker"
+  mon "sendkey right"; sleep 2; mon "sendkey ret"
+  sleep 180
+  screendump "inst-01-recovery"
+}
+
+stage_install() {  # M2: open Disk Utility via keyboard nav and observe (recon for the erase choreography)
+  local i
+  boot_to_recovery
+  log "navigating Recovery chooser to Disk Utility (down x3, enter)"
+  mon "sendkey down"; sleep 1; mon "sendkey down"; sleep 1; mon "sendkey down"; sleep 1
+  screendump "inst-02-du-selected"
   mon "sendkey ret"
-  for ((i = 1; i <= steps; i++)); do
-    sleep 30
-    screendump "install-recon-$(printf '%02d' "$i")"
-    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at recon step $i"; return 1; }
+  for ((i = 1; i <= 6; i++)); do
+    sleep 20
+    screendump "inst-03-du-$(printf '%02d' "$i")"
+    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at DU recon step $i"; return 1; }
   done
-  log "M2 recon done — inspect install-recon-*.png to design Disk Utility + install steps"
+  log "Disk Utility recon done — inspect inst-*.png to design the erase"
 }
 
 stage_image() {  # M3

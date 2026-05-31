@@ -157,17 +157,21 @@ start_reinstall_to_license() {  # chooser -> Reinstall -> intro -> license
   keys ret; sleep 5                                  # intro Continue (default) -> license
 }
 
-stage_install() {  # M2: license Agree (685,650 via PIL) -> confirm sheet (try Return) -> disk-select recon
+agree_license() {  # license Agree (685,650) -> confirm sheet Agree (690,405)
+  click 685 650; sleep 3      # license "Agree"
+  click 690 405; sleep 6      # confirm-sheet "Agree" (Disagree is the blue default, so must click)
+}
+
+stage_install() {  # M2: reach disk-select, try to start the install, observe first-reboot behavior
   boot_to_recovery
   erase_target
   start_reinstall_to_license
-  screendump "ri-20-license"
-  log "click Agree (685,650) on license"
-  click 685 650; sleep 3; screendump "ri-21-confirm"      # confirm sheet
-  log "try Return on confirm sheet (Agree is often the default button)"
-  keys ret; sleep 5; screendump "ri-22-afterret"
-  sleep 4; screendump "ri-23-disksel"
-  log "recon — inspect ri-2*.png for confirm sheet + disk-select (download NOT started)"
+  agree_license
+  screendump "in-00-disksel"
+  log "try Return to start install (single eligible disk may be preselected)"
+  keys ret; sleep 8; screendump "in-01-afterret"
+  sleep 5; screendump "in-02"
+  log "disk-select recon + install-start attempt — inspect in-*.png"
 }
 
 stage_image() {  # M3

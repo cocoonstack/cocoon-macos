@@ -227,11 +227,12 @@ capture_and_push() {  # stop QEMU, compress the installed macOS qcow2, push it t
   mon "quit"; sleep 10
   [[ -f "$WORKDIR/qemu.pid" ]] && kill "$(cat "$WORKDIR/qemu.pid")" 2>/dev/null || true
   sleep 3
-  local out="$ARTIFACT_DIR/$QCOW2_NAME"
+  # capture to WORKDIR (NOT ARTIFACT_DIR) so the ~10GB image isn't uploaded as a CI artifact
+  local out="$WORKDIR/$QCOW2_NAME"
   qemu-img convert -O qcow2 -c "$OSX_KVM_DIR/$QCOW2_NAME" "$out"
   log "captured $(du -h "$out" | cut -f1); pushing -> $GHCR_REPO:$tag"
   if command -v oras >/dev/null 2>&1; then
-    ( cd "$ARTIFACT_DIR" && oras push "$GHCR_REPO:$tag" \
+    ( cd "$WORKDIR" && oras push "$GHCR_REPO:$tag" \
         --artifact-type application/vnd.cocoon.macos.disk \
         "$QCOW2_NAME:application/octet-stream" ) || log "oras push failed (check ghcr perms)"
   else

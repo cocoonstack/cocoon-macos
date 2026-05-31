@@ -172,13 +172,15 @@ stage_install() {  # M2: OCR-driven Reinstall click-through, then start the inst
   log "disk-select: pick Macintosh, then Continue (clean — no menu-bar misclick)"
   ocrclick Macintosh; sleep 2; ocrclick Continue 620 690; sleep 12
   screendump "oc-04-installing"
-  log "monitoring install to completion (~55min: prepare + reboots auto-continue + Setup Assistant)"
+  log "monitoring install + jiggling mouse to defeat macOS display-sleep (black screen after ~34min was sleep)"
   local i
-  for ((i = 1; i <= 75; i++)); do
-    sleep 60; screendump "oc-05-$(printf '%02d' "$i")"
+  for ((i = 1; i <= 55; i++)); do
+    python3 "$QMP_PY" "$QMP_SOCK" move $((420 + i % 180)) 420 2>/dev/null || true  # jiggle: keep display awake
+    sleep 60
+    screendump "oc-05-$(printf '%02d' "$i")"
     kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at install monitor $i"; return 1; }
   done
-  log "install monitor done — inspect oc-05-*.png for completion + Setup Assistant"
+  log "install monitor done — inspect oc-05-*.png for completion + Setup Assistant (display kept awake)"
 }
 
 stage_image() {  # M3

@@ -261,16 +261,22 @@ boot_installed() {  # OpenCore picker -> installed macOS (2nd entry, right of EF
   for t in 1 2 3 4 5; do mon "sendkey ret"; sleep 8; done
 }
 
-stage_setup() {  # M2b: boot the installed base image and verify it reaches Setup Assistant fast (recon)
+sa_shot() { sleep "${2:-4}"; screendump "su-$1"; kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited"; return 1; }; }
+
+stage_setup() {  # M2b: drive the installed system's Setup Assistant (best-effort; dense screenshots to refine)
   boot_installed
-  local i
-  for ((i = 1; i <= 10; i++)); do
-    python3 "$QMP_PY" "$QMP_SOCK" move $((420 + i % 180)) 420 2>/dev/null || true  # jiggle: keep display awake
-    sleep 30
-    screendump "setup-01-$(printf '%02d' "$i")"
-    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at setup recon $i"; return 1; }
-  done
-  log "setup recon done — verify fast boot to Setup Assistant (setup-01-*.png)"
+  sleep 35; screendump "su-00-region"
+  log "Setup Assistant click-through (best-effort)"
+  typestr "United States"; sleep 1; ocrclick Continue 600 720; sa_shot 01 6   # Country/Region
+  ocrclick Continue 600 720; sa_shot 02 5                                       # Written/Spoken Languages
+  ocrclick Now 540 720; sa_shot 03 5                                            # Accessibility -> Not Now
+  ocrclick Continue 600 720; sa_shot 04 5                                       # Data & Privacy
+  ocrclick Now 540 720; sa_shot 05 5                                            # Migration -> Not Now
+  ocrclick Later 700 720; sa_shot 06 5                                          # Apple Account -> Set Up Later
+  ocrclick Skip 420 560; sa_shot 07 4                                           # confirm "Skip"
+  ocrclick Agree 600 720; sa_shot 08 3                                          # Terms & Conditions -> Agree
+  keys tab; sleep 1; keys spc; sleep 1; ocrclick Agree 360 480; sa_shot 09 5    # terms confirm sheet
+  log "Setup Assistant recon done — inspect su-*.png to refine the sequence"
 }
 
 main() {

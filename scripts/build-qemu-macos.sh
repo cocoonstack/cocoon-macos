@@ -118,9 +118,20 @@ stage_boot() {  # M1: capture screenshots over time to prove OpenCore -> Recover
   log "M1 boot stage done — inspect artifacts/boot-*.png for the Recovery screen"
 }
 
-stage_install() {  # M2: TODO — headless install via sendkey/screendump choreography
-  log "TODO(M2): drive Recovery -> Disk Utility erase -> startosinstall via mon 'sendkey ...'"
-  return 1
+stage_install() {  # M2 recon: select installer at the picker, capture the Recovery boot sequence
+  local steps=${INSTALL_RECON_STEPS:-22} i
+  sleep 90
+  screendump "install-00-picker"
+  log "selecting 'macOS Base System' at OpenCore picker (right, enter)"
+  mon "sendkey right"; sleep 2
+  screendump "install-01-selected"
+  mon "sendkey ret"
+  for ((i = 1; i <= steps; i++)); do
+    sleep 30
+    screendump "install-recon-$(printf '%02d' "$i")"
+    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at recon step $i"; return 1; }
+  done
+  log "M2 recon done — inspect install-recon-*.png to design Disk Utility + install steps"
 }
 
 stage_image() {  # M3

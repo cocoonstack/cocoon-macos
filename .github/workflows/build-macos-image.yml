@@ -66,12 +66,6 @@ jobs:
             | sudo tar -xz -C /usr/local/bin oras
           oras version
 
-      - name: Set up Go (for the cli stage's go build)
-        if: ${{ github.event.inputs.stage == 'cli' }}
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: 'go.mod'
-
       - name: Build (stage=${{ github.event.inputs.stage }})
         run: bash scripts/build-qemu-macos.sh
 

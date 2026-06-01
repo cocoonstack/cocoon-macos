@@ -23,11 +23,22 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
+      - name: Download dependencies
+        run: go mod download
+
       - name: Vet
         run: go vet ./...
 
-      - name: Test
-        run: go test -race -timeout 120s -count=1 ./...
+      - name: Test with coverage
+        run: go test -race -timeout 120s -count=1 -cover -coverprofile=coverage.out ./...
 
-      - name: Build
+      - name: Upload coverage artifact
+        continue-on-error: true
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 7
+
+      - name: Build binary
         run: CGO_ENABLED=0 go build -o cocoon-macos .

@@ -247,12 +247,12 @@ capture_and_push() {  # stop QEMU, compress the installed macOS qcow2, push it t
   fi
 }
 
-pull_base_image() {  # fetch the installed macOS base from ghcr as the boot disk (fast: skips the ~50min install)
+pull_image() {  # oras pull $GHCR_REPO:$1 -> $QCOW2_NAME (the boot disk; skips the ~50min install)
   cd "$OSX_KVM_DIR"
-  log "pulling base image $GHCR_REPO:${BASE_TAG:-$GHCR_TAG-base}"
-  oras pull "$GHCR_REPO:${BASE_TAG:-$GHCR_TAG-base}" -o .
-  [[ -f "$QCOW2_NAME" ]] || { log "FATAL: base image $QCOW2_NAME not pulled"; exit 1; }
-  log "base image present: $(du -h "$QCOW2_NAME" | cut -f1)"
+  log "pulling image $GHCR_REPO:$1"
+  oras pull "$GHCR_REPO:$1" -o .
+  [[ -f "$QCOW2_NAME" ]] || { log "FATAL: image $QCOW2_NAME not pulled from :$1"; exit 1; }
+  log "image present: $(du -h "$QCOW2_NAME" | cut -f1)"
   [[ -f OVMF_VARS.fd ]] || cp OVMF_VARS-1920x1080.fd OVMF_VARS.fd
 }
 
@@ -290,6 +290,30 @@ stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the ins
   capture_and_push "$GHCR_TAG"   # tahoe:26 = SA-skipped, user 'cocoon', SSH on first boot
 }
 
+stage_verify() {  # boot the turnkey tahoe:26 and confirm it reaches login (not Setup Assistant) + SSH works
+  sleep 75
+  screendump "vf-00-picker"
+  log "booting installed macOS (turnkey)"
+  mon "sendkey right"; sleep 2
+  local t
+  for t in 1 2 3 4 5; do mon "sendkey ret"; sleep 8; done
+  log "waiting for boot + first-boot SSH daemon (jiggle to keep display awake)"
+  local w
+  for w in 1 2 3 4 5 6 7 8; do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 25)) 400 2>/dev/null || true; sleep 25; done
+  screendump "vf-01-loginscreen"
+  log "testing SSH cocoon@localhost:$SSH_PORT"
+  local ok=""
+  for w in 1 2 3 4 5 6; do
+    if sshpass -p cocoon ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 \
+         -p "$SSH_PORT" cocoon@localhost 'sw_vers; hostname; id' >"$ARTIFACT_DIR/ssh-output.txt" 2>&1; then
+      ok=1; log "SSH OK:"; cat "$ARTIFACT_DIR/ssh-output.txt"; break
+    fi
+    log "SSH attempt $w not ready; waiting"; sleep 30; screendump "vf-02-wait-$w"
+  done
+  screendump "vf-03-final"
+  [[ -n "$ok" ]] && log "VERIFY PASS: turnkey macOS boots + SSH works" || log "VERIFY: SSH not reachable yet (inspect vf-*.png + ssh-output.txt)"
+}
+
 main() {
   require_kvm
   setup_osx_kvm
@@ -299,7 +323,9 @@ main() {
     install)
       fetch_recovery; configure_opencore; launch_qemu; stage_install ;;
     setup)
-      pull_base_image; fetch_recovery; launch_qemu; stage_setup ;;
+      pull_image "$GHCR_TAG-base"; fetch_recovery; launch_qemu; stage_setup ;;
+    verify)
+      pull_image "$GHCR_TAG"; configure_opencore; launch_qemu; stage_verify ;;
     *)
       log "unknown STAGE=$STAGE"; exit 2 ;;
   esac

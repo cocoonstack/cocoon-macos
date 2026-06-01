@@ -1,69 +1,70 @@
 # cocoon-macos
 
-Run **full macOS (Tahoe 26)** as a fully-virtualized **QEMU/KVM** guest on **x86 Linux**,
-with an automated CI pipeline that builds golden disk images and a thin Go CLI that
-mirrors cocoon's command set.
+Run **full macOS (Tahoe 26)** as a fully-virtualized **QEMU/KVM** guest on **x86 Linux** —
+built entirely by CI. A GitHub Action installs macOS from scratch and publishes a golden
+disk image to ghcr; a thin Go CLI clones that image and boots VMs from it.
 
-## Goal
+## What works (proven in CI on GitHub Actions `ubuntu-latest`)
 
-> Stand up macOS-on-QEMU as a self-contained cocoonstack project:
->
-> 1. **Image automation** — a GitHub Action (`.github/workflows/build-macos-image.yml`
->    + `scripts/build-qemu-macos.sh`) that builds a golden `macos-tahoe-26.qcow2` on
->    `ubuntu-latest` and pushes it to `ghcr.io/cocoonstack/cocoon-macos/tahoe:26`,
->    modeled on cocoon's `os-image` / `cocoonstack/windows` QEMU build.
-> 2. **CLI** — a thin Go wrapper mirroring cocoon's commands so `cocoon-macos vm create`
->    / `vm run` creates and boots a macOS VM via QEMU + OpenCore.
+- **Fully-automated macOS Tahoe 26 install** (`stage=install`, ~50 min): OpenCore boot →
+  `diskutil` erase (APFS) → OCR/keyboard-driven installer click-through → ~15 GB download +
+  install → `RequestBootVarRouting` makes the install reboots auto-continue → Setup Assistant.
+- **Golden images on ghcr:**
+  - `ghcr.io/cocoonstack/cocoon-macos/tahoe:26-base` — installed macOS Tahoe 26 at first-run Setup Assistant.
+  - `ghcr.io/cocoonstack/cocoon-macos/tahoe:26` — turnkey: provisioned via Recovery Terminal
+    (Setup Assistant skipped, admin user `cocoon`/`cocoon`, Remote Login/SSH enabled on first boot).
+- **CLI** (`cocoon-macos vm …`) clones a golden image (copy-on-write qcow2 overlay) and launches QEMU.
 
-**Out of scope (for now):** cocoon engine integration (a `qemu` Hypervisor backend in
-cocoon) is a later, separate phase. iServices/App Store — which need unique per-VM SMBIOS
-injection (`MLB/ROM/SystemSerialNumber/SystemUUID/SystemProductName/board-id`), a built-in
-`en0` NIC, and VMHide.kext — is a designed-in hook but **not enabled in v0.1**.
-
-## Why QEMU (not Apple Virtualization.framework / VZ)
-
-Verified late-May-2026: VZ on Apple Silicon is capped at **~2 macOS VMs per host** and its
-guests **cannot use the App Store** (iCloud sign-in works since macOS 15, but App Store /
-Apple Media Services / Find My / iCloud Backup / Wallet do not). QEMU + OpenCore on x86 has
-no such cap and can reach full Apple services — at the cost of per-VM unique identity and
-Apple-ID ban risk at fleet scale. Tahoe 26 is the **last Intel-supporting macOS** (27+ is
-Apple-Silicon-only), so this x86 path has a finite shelf life.
-
-## Status
-
-Scaffold only. CLI compiles; all `vm` actions are stubs returning `not implemented`.
-
-| Phase | What | State |
-|-------|------|-------|
-| P0 | KVM smoke + **macOS install-automation spike** (no autounattend equivalent — the load-bearing unknown) | TODO |
-| P1 | Golden `tahoe-base.qcow2` (recovery + LongQT-sea OpenCore), SSH-enabled | TODO |
-| P2 | Go CLI v0.1: `vm create/run/start/stop/list/inspect/console/rm` (qcow2 overlay + headless QEMU) | scaffold |
-| P3 | CI image build → push ghcr | scaffold |
-| P4 | (separate) cocoon `qemu` backend | not started |
-
-## Layout
-
-```
-cmd/            CLI (cobra) — root + vm subcommand tree (copied from cocoon's pattern)
-qemu/           qemu-system-x86_64 arg builder / launch (Spec.Args)
-image/          OpenCore config templating + SMBIOS injection (later)
-os-image/tahoe/ OpenCore EFI (LongQT-sea), fetch-macOS, install scripts
-scripts/        build-qemu-macos.sh — the CI image-build script
-.github/        build-macos-image.yml — the image-build Action
-```
-
-## Dependency on cocoon
-
-Imports only `github.com/cocoonstack/cocoon/types` (the cross-platform-safe package).
-`cmd/core`, `hypervisor`, and `cmd/vm` drag Linux-only `netlink`/CH deps and won't build on
-darwin, so the cobra command tree is copied rather than imported. Local dev resolves cocoon
-via `replace => ../cocoonv2`; CI pins a real pseudo-version.
-
-## Dev
+## CLI
 
 ```bash
-go build ./...        # builds the CLI (works on darwin; QEMU launch only runs on x86 Linux/KVM)
-./cocoon-macos vm --help
+go build -o cocoon-macos .
+
+# clone the golden image into a per-VM overlay and boot it (x86 Linux + /dev/kvm)
+cocoon-macos vm run ghcr-pulled-tahoe.qcow2 \
+  --name m1 --cpus 4 --memory 8192 --ssh-port 2222 --vnc 1 \
+  --opencore OpenCore.qcow2 --ovmf-code OVMF_CODE_4M.fd --ovmf-vars OVMF_VARS.fd
+
+cocoon-macos vm list           # JSON of all VMs
+cocoon-macos vm inspect m1
+cocoon-macos vm stop m1
+cocoon-macos vm rm m1
+# also: create (no boot), start, console
 ```
 
-Image builds and `vm run` require an **x86 Linux host with `/dev/kvm`** — not a Mac.
+`vm run` does: `qemu-img create -b <golden> overlay.qcow2` (instant CoW clone) → copy a
+per-VM `OVMF_VARS` → launch `qemu-system-x86_64` (validated OSX-KVM recipe in `qemu/launch.go`:
+Skylake-Client CPU spoofing GenuineIntel + `isa-applesmc` OSK + OVMF + OpenCore + the macOS
+qcow2) daemonized, recording state under `$COCOON_MACOS_HOME` (default `~/.cocoon-macos`).
+
+## CI image pipeline (`.github/workflows/build-macos-image.yml`, `scripts/build-qemu-macos.sh`)
+
+`workflow_dispatch` with `stage`:
+
+| stage | what |
+|-------|------|
+| `boot` | smoke: boot OpenCore → macOS Recovery (proves KVM + OpenCore + Tahoe recovery) |
+| `install` | full install from scratch → capture → push `tahoe:26-base` (~65 min) |
+| `setup` | pull `tahoe:26-base` → boot Recovery → `provision-macos.sh` (skip SA + user + SSH) → push `tahoe:26` |
+| `verify` | pull `tahoe:26` → boot → confirm login + SSH (`cocoon@localhost`) |
+| `cli` | build the Go CLI → `cocoon-macos vm run tahoe:26` → SSH (end-to-end CLI proof) |
+
+Automation primitives (`scripts/qmp-input.py`): QMP absolute mouse click/move, keyboard
+type/chord, **tesseract+PIL OCR-click and title routing** (drives the macOS GUI installer where
+buttons can't be reached by keyboard), HMP `screendump`. Provisioning (`scripts/provision-macos.sh`)
+runs in the Recovery Terminal against the installed Data volume (`dscl -f` offline user,
+`.AppleSetupDone`, first-boot LaunchDaemon for Remote Login).
+
+Key host facts: GitHub `ubuntu-latest` exposes `/dev/kvm` (needs `chmod 666`); macOS Tahoe 26
+is the last Intel-supporting macOS, so this x86 path has a finite shelf life.
+
+## Why QEMU (not Apple VZ)
+
+VZ on Apple Silicon caps ~2 macOS VMs/host and can't use the App Store; QEMU + OpenCore on x86
+has neither limit (at the cost of per-VM identity + Apple-ID ban risk at fleet scale). See the
+deep-research notes that motivated this project.
+
+## Out of scope (v0.x)
+
+cocoon engine integration (a `qemu` Hypervisor backend in cocoon) is a separate later phase.
+iServices/App Store (per-VM SMBIOS injection) is a designed-in hook, not enabled here.

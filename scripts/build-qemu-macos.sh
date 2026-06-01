@@ -295,12 +295,28 @@ stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the ins
   capture_and_push "$GHCR_TAG"   # tahoe:26 = SA-skipped, user 'cocoon', SSH on first boot
 }
 
-stage_verify() {  # boot the turnkey tahoe:26 and confirm SSH; OpenCore auto-boots it (HideAuxiliary+Timeout)
-  # CRITICAL: send NO input during the OpenCore picker window — any key/mouse cancels the auto-boot Timeout.
-  log "letting OpenCore Timeout auto-boot the installed macOS (no input for 90s)"
-  sleep 90
-  screendump "vf-00-booting"
-  log "macOS booting; jiggling mouse now (past the picker) to keep display awake; first-boot enables SSH"
+picker_size() { stat -f%z "$ARTIFACT_DIR/$1.png" 2>/dev/null || stat -c%s "$ARTIFACT_DIR/$1.png" 2>/dev/null || echo 0; }
+
+boot_macintosh() {  # leave the OpenCore picker into the installed macOS: prefer auto-boot, else sendkey (retry ret)
+  sleep 50
+  screendump "vf-00"
+  if [ "$(picker_size vf-00)" -gt 30000 ]; then
+    log "still at picker ($(picker_size vf-00) bytes); selecting Macintosh via sendkey (right once, then ret)"
+    mon "sendkey right"; sleep 2
+    local a
+    for a in $(seq 1 8); do
+      mon "sendkey ret"; sleep 12
+      screendump "vf-pk-$a"
+      if [ "$(picker_size vf-pk-$a)" -lt 30000 ]; then log "left picker after $a ret"; break; fi
+    done
+  else
+    log "OpenCore auto-booted (frame $(picker_size vf-00) bytes)"
+  fi
+}
+
+stage_verify() {  # boot the turnkey tahoe:26 and confirm SSH
+  boot_macintosh
+  log "macOS booting; jiggling mouse (past the picker) to keep display awake; first-boot enables SSH"
   local w
   for w in $(seq 1 8); do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 20)) 400 2>/dev/null || true; sleep 20; done
   screendump "vf-01-loginscreen"

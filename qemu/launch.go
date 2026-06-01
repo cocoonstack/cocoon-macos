@@ -30,10 +30,7 @@ type Spec struct {
 
 // Args returns the qemu-system-x86_64 argument vector for the macOS guest.
 func (s Spec) Args() []string {
-	cores := s.CPUs / 2
-	if cores < 1 {
-		cores = 1
-	}
+	cores := max(s.CPUs/2, 1)
 	a := []string{
 		"-enable-kvm", "-m", s.Memory,
 		"-cpu", macOSCPU,

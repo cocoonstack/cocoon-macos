@@ -295,12 +295,14 @@ stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the ins
   capture_and_push "$GHCR_TAG"   # tahoe:26 = SA-skipped, user 'cocoon', SSH on first boot
 }
 
-stage_verify() {  # boot the turnkey tahoe:26 (OpenCore auto-boots it via HideAuxiliary+Timeout) + confirm SSH
-  sleep 30
-  screendump "vf-00-picker"
-  log "OpenCore auto-boots the installed macOS (HideAuxiliary); waiting for boot + first-boot SSH daemon"
+stage_verify() {  # boot the turnkey tahoe:26 and confirm SSH; OpenCore auto-boots it (HideAuxiliary+Timeout)
+  # CRITICAL: send NO input during the OpenCore picker window — any key/mouse cancels the auto-boot Timeout.
+  log "letting OpenCore Timeout auto-boot the installed macOS (no input for 90s)"
+  sleep 90
+  screendump "vf-00-booting"
+  log "macOS booting; jiggling mouse now (past the picker) to keep display awake; first-boot enables SSH"
   local w
-  for w in $(seq 1 12); do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 20)) 400 2>/dev/null || true; sleep 25; done
+  for w in $(seq 1 8); do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 20)) 400 2>/dev/null || true; sleep 20; done
   screendump "vf-01-loginscreen"
   log "testing SSH cocoon@localhost:$SSH_PORT"
   local ok=""
@@ -309,7 +311,8 @@ stage_verify() {  # boot the turnkey tahoe:26 (OpenCore auto-boots it via HideAu
          -p "$SSH_PORT" cocoon@localhost 'sw_vers; hostname; id' >"$ARTIFACT_DIR/ssh-output.txt" 2>&1; then
       ok=1; log "SSH OK:"; cat "$ARTIFACT_DIR/ssh-output.txt"; break
     fi
-    log "SSH attempt $w not ready; waiting"; sleep 30; screendump "vf-02-wait-$w"
+    log "SSH attempt $w not ready; waiting"; sleep 25
+    python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 15)) 420 2>/dev/null || true
   done
   screendump "vf-03-final"
   [[ -n "$ok" ]] && log "VERIFY PASS: turnkey macOS boots + SSH works" || log "VERIFY: SSH not reachable yet (inspect vf-*.png + ssh-output.txt)"

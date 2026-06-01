@@ -20,6 +20,8 @@ type Actions interface {
 // Command builds the `vm` subcommand tree against the given handler.
 func Command(h Actions) *cobra.Command {
 	vmCmd := &cobra.Command{Use: "vm", Short: "Manage macOS VMs"}
+	// state-dir applies to every subcommand (locating VM records), so make it persistent
+	vmCmd.PersistentFlags().String("state-dir", "", "VM state root (default $COCOON_MACOS_HOME or ~/.cocoon-macos)")
 
 	createCmd := &cobra.Command{
 		Use:   "create [flags] IMAGE",
@@ -93,5 +95,4 @@ func addVMFlags(cmd *cobra.Command) {
 	cmd.Flags().String("opencore", "", "OpenCore.qcow2 boot loader (required)")
 	cmd.Flags().String("ovmf-code", "", "OVMF_CODE firmware (required)")
 	cmd.Flags().String("ovmf-vars", "", "OVMF_VARS template (copied per-VM)")
-	cmd.Flags().String("state-dir", "", "VM state root (default $COCOON_MACOS_HOME or ~/.cocoon-macos)")
 }

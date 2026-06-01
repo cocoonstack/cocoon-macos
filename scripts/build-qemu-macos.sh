@@ -265,25 +265,24 @@ boot_installed() {  # OpenCore picker -> installed macOS (2nd entry, right of EF
   for t in 1 2 3 4 5; do mon "sendkey ret"; sleep 8; done
 }
 
-sa_shot() { sleep "${2:-4}"; screendump "su-$1"; kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited"; return 1; }; }
+wake() { python3 "$QMP_PY" "$QMP_SOCK" move 60 400 2>/dev/null || true; sleep 1; }  # wake display (neutral)
 
-stage_setup() {  # M2b: drive the installed system's Setup Assistant (best-effort; dense screenshots to refine)
+stage_setup() {  # M2b: Setup Assistant via mouse pixel-clicks (OCR can't read light buttons; QMP keys dead here)
   boot_installed
-  log "waiting for Setup Assistant (jiggle to keep display awake while macOS boots)"
+  log "waiting for Setup Assistant (jiggle to keep display awake)"
   local w
-  for w in 1 2 3 4 5; do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 30)) 400 2>/dev/null || true; sleep 25; done
-  screendump "su-00-region"
-  log "Setup Assistant click-through (best-effort)"
-  typestr "United States"; sleep 1; ocrclick Continue 600 720; sa_shot 01 6   # Country/Region
-  ocrclick Continue 600 720; sa_shot 02 5                                       # Written/Spoken Languages
-  ocrclick Now 540 720; sa_shot 03 5                                            # Accessibility -> Not Now
-  ocrclick Continue 600 720; sa_shot 04 5                                       # Data & Privacy
-  ocrclick Now 540 720; sa_shot 05 5                                            # Migration -> Not Now
-  ocrclick Later 700 720; sa_shot 06 5                                          # Apple Account -> Set Up Later
-  ocrclick Skip 420 560; sa_shot 07 4                                           # confirm "Skip"
-  ocrclick Agree 600 720; sa_shot 08 3                                          # Terms & Conditions -> Agree
-  keys tab; sleep 1; keys spc; sleep 1; ocrclick Agree 360 480; sa_shot 09 5    # terms confirm sheet
-  log "Setup Assistant recon done — inspect su-*.png to refine the sequence"
+  for w in 1 2 3 4 5 6; do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 25)) 400 2>/dev/null || true; sleep 25; done
+  screendump "su-00"
+  log "pixel-clicking footer Continue (955,661) to map the screen sequence"
+  local i
+  for ((i = 1; i <= 8; i++)); do
+    wake
+    click 955 661   # Setup Assistant footer Continue (consistent position)
+    sleep 7
+    screendump "su-$(printf '%02d' "$i")"
+    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at setup step $i"; return 1; }
+  done
+  log "pixel-Continue recon — map screens + locate skip-screen buttons (su-*.png)"
 }
 
 main() {

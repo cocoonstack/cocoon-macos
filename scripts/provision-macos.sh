@@ -20,8 +20,11 @@ diskutil list | tail -20
 
 DS="$VOL/private/var/db/dslocal/nodes/Default"
 
-# 1) skip Setup Assistant
-touch "$VOL/private/var/db/.AppleSetupDone" && echo "OK .AppleSetupDone"
+# 1) skip Setup Assistant (cover both path shapes; verify)
+for d in "$VOL/private/var/db" "$VOL/var/db"; do
+  [ -d "$d" ] && touch "$d/.AppleSetupDone"
+done
+ls -la "$VOL/private/var/db/.AppleSetupDone" 2>/dev/null && echo "OK .AppleSetupDone" || echo "WARN .AppleSetupDone missing"
 
 # 2) create the admin user directly in the volume's dslocal
 U="/Local/Default/Users/$USER_NAME"
@@ -35,21 +38,32 @@ dscl -f "$DS" localhost -passwd "$U" "$USER_PASS"
 dscl -f "$DS" localhost -append "/Local/Default/Groups/admin" GroupMembership "$USER_NAME"
 mkdir -p "$VOL/Users/$USER_NAME" && echo "OK user $USER_NAME created"
 
-# 3) first-boot daemon: enable Remote Login (SSH), then remove itself
+# 3) first-boot daemon: enable Remote Login (SSH) robustly, then remove itself.
 mkdir -p "$VOL/Library/LaunchDaemons" "$VOL/usr/local/bin"
 cat > "$VOL/usr/local/bin/cocoon-firstboot.sh" <<'SH'
 #!/bin/bash
-/usr/sbin/systemsetup -setremotelogin on
+exec >>/var/log/cocoon-firstboot.log 2>&1
+echo "=== cocoon-firstboot $(date) ==="
+/usr/sbin/systemsetup -f -setremotelogin on
+/bin/launchctl enable system/com.openssh.sshd
+/bin/launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist
+/bin/launchctl kickstart -k system/com.openssh.sshd
+echo "remotelogin: $(/usr/sbin/systemsetup -getremotelogin)"
 /bin/rm -f /Library/LaunchDaemons/com.cocoon.firstboot.plist /usr/local/bin/cocoon-firstboot.sh
 SH
-chmod +x "$VOL/usr/local/bin/cocoon-firstboot.sh"
+chmod 755 "$VOL/usr/local/bin/cocoon-firstboot.sh"
 cat > "$VOL/Library/LaunchDaemons/com.cocoon.firstboot.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>com.cocoon.firstboot</string>
-  <key>ProgramArguments</key><array><string>/usr/local/bin/cocoon-firstboot.sh</string></array>
+  <key>ProgramArguments</key><array><string>/bin/bash</string><string>/usr/local/bin/cocoon-firstboot.sh</string></array>
   <key>RunAtLoad</key><true/>
+  <key>StandardErrorPath</key><string>/var/log/cocoon-firstboot.err</string>
 </dict></plist>
 PLIST
+# LaunchDaemons must be owned root:wheel and not group/other-writable, else launchd ignores them
+chown 0:0 "$VOL/Library/LaunchDaemons/com.cocoon.firstboot.plist" "$VOL/usr/local/bin/cocoon-firstboot.sh"
+chmod 644 "$VOL/Library/LaunchDaemons/com.cocoon.firstboot.plist"
+ls -la "$VOL/Library/LaunchDaemons/com.cocoon.firstboot.plist"
 echo "=== PROVISION DONE (user=$USER_NAME, SSH on first boot) ==="

@@ -266,23 +266,31 @@ boot_installed() {  # OpenCore picker -> installed macOS (2nd entry, right of EF
 }
 
 wake() { python3 "$QMP_PY" "$QMP_SOCK" move 60 400 2>/dev/null || true; sleep 1; }  # wake display (neutral)
+sa_title() { python3 "$QMP_PY" "$QMP_SOCK" ocrtext 150 330 2>/dev/null | tr 'A-Z' 'a-z'; }  # screen title (dark text)
 
-stage_setup() {  # M2b: Setup Assistant via mouse pixel-clicks (OCR can't read light buttons; QMP keys dead here)
+stage_setup() {  # M2b: route Setup Assistant by OCR'd title -> footer Continue (955,661) / Not Now (811,661)
   boot_installed
   log "waiting for Setup Assistant (jiggle to keep display awake)"
   local w
   for w in 1 2 3 4 5 6; do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 25)) 400 2>/dev/null || true; sleep 25; done
-  screendump "su-00"
-  log "pixel-clicking footer Continue (955,661) to map the screen sequence"
-  local i
-  for ((i = 1; i <= 8; i++)); do
+  local i title
+  for ((i = 1; i <= 16; i++)); do
     wake
-    click 955 661   # Setup Assistant footer Continue (consistent position)
-    sleep 7
+    title="$(sa_title)"
+    log "screen $i title: [$title]"
     screendump "su-$(printf '%02d' "$i")"
+    case "$title" in
+      *transfer*|*migrat*|*screen*) click 811 661 ;;          # Migration / Screen Time -> Not Now (footer-left)
+      *apple*|*sign*) click 811 661 ;;                         # Apple Account -> Set Up Later (footer-left)
+      *terms*) click 955 661; sleep 2; click 705 399 ;;        # Terms -> Agree, then confirm-sheet Agree
+      *account*|*computer*|*full?name*) log "ACCOUNT screen — pausing for field-map"; break ;;
+      "") log "empty title (transition); wait"; sleep 6; continue ;;
+      *) click 955 661 ;;                                      # default -> Continue (footer-right)
+    esac
+    sleep 6
     kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at setup step $i"; return 1; }
   done
-  log "pixel-Continue recon — map screens + locate skip-screen buttons (su-*.png)"
+  log "title-routing recon — verify titles read + reached the account screen"
 }
 
 main() {

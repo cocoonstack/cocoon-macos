@@ -130,6 +130,27 @@ class QMP:
         hits.sort(key=lambda t: -t[2])  # highest confidence first
         return hits
 
+    def ocr_text(self, ymin=0, ymax=10 ** 9):
+        from PIL import Image, ImageOps
+        ppm = "/tmp/_ocr.ppm"
+        self.cmd("screendump", filename=ppm)
+        time.sleep(1)
+        img = Image.open(ppm).convert("L")
+        img = ImageOps.autocontrast(img.resize((img.width * self.SCALE, img.height * self.SCALE)))
+        img.save("/tmp/_ocr.png")
+        out = subprocess.run(
+            ["tesseract", "/tmp/_ocr.png", "stdout", "--psm", "6", "tsv"],
+            capture_output=True, text=True,
+        ).stdout
+        words = []
+        for ln in out.splitlines()[1:]:
+            f = ln.split("\t")
+            if len(f) >= 12 and f[11].strip():
+                cy = (int(f[7]) + int(f[9]) // 2) // self.SCALE
+                if ymin <= cy <= ymax and float(f[10]) >= 30:
+                    words.append(f[11].strip())
+        return " ".join(words)
+
     def ocrclick(self, word, ymin=0, ymax=10 ** 9):
         hits = self.ocr_find(word, ymin, ymax)
         if not hits:
@@ -161,6 +182,10 @@ def main():
         ymin = int(sys.argv[4]) if len(sys.argv) > 4 else 0
         ymax = int(sys.argv[5]) if len(sys.argv) > 5 else 10 ** 9
         sys.exit(0 if q.ocrclick(word, ymin, ymax) else 3)
+    elif op == "ocrtext":
+        ymin = int(sys.argv[3]) if len(sys.argv) > 3 else 0
+        ymax = int(sys.argv[4]) if len(sys.argv) > 4 else 10 ** 9
+        print(q.ocr_text(ymin, ymax))
     elif op == "screendump":
         q.cmd("screendump", filename=sys.argv[3])
     else:

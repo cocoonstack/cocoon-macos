@@ -90,7 +90,8 @@ fetch_recovery() {
   [[ -f OVMF_VARS.fd ]] || cp OVMF_VARS-1920x1080.fd OVMF_VARS.fd
 }
 
-configure_opencore() {  # make OpenCore follow the installer's bless across reboots (else reboot loops to recovery)
+configure_opencore() {  # patch OpenCore config.plist; arg "hide" => HideAuxiliary+short Timeout so it auto-boots the installed macOS
+  local hide="${1:-}"
   local oc="$OSX_KVM_DIR/OpenCore/OpenCore.qcow2"
   [[ -f "$oc" ]] || { log "OpenCore.qcow2 missing; skip OC patch"; return 0; }
   log "patching OpenCore config.plist: RequestBootVarRouting=true + Timeout (qemu-nbd)"
@@ -107,15 +108,19 @@ configure_opencore() {  # make OpenCore follow the installer's bless across rebo
     local cfg
     cfg=$(sudo find /mnt/oc -iname config.plist 2>/dev/null | head -1)
     if [[ -n "$cfg" ]]; then
-      sudo python3 - "$cfg" <<'PY' || true
-import plistlib, sys
+      sudo HIDE="$hide" python3 - "$cfg" <<'PY' || true
+import plistlib, os, sys
 p = sys.argv[1]
 d = plistlib.load(open(p, "rb"))
 d.setdefault("Booter", {}).setdefault("Quirks", {})["RequestBootVarRouting"] = True
 b = d.setdefault("Misc", {}).setdefault("Boot", {})
-b["Timeout"] = 8
+if os.environ.get("HIDE") == "hide":
+    b["HideAuxiliary"] = True   # hide EFI/recovery -> only the installed macOS remains
+    b["Timeout"] = 5            # auto-boot it (no keypress needed)
+else:
+    b["Timeout"] = 8
 plistlib.dump(d, open(p, "wb"))
-print("[oc] patched RequestBootVarRouting+Timeout in", p)
+print("[oc] patched config.plist (HIDE=%s) in %s" % (os.environ.get("HIDE"), p))
 PY
     else
       log "config.plist not found on OpenCore EFI"
@@ -290,14 +295,10 @@ stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the ins
   capture_and_push "$GHCR_TAG"   # tahoe:26 = SA-skipped, user 'cocoon', SSH on first boot
 }
 
-stage_verify() {  # boot the turnkey tahoe:26 and confirm it reaches login (not Setup Assistant) + SSH works
-  sleep 75
+stage_verify() {  # boot the turnkey tahoe:26 (OpenCore auto-boots it via HideAuxiliary+Timeout) + confirm SSH
+  sleep 30
   screendump "vf-00-picker"
-  log "booting installed macOS (turnkey)"
-  mon "sendkey right"; sleep 2
-  local t
-  for t in 1 2 3 4 5; do mon "sendkey ret"; sleep 8; done
-  log "waiting for boot + first-boot SSH daemon (jiggle to keep display awake)"
+  log "OpenCore auto-boots the installed macOS (HideAuxiliary); waiting for boot + first-boot SSH daemon"
   local w
   for w in $(seq 1 12); do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 20)) 400 2>/dev/null || true; sleep 25; done
   screendump "vf-01-loginscreen"
@@ -325,7 +326,7 @@ main() {
     setup)
       pull_image "$GHCR_TAG-base"; fetch_recovery; launch_qemu; stage_setup ;;
     verify)
-      pull_image "$GHCR_TAG"; configure_opencore; launch_qemu; stage_verify ;;
+      pull_image "$GHCR_TAG"; configure_opencore hide; launch_qemu; stage_verify ;;
     *)
       log "unknown STAGE=$STAGE"; exit 2 ;;
   esac

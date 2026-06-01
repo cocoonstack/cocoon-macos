@@ -265,33 +265,28 @@ boot_installed() {  # OpenCore picker -> installed macOS (2nd entry, right of EF
   for t in 1 2 3 4 5; do mon "sendkey ret"; sleep 8; done
 }
 
-wake() { python3 "$QMP_PY" "$QMP_SOCK" move 60 400 2>/dev/null || true; sleep 1; }  # wake display (neutral)
-sa_title() { python3 "$QMP_PY" "$QMP_SOCK" ocrtext 150 330 2>/dev/null | tr 'A-Z' 'a-z'; }  # screen title (dark text)
+PROVISION_URL="https://raw.githubusercontent.com/cocoonstack/cocoon-macos/master/scripts/provision-macos.sh"
 
-stage_setup() {  # M2b: route Setup Assistant by OCR'd title -> footer Continue (955,661) / Not Now (811,661)
-  boot_installed
-  log "waiting for Setup Assistant (jiggle to keep display awake)"
+stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the installed volume (skip GUI Setup Assistant)
+  sleep 75
+  screendump "su-00-picker"
+  log "booting macOS Base System (recovery) at the picker"
+  mon "sendkey right"; sleep 2
+  local t
+  for t in 1 2 3 4 5; do mon "sendkey ret"; sleep 8; done
+  log "waiting for Recovery (jiggle to keep display awake)"
   local w
-  for w in 1 2 3 4 5 6; do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 25)) 400 2>/dev/null || true; sleep 25; done
-  local i title
-  for ((i = 1; i <= 16; i++)); do
-    wake
-    title="$(sa_title)"
-    log "screen $i title: [$title]"
-    screendump "su-$(printf '%02d' "$i")"
-    case "$title" in
-      *transfer*|*migrat*) click 425 572; sleep 1; click 955 661 ;;  # "Set up as new" radio + Continue
-      *screen*) click 811 661 ;;                               # Screen Time -> Set Up Later (footer-left)
-      *apple*|*sign*) click 811 661 ;;                         # Apple Account -> Set Up Later (footer-left)
-      *terms*) click 955 661; sleep 2; click 705 399 ;;        # Terms -> Agree, then confirm-sheet Agree
-      *account*|*computer*|*full?name*) log "ACCOUNT screen — pausing for field-map"; break ;;
-      "") log "empty title (transition); wait"; sleep 6; continue ;;
-      *) click 955 661 ;;                                      # default -> Continue (footer-right)
-    esac
-    sleep 6
-    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at setup step $i"; return 1; }
+  for w in 1 2 3 4 5; do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 25)) 400 2>/dev/null || true; sleep 25; done
+  screendump "su-01-recovery"
+  log "opening Terminal (Shift-Cmd-T) + running provision script via curl|bash"
+  chord shift meta_l t; sleep 5; screendump "su-02-terminal"
+  typestr "curl -fsSL $PROVISION_URL -o /tmp/p.sh && bash /tmp/p.sh"; keys ret
+  local i
+  for ((i = 1; i <= 8; i++)); do
+    sleep 12; screendump "su-03-provision-$(printf '%02d' "$i")"
+    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited"; return 1; }
   done
-  log "title-routing recon — verify titles read + reached the account screen"
+  log "recovery-provision recon — inspect su-*.png (picker order, Terminal, provision output)"
 }
 
 main() {
@@ -303,7 +298,7 @@ main() {
     install)
       fetch_recovery; configure_opencore; launch_qemu; stage_install ;;
     setup)
-      pull_base_image; configure_opencore; launch_qemu; stage_setup ;;
+      pull_base_image; fetch_recovery; launch_qemu; stage_setup ;;
     *)
       log "unknown STAGE=$STAGE"; exit 2 ;;
   esac

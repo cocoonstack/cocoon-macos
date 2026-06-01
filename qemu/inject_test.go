@@ -1,0 +1,101 @@
+package qemu
+
+import (
+	"encoding/hex"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"howett.net/plist"
+)
+
+// sampleConfig mirrors the shape of the OSX-KVM OpenCore config.plist (placeholder
+// PlatformInfo + an unrelated Misc/Security/Vault key) so patchPlist is exercised against
+// a realistic round-trip.
+const sampleConfig = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Misc</key>
+	<dict>
+		<key>Security</key>
+		<dict>
+			<key>Vault</key>
+			<string>Optional</string>
+		</dict>
+	</dict>
+	<key>PlatformInfo</key>
+	<dict>
+		<key>Automatic</key>
+		<true/>
+		<key>UpdateSMBIOSMode</key>
+		<string>Create</string>
+		<key>Generic</key>
+		<dict>
+			<key>SystemProductName</key>
+			<string>iMac19,1</string>
+			<key>SystemSerialNumber</key>
+			<string>W00000000001</string>
+			<key>MLB</key>
+			<string>M0000000000000001</string>
+			<key>SystemUUID</key>
+			<string>00000000-0000-0000-0000-000000000000</string>
+			<key>ROM</key>
+			<data>ESIzRFVm</data>
+			<key>SpoofVendor</key>
+			<true/>
+		</dict>
+	</dict>
+</dict>
+</plist>
+`
+
+func TestPatchPlist(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.plist")
+	if err := os.WriteFile(p, []byte(sampleConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sm := SMBIOS{
+		Model: "iMac19,1", Serial: "ABC123DEF456", MLB: "AABBCCDDEEFF00112",
+		UUID: "11223344-5566-4788-99AA-BBCCDDEEFF00", ROM: "020406080a0c",
+	}
+	if err := patchPlist(p, sm); err != nil {
+		t.Fatalf("patchPlist: %v", err)
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if _, err := plist.Unmarshal(b, &cfg); err != nil {
+		t.Fatalf("patched config.plist no longer parses: %v", err)
+	}
+	pi, ok := cfg["PlatformInfo"].(map[string]any)
+	if !ok {
+		t.Fatal("PlatformInfo missing after patch")
+	}
+	g, ok := pi["Generic"].(map[string]any)
+	if !ok {
+		t.Fatal("Generic missing after patch")
+	}
+	if g["SystemSerialNumber"] != sm.Serial || g["MLB"] != sm.MLB || g["SystemUUID"] != sm.UUID {
+		t.Errorf("identity not injected: serial=%v mlb=%v uuid=%v", g["SystemSerialNumber"], g["MLB"], g["SystemUUID"])
+	}
+	if pi["Automatic"] != true {
+		t.Errorf("Automatic = %v, want true", pi["Automatic"])
+	}
+	if rom, _ := g["ROM"].([]byte); hex.EncodeToString(rom) != sm.ROM {
+		t.Errorf("ROM = %x, want %s", rom, sm.ROM)
+	}
+	if pi["UpdateSMBIOSMode"] != "Create" {
+		t.Errorf("unrelated PlatformInfo key not preserved: UpdateSMBIOSMode = %v", pi["UpdateSMBIOSMode"])
+	}
+	misc, ok := cfg["Misc"].(map[string]any)
+	if !ok {
+		t.Fatal("unrelated top-level key Misc dropped")
+	}
+	sec, _ := misc["Security"].(map[string]any)
+	if sec == nil || sec["Vault"] != "Optional" {
+		t.Errorf("Misc.Security.Vault not preserved: %v", sec)
+	}
+}

@@ -26,6 +26,7 @@ type Spec struct {
 	SSHPort  int    // host port forwarded to guest :22; 0 disables
 	MonSock  string // optional HMP monitor unix socket
 	QMPSock  string // optional QMP unix socket
+	MAC      string // optional guest NIC MAC (set to the SMBIOS ROM for --random-smbios)
 }
 
 // Args returns the qemu-system-x86_64 argument vector for the macOS guest.
@@ -55,7 +56,11 @@ func (s Spec) Args() []string {
 	} else {
 		a = append(a, "-netdev", "user,id=net0")
 	}
-	a = append(a, "-device", "virtio-net-pci,netdev=net0,id=net0")
+	nic := "virtio-net-pci,netdev=net0,id=net0"
+	if s.MAC != "" {
+		nic += ",mac=" + s.MAC
+	}
+	a = append(a, "-device", nic)
 	if s.VNCDisp >= 0 {
 		a = append(a, "-display", "none", "-vnc", fmt.Sprintf("127.0.0.1:%d", s.VNCDisp))
 	}

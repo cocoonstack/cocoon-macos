@@ -22,18 +22,20 @@ type Handler struct{}
 func NewHandler() *Handler { return &Handler{} }
 
 type record struct {
-	Name     string `json:"name"`
-	Image    string `json:"image"`
-	Disk     string `json:"disk"`
-	OpenCore string `json:"opencore"`
-	OVMFCode string `json:"ovmf_code"`
-	OVMFVars string `json:"ovmf_vars"`
-	CPUs     int    `json:"cpus"`
-	Memory   string `json:"memory"`
-	VNCDisp  int    `json:"vnc"`
-	SSHPort  int    `json:"ssh_port"`
-	PID      int    `json:"pid"`
-	Created  string `json:"created"`
+	Name     string       `json:"name"`
+	Image    string       `json:"image"`
+	Disk     string       `json:"disk"`
+	OpenCore string       `json:"opencore"`
+	OVMFCode string       `json:"ovmf_code"`
+	OVMFVars string       `json:"ovmf_vars"`
+	CPUs     int          `json:"cpus"`
+	Memory   string       `json:"memory"`
+	VNCDisp  int          `json:"vnc"`
+	SSHPort  int          `json:"ssh_port"`
+	PID      int          `json:"pid"`
+	Created  string       `json:"created"`
+	MAC      string       `json:"mac,omitempty"`
+	SMBIOS   *qemu.SMBIOS `json:"smbios,omitempty"`
 }
 
 func stateDir(cmd *cobra.Command) string {
@@ -105,13 +107,36 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 		Name: name, Image: image, Disk: overlay, OpenCore: oc, OVMFCode: code, OVMFVars: ovmfVars,
 		CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: ssh, Created: time.Now().Format(time.RFC3339),
 	}
+	if random, _ := cmd.Flags().GetBool("random-smbios"); random {
+		if err := assignSMBIOS(dir, oc, r); err != nil {
+			return nil, err
+		}
+	}
 	return r, saveRec(dir, r)
+}
+
+// assignSMBIOS gives the VM a unique identity: a per-VM OpenCore copy with PlatformInfo/Generic
+// injected, so clones do not all boot as the shipped placeholder serial.
+func assignSMBIOS(dir, oc string, r *record) error {
+	sm, err := qemu.RandomSMBIOS()
+	if err != nil {
+		return err
+	}
+	ocCopy := filepath.Join(dir, "OpenCore.qcow2")
+	if err := copyFile(oc, ocCopy); err != nil {
+		return fmt.Errorf("copy OpenCore: %w", err)
+	}
+	if err := qemu.InjectSMBIOS(ocCopy, sm); err != nil {
+		return fmt.Errorf("inject SMBIOS: %w", err)
+	}
+	r.OpenCore, r.SMBIOS, r.MAC = ocCopy, &sm, sm.MAC()
+	return nil
 }
 
 func (h *Handler) launch(dir string, r *record) error {
 	spec := qemu.Spec{
 		Name: r.Name, Disk: r.Disk, OpenCore: r.OpenCore, OVMFCode: r.OVMFCode, OVMFVars: r.OVMFVars,
-		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, SSHPort: r.SSHPort,
+		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, SSHPort: r.SSHPort, MAC: r.MAC,
 		MonSock: filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
 	}
 	pidfile := filepath.Join(dir, "qemu.pid")

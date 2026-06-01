@@ -315,6 +315,33 @@ stage_verify() {  # boot the turnkey tahoe:26 (OpenCore auto-boots it via HideAu
   [[ -n "$ok" ]] && log "VERIFY PASS: turnkey macOS boots + SSH works" || log "VERIFY: SSH not reachable yet (inspect vf-*.png + ssh-output.txt)"
 }
 
+stage_cli() {  # M3: clone+launch tahoe:26 via the Go CLI (cocoon-macos vm run), then SSH in
+  cd "$ROOT_DIR"
+  go build -o "$WORKDIR/cocoon-macos" . || { log "go build failed"; return 1; }
+  log "built cocoon-macos: $("$WORKDIR/cocoon-macos" vm --help 2>&1 | head -1)"
+  local sd="$WORKDIR/cli-state"
+  "$WORKDIR/cocoon-macos" vm run "$OSX_KVM_DIR/$QCOW2_NAME" \
+    --name t1 --cpus "$CPUS" --memory "$MEMORY" --vnc "$VNC_DISP" --ssh-port "$SSH_PORT" \
+    --opencore "$OSX_KVM_DIR/OpenCore/OpenCore.qcow2" \
+    --ovmf-code "$OSX_KVM_DIR/OVMF_CODE_4M.fd" \
+    --ovmf-vars "$OSX_KVM_DIR/OVMF_VARS-1920x1080.fd" \
+    --state-dir "$sd" || { log "cocoon-macos vm run failed"; return 1; }
+  "$WORKDIR/cocoon-macos" vm list --state-dir "$sd"
+  QEMU_PID="$(cat "$sd/vms/t1/qemu.pid" 2>/dev/null || echo "")"
+  log "CLI launched VM (pid $QEMU_PID); OpenCore auto-boots macOS; waiting for SSH"
+  sleep 180
+  local ok="" w
+  for w in $(seq 1 12); do
+    if sshpass -p cocoon ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 \
+         -p "$SSH_PORT" cocoon@localhost 'sw_vers; hostname; id' >"$ARTIFACT_DIR/cli-ssh.txt" 2>&1; then
+      ok=1; log "M3 CLI SSH OK:"; cat "$ARTIFACT_DIR/cli-ssh.txt"; break
+    fi
+    log "CLI SSH attempt $w not ready"; sleep 30
+  done
+  [[ -n "$ok" ]] && log "=== M3 PASS: cocoon-macos vm run clones + boots macOS + SSH works ===" \
+    || log "M3 CLI: SSH not reachable (inspect $ARTIFACT_DIR/cli-ssh.txt)"
+}
+
 main() {
   require_kvm
   setup_osx_kvm
@@ -327,6 +354,8 @@ main() {
       pull_image "$GHCR_TAG-base"; fetch_recovery; launch_qemu; stage_setup ;;
     verify)
       pull_image "$GHCR_TAG"; configure_opencore hide; launch_qemu; stage_verify ;;
+    cli)
+      pull_image "$GHCR_TAG"; configure_opencore hide; stage_cli ;;
     *)
       log "unknown STAGE=$STAGE"; exit 2 ;;
   esac

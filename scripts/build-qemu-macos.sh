@@ -299,11 +299,11 @@ stage_verify() {  # boot the turnkey tahoe:26 and confirm it reaches login (not 
   for t in 1 2 3 4 5; do mon "sendkey ret"; sleep 8; done
   log "waiting for boot + first-boot SSH daemon (jiggle to keep display awake)"
   local w
-  for w in 1 2 3 4 5 6 7 8; do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 25)) 400 2>/dev/null || true; sleep 25; done
+  for w in $(seq 1 12); do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 20)) 400 2>/dev/null || true; sleep 25; done
   screendump "vf-01-loginscreen"
   log "testing SSH cocoon@localhost:$SSH_PORT"
   local ok=""
-  for w in 1 2 3 4 5 6; do
+  for w in $(seq 1 14); do
     if sshpass -p cocoon ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 \
          -p "$SSH_PORT" cocoon@localhost 'sw_vers; hostname; id' >"$ARTIFACT_DIR/ssh-output.txt" 2>&1; then
       ok=1; log "SSH OK:"; cat "$ARTIFACT_DIR/ssh-output.txt"; break

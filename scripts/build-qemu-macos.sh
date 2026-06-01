@@ -286,7 +286,8 @@ stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the ins
     sleep 12; screendump "su-03-provision-$(printf '%02d' "$i")"
     kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited"; return 1; }
   done
-  log "recovery-provision recon — inspect su-*.png (picker order, Terminal, provision output)"
+  log "provision done; capturing turnkey image -> $GHCR_REPO:$GHCR_TAG"
+  capture_and_push "$GHCR_TAG"   # tahoe:26 = SA-skipped, user 'cocoon', SSH on first boot
 }
 
 main() {

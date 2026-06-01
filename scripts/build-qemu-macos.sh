@@ -280,7 +280,8 @@ stage_setup() {  # M2b: route Setup Assistant by OCR'd title -> footer Continue 
     log "screen $i title: [$title]"
     screendump "su-$(printf '%02d' "$i")"
     case "$title" in
-      *transfer*|*migrat*|*screen*) click 811 661 ;;          # Migration / Screen Time -> Not Now (footer-left)
+      *transfer*|*migrat*) click 425 572; sleep 1; click 955 661 ;;  # "Set up as new" radio + Continue
+      *screen*) click 811 661 ;;                               # Screen Time -> Set Up Later (footer-left)
       *apple*|*sign*) click 811 661 ;;                         # Apple Account -> Set Up Later (footer-left)
       *terms*) click 955 661; sleep 2; click 705 399 ;;        # Terms -> Agree, then confirm-sheet Agree
       *account*|*computer*|*full?name*) log "ACCOUNT screen — pausing for field-map"; break ;;

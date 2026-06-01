@@ -346,16 +346,22 @@ stage_cli() {  # M3: clone+launch tahoe:26 via the Go CLI (cocoon-macos vm run),
     --ovmf-vars "$OSX_KVM_DIR/OVMF_VARS-1920x1080.fd" \
     --state-dir "$sd" || { log "cocoon-macos vm run failed"; return 1; }
   "$WORKDIR/cocoon-macos" vm list --state-dir "$sd"
+  # point the boot/screenshot helpers at the CLI-launched VM's sockets, then boot like verify
+  MON_SOCK="$sd/vms/t1/monitor.sock"
+  QMP_SOCK="$sd/vms/t1/qmp.sock"
   QEMU_PID="$(cat "$sd/vms/t1/qemu.pid" 2>/dev/null || echo "")"
-  log "CLI launched VM (pid $QEMU_PID); OpenCore auto-boots macOS; waiting for SSH"
-  sleep 180
+  log "CLI launched VM (pid $QEMU_PID); booting macOS"
+  boot_macintosh
+  log "waiting for SSH on the CLI-launched VM"
   local ok="" w
+  for w in $(seq 1 8); do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 20)) 400 2>/dev/null || true; sleep 20; done
   for w in $(seq 1 12); do
     if sshpass -p cocoon ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 \
          -p "$SSH_PORT" cocoon@localhost 'sw_vers; hostname; id' >"$ARTIFACT_DIR/cli-ssh.txt" 2>&1; then
       ok=1; log "M3 CLI SSH OK:"; cat "$ARTIFACT_DIR/cli-ssh.txt"; break
     fi
-    log "CLI SSH attempt $w not ready"; sleep 30
+    log "CLI SSH attempt $w not ready"; sleep 25
+    python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 15)) 420 2>/dev/null || true
   done
   [[ -n "$ok" ]] && log "=== M3 PASS: cocoon-macos vm run clones + boots macOS + SSH works ===" \
     || log "M3 CLI: SSH not reachable (inspect $ARTIFACT_DIR/cli-ssh.txt)"

@@ -18,22 +18,10 @@ jobs:
       - name: Checkout cocoon-macos
         uses: actions/checkout@v5
 
-      # cocoon is imported only for its neutral `types` package; resolve it via a
-      # path replace against an in-workspace checkout (the `_cocoon` leading
-      # underscore makes the Go tool skip the dir when walking ./...).
-      - name: Checkout cocoon (dependency)
-        uses: actions/checkout@v5
-        with:
-          repository: cocoonstack/cocoon
-          path: _cocoon
-
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
-
-      - name: Point replace at in-workspace cocoon
-        run: go mod edit -replace github.com/cocoonstack/cocoon=./_cocoon
 
       - name: Build
         env:

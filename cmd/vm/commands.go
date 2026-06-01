@@ -87,7 +87,11 @@ func Command(h Actions) *cobra.Command {
 func addVMFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("name", "n", "", "VM name (default: generated)")
 	cmd.Flags().Int("cpus", 4, "vCPU count")
-	cmd.Flags().String("memory", "8G", "memory size")
-	cmd.Flags().Int("vnc", 0, "VNC display number (n => host :590n); 0 disables")
+	cmd.Flags().String("memory", "8192", "guest memory in MiB")
+	cmd.Flags().Int("vnc", -1, "VNC display number (n => host 127.0.0.1:590n); <0 disables")
 	cmd.Flags().Int("ssh-port", 0, "host port forwarded to guest :22; 0 disables")
+	cmd.Flags().String("opencore", "", "OpenCore.qcow2 boot loader (required)")
+	cmd.Flags().String("ovmf-code", "", "OVMF_CODE firmware (required)")
+	cmd.Flags().String("ovmf-vars", "", "OVMF_VARS template (copied per-VM)")
+	cmd.Flags().String("state-dir", "", "VM state root (default $COCOON_MACOS_HOME or ~/.cocoon-macos)")
 }

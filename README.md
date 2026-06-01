@@ -14,6 +14,10 @@ disk image to ghcr; a thin Go CLI clones that image and boots VMs from it.
   - `ghcr.io/cocoonstack/cocoon-macos/tahoe:26` — turnkey: provisioned via Recovery Terminal
     (Setup Assistant skipped, admin user `cocoon`/`cocoon`, Remote Login/SSH enabled on first boot).
 - **CLI** (`cocoon-macos vm …`) clones a golden image (copy-on-write qcow2 overlay) and launches QEMU.
+- **Per-VM identity** (`--random-smbios`, testbed-verified): injects a unique Apple SMBIOS
+  (serial/MLB/UUID/ROM, with the guest NIC MAC set to the ROM) into a per-VM OpenCore so clones
+  don't all boot as the shipped placeholder serial. Confirmed in-guest via `system_profiler` —
+  two clones get two distinct serials, each matching what was injected.
 
 ## CLI
 
@@ -22,7 +26,7 @@ go build -o cocoon-macos .
 
 # clone the golden image into a per-VM overlay and boot it (x86 Linux + /dev/kvm)
 cocoon-macos vm run ghcr-pulled-tahoe.qcow2 \
-  --name m1 --cpus 4 --memory 8192 --ssh-port 2222 --vnc 1 \
+  --name m1 --cpus 4 --memory 8192 --ssh-port 2222 --vnc 1 --random-smbios \
   --opencore OpenCore.qcow2 --ovmf-code OVMF_CODE_4M.fd --ovmf-vars OVMF_VARS.fd
 
 cocoon-macos vm list           # JSON of all VMs
@@ -37,6 +41,11 @@ per-VM `OVMF_VARS` → launch `qemu-system-x86_64` (validated OSX-KVM recipe in 
 Skylake-Client CPU spoofing GenuineIntel + `isa-applesmc` OSK + OVMF + OpenCore + the macOS
 qcow2) daemonized, recording state under `$COCOON_MACOS_HOME` (default `~/.cocoon-macos`).
 
+With `--random-smbios`, `create` also copies OpenCore per-VM and injects a generated identity
+into its `config.plist` `PlatformInfo/Generic` (via `qemu-nbd` mount); the model stays `iMac19,1`
+(proven to boot Tahoe) and only serial/MLB/UUID/ROM are randomized. The assigned identity is
+recorded and shown by `vm inspect`.
+
 ## CI image pipeline (`.github/workflows/build-macos-image.yml`, `scripts/build-qemu-macos.sh`)
 
 `workflow_dispatch` with `stage`:
@@ -47,7 +56,9 @@ qcow2) daemonized, recording state under `$COCOON_MACOS_HOME` (default `~/.cocoo
 | `install` | full install from scratch → capture → push `tahoe:26-base` (~65 min) |
 | `setup` | pull `tahoe:26-base` → boot Recovery → `provision-macos.sh` (skip SA + user + SSH) → push `tahoe:26` |
 | `verify` | pull `tahoe:26` → boot → confirm login + SSH (`cocoon@localhost`) |
-| `cli` | build the Go CLI → `cocoon-macos vm run tahoe:26` → SSH (end-to-end CLI proof) |
+
+This pipeline is **image-only** (no Go); the CLI end-to-end (`vm run` + `--random-smbios`) is
+exercised on a KVM testbed, keeping image and Go CI separate.
 
 Automation primitives (`scripts/qmp-input.py`): QMP absolute mouse click/move, keyboard
 type/chord, **tesseract+PIL OCR-click and title routing** (drives the macOS GUI installer where
@@ -67,4 +78,6 @@ deep-research notes that motivated this project.
 ## Out of scope (v0.x)
 
 cocoon engine integration (a `qemu` Hypervisor backend in cocoon) is a separate later phase.
-iServices/App Store (per-VM SMBIOS injection) is a designed-in hook, not enabled here.
+Per-VM SMBIOS injection (`--random-smbios`) is implemented + testbed-verified, but registering
+those identities with iServices/App Store is the consumer's policy concern — it needs validated
+(not just unique) serials and carries Apple-ID ban risk at fleet scale — so it is not done here.

@@ -24,9 +24,8 @@ func InjectSMBIOS(ocPath string, s SMBIOS) error {
 	if out, cerr := exec.Command("qemu-nbd", "--connect="+nbd, "-f", "qcow2", ocPath).CombinedOutput(); cerr != nil {
 		return fmt.Errorf("qemu-nbd connect %s: %v: %s", nbd, cerr, out)
 	}
-	defer func() { _ = exec.Command("qemu-nbd", "--disconnect", nbd).Run() }()
-	time.Sleep(2 * time.Second)
-	_ = exec.Command("partprobe", nbd).Run()
+	defer disconnectNBD(nbd, ocPath)
+	waitForPart(nbd)
 	mnt, err := os.MkdirTemp("", "oc-efi-")
 	if err != nil {
 		return err
@@ -44,6 +43,46 @@ func InjectSMBIOS(ocPath string, s SMBIOS) error {
 	}
 	defer func() { _ = exec.Command("umount", mnt).Run() }()
 	return patchPlist(filepath.Join(mnt, "EFI", "OC", "config.plist"), s)
+}
+
+// waitForPart blocks until the kernel has scanned the qcow2's partition table (nbd partition
+// creation is asynchronous after --connect), so the mount below sees nbdXp1.
+func waitForPart(nbd string) {
+	for range 50 {
+		if _, err := os.Stat(nbd + "p1"); err == nil {
+			return
+		}
+		_ = exec.Command("partprobe", nbd).Run()
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// disconnectNBD tears down the qemu-nbd mapping and waits until the qcow2 is no longer held
+// open by any process. qemu-nbd --disconnect releases the device asynchronously and the server
+// pid is not /sys/block/nbdX/pid, so returning early would let the qemu launch race in and fail
+// with "Failed to get shared write lock".
+func disconnectNBD(nbd, ocPath string) {
+	_ = exec.Command("qemu-nbd", "--disconnect", nbd).Run()
+	for range 100 {
+		if !fileHeld(ocPath) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func fileHeld(path string) bool {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		abs = path
+	}
+	fds, _ := filepath.Glob("/proc/[0-9]*/fd/*")
+	for _, fd := range fds {
+		if tgt, err := os.Readlink(fd); err == nil && tgt == abs {
+			return true
+		}
+	}
+	return false
 }
 
 func freeNBD() (string, error) {

@@ -121,6 +121,13 @@ func patchPlist(path string, s SMBIOS) error {
 	g["SystemUUID"] = s.UUID
 	g["ROM"] = rom
 	g["SpoofVendor"] = true
+	// Auto-boot the installed macOS: hide the EFI/recovery aux entry + a short timeout, so the VM
+	// never stalls at the OpenCore picker (which can't be driven reliably headlessly — a missed
+	// sendkey boots the dead EFI entry and the VM never reaches macOS).
+	boot := subMap(subMap(cfg, "Misc"), "Boot")
+	boot["HideAuxiliary"] = true
+	boot["Timeout"] = uint64(5)
+	subMap(subMap(cfg, "Booter"), "Quirks")["RequestBootVarRouting"] = true
 	out, err := plist.MarshalIndent(cfg, plist.XMLFormat, "\t")
 	if err != nil {
 		return fmt.Errorf("encode config.plist: %w", err)

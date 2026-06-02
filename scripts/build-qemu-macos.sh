@@ -8,7 +8,8 @@
 # This is an IMAGE-only pipeline (no Go); the CLI is exercised separately on a testbed.
 #   boot    — boot headless to the macOS Recovery/installer, screenshot proof
 #   install — Recovery -> erase -> startosinstall headlessly, push tahoe:26-base
-#   setup   — provision the installed image (skip Setup Assistant), push turnkey tahoe:26
+#   setup   — provision the installed image (create cocoon user + SSH), push tahoe:26
+#   desktop — boot tahoe:26 -> auto-login cocoon + skip Setup Assistant + slim, re-push tahoe:26
 #   verify  — boot tahoe:26 + confirm SSH
 set -euo pipefail
 
@@ -150,7 +151,7 @@ launch_qemu() {
     -device ich9-ahci,id=sata
     -drive id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,file=OpenCore/OpenCore.qcow2
     -device ide-hd,bus=sata.2,drive=OpenCoreBoot
-    -drive id=MacHDD,if=none,file="$QCOW2_NAME",format=qcow2
+    -drive id=MacHDD,if=none,file="$QCOW2_NAME",format=qcow2,discard=unmap,detect-zeroes=unmap
     -device ide-hd,bus=sata.4,drive=MacHDD
     -netdev user,id=net0,hostfwd=tcp::"$SSH_PORT"-:22
     -device virtio-net-pci,netdev=net0,id=net0,mac=52:54:00:c9:18:27
@@ -336,6 +337,82 @@ stage_verify() {  # boot the turnkey tahoe:26 and confirm SSH
   [[ -n "$ok" ]] && log "VERIFY PASS: turnkey macOS boots + SSH works" || log "VERIFY: SSH not reachable yet (inspect vf-*.png + ssh-output.txt)"
 }
 
+gssh() { sshpass -p cocoon ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -p "$SSH_PORT" cocoon@localhost "$@"; }
+
+wait_ssh() {  # poll guest SSH (jiggling the mouse to keep the display awake); returns 0 once it answers
+  local w
+  for w in $(seq 1 "${1:-16}"); do
+    gssh true 2>/dev/null && return 0
+    sleep 20
+    python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 13)) 400 2>/dev/null || true
+  done
+  return 1
+}
+
+apply_desktop_recipe() {  # skip Setup Assistant + auto-login cocoon + no display sleep + suppress keyboard wizard
+  log "applying boot-to-desktop recipe over SSH"
+  gssh 'bash -s' <<'GUEST'
+PV=$(sw_vers -productVersion); BV=$(sw_vers -buildVersion); echo "[recipe] PV=$PV BV=$BV"
+echo cocoon | sudo -S createhomedir -c -u cocoon >/dev/null 2>&1   # cocoon has never GUI-logged-in
+P=/Users/cocoon/Library/Preferences/com.apple.SetupAssistant
+for k in DidSeeCloudSetup DidSeeSiriSetup DidSeePrivacy DidSeeScreenTime DidSeeAppearanceSetup DidSeeTouchIDSetup DidSeeApplePaySetup DidSeeActivationLock DidSeeAccessibility DidSeeAvatarSetup DidSeeSyncSetup DidSeeSyncSetup2 DidSeeTermsOfAddress DidSeeLockdownMode DidSeeAppStore DidSeeiCloudLoginForStorageServices; do echo cocoon | sudo -S defaults write $P "$k" -bool true; done
+echo cocoon | sudo -S defaults write $P GestureMovieSeen none
+echo cocoon | sudo -S defaults write $P LastSeenCloudProductVersion -string "$PV"
+echo cocoon | sudo -S defaults write $P LastSeenBuddyBuildVersion -string "$BV"   # MUST be the build, or the cloud pane respawns
+echo cocoon | sudo -S defaults write $P LastSeenDiagnosticsProductVersion -string "$PV"
+echo cocoon | sudo -S defaults write $P LastSeenSiriProductVersion -string "$PV"
+echo cocoon | sudo -S defaults write $P LastSeenSyncProductVersion -string "$PV"
+echo cocoon | sudo -S defaults write $P MiniBuddyShouldLaunchToResumeSetup -bool false
+echo cocoon | sudo -S defaults write $P MiniBuddyLaunchReason -integer 0
+echo cocoon | sudo -S chown -R cocoon:staff /Users/cocoon/Library/Preferences
+echo cocoon | sudo -S defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string cocoon
+# guest python3 is the Apple CLT stub -> printf the kcpassword bytes for "cocoon" (XOR Apple key, padded to 12)
+echo cocoon | sudo -S bash -c 'printf "\x1e\xe6\x31\x4c\xbd\xd2\xdd\xea\xa3\xb9\x1f\x7d" > /etc/kcpassword; chmod 600 /etc/kcpassword; chown root:wheel /etc/kcpassword'
+# suppress the Keyboard Setup Assistant for the QEMU USB keyboard (idVendor 1575, idProduct 1) -> ANSI(40)
+echo cocoon | sudo -S defaults write /Library/Preferences/com.apple.keyboardtype keyboardtype -dict-add "1-1575-0" -int 40
+echo cocoon | sudo -S pmset -a displaysleep 0 sleep 0 disksleep 0
+echo "[recipe] autoLoginUser=$(echo cocoon | sudo -S defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser 2>/dev/null) kcpw=$(echo cocoon | sudo -S stat -f %z /etc/kcpassword 2>/dev/null)b"
+echo RECIPE_OK
+GUEST
+}
+
+slim_disk() {  # reclaim stale qcow2 clusters: drop sleepimage/caches, then zero-fill free space (detect-zeroes=unmap drops it in place)
+  log "slimming: drop sleepimage + caches, zero-fill free space"
+  gssh 'bash -s' <<'GUEST'
+echo cocoon | sudo -S pmset -a hibernatemode 0 2>/dev/null
+echo cocoon | sudo -S rm -f /private/var/vm/sleepimage 2>/dev/null
+echo cocoon | sudo -S rm -rf /Library/Caches/* /System/Library/Caches/* /private/var/log/* 2>/dev/null
+rm -rf ~/Library/Caches/* ~/.Trash/* 2>/dev/null
+echo "[slim] used before zero-fill: $(df -h / | tail -1 | awk '{print $3}')"
+echo cocoon | sudo -S dd if=/dev/zero of=/private/var/tmp/ZZ bs=1048576 2>/dev/null; echo cocoon | sudo -S rm -f /private/var/tmp/ZZ; sync; sleep 3
+echo SLIM_OK
+GUEST
+}
+
+stage_desktop() {  # turn the SSH-ready :26 into a boot-straight-to-desktop + slimmed image, then re-push :26
+  boot_macintosh
+  log "waiting for SSH on the SSH-ready image"
+  wait_ssh 16 || { log "FATAL: SSH never came up"; return 1; }
+  apply_desktop_recipe
+  log "rebooting so the next boot auto-logs into cocoon's desktop"
+  gssh 'echo cocoon | sudo -S reboot' >/dev/null 2>&1
+  sleep 40
+  boot_macintosh
+  wait_ssh 16 || { log "FATAL: SSH not back after reboot"; return 1; }
+  local cu="" w
+  for w in $(seq 1 12); do cu=$(gssh 'stat -f %Su /dev/console' 2>/dev/null); [ "$cu" = cocoon ] && break; sleep 12; done
+  python3 "$QMP_PY" "$QMP_SOCK" move 220 220 2>/dev/null || true; sleep 2
+  screendump "desktop-01"
+  log "console user after reboot: $cu"
+  [ "$cu" = cocoon ] || { log "FATAL: did not auto-login to cocoon desktop (console=$cu)"; return 1; }
+  log "=== DESKTOP OK: auto-logged into cocoon's desktop ==="
+  slim_disk
+  log "clean shutdown"
+  gssh 'echo cocoon | sudo -S shutdown -h now' >/dev/null 2>&1
+  sleep 20
+  capture_and_push "$GHCR_TAG"   # tahoe:26 = boots straight to cocoon's desktop, slimmed
+}
+
 main() {
   require_kvm
   setup_osx_kvm
@@ -346,6 +423,8 @@ main() {
       fetch_recovery; configure_opencore; launch_qemu; stage_install ;;
     setup)
       pull_image "$GHCR_TAG-base"; fetch_recovery; launch_qemu; stage_setup ;;
+    desktop)
+      pull_image "$GHCR_TAG"; configure_opencore hide; launch_qemu; stage_desktop ;;
     verify)
       pull_image "$GHCR_TAG"; configure_opencore hide; launch_qemu; stage_verify ;;
     *)

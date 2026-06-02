@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       stage:
-        description: "boot | install | setup (provision turnkey) | verify (boot tahoe:26, test SSH)"
+        description: "boot | install | setup (provision SSH) | desktop (auto-login + skip SA + slim, repush :26) | verify"
         required: true
         default: "boot"
       version_tag:

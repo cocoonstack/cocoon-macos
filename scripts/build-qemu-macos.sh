@@ -345,6 +345,7 @@ wait_ssh() {  # poll guest SSH (jiggling the mouse to keep the display awake); r
     gssh true 2>/dev/null && return 0
     sleep 20
     python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 13)) 400 2>/dev/null || true
+    [ $((w % 4)) -eq 0 ] && screendump "wait-$(printf '%02d' "$w")"  # boot-timeline frames (uploaded even on failure)
   done
   return 1
 }

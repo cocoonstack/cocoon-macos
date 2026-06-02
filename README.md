@@ -20,22 +20,53 @@ disk image to ghcr; a thin Go CLI clones that image and boots VMs from it.
   (serial/MLB/UUID/ROM, with the guest NIC MAC set to the ROM) into a per-VM OpenCore so clones
   don't all boot as the shipped placeholder serial. Confirmed in-guest via `system_profiler` —
   two clones get two distinct serials, each matching what was injected.
+- **Image management** (`cocoon-macos image pull|list|inspect|rm`): pulls the golden qcow2 from
+  ghcr into a content-addressed local store — cocoon's `cloudimg` backend imported directly — so
+  `vm run <ref>` bakes a CoW overlay on the immutable shared base. **qcow2-only** (no OCI image
+  layers; `oras` is just the ghcr transport for the qcow2 blob).
+- **Networking** (`--net user|tap|cni|bridge`): user-mode SLIRP + `--ssh-port` hostfwd by default;
+  `tap`/`bridge`/`cni` auto-create a host TAP via cocoon's network plane (imported `network/bridge`
+  + `network/cni`), so macOS VMs join the **same** bridge/CNI forwarding plane as cocoon's CH/FC
+  VMs on the node. The guest MAC stays = SMBIOS ROM. Auto-create is Linux-only (CAP_NET_ADMIN);
+  user-mode + a pre-created `--tap` work everywhere.
+- **Snapshot / restore / clone** (`vm snapshot|restore|clone`): offline qcow2-internal snapshots
+  (`qemu-img snapshot`, VM stopped — `-cpu +invtsc` blocks live RAM snapshot, so this is disk-state
+  only) and CoW clones that cold-boot a **fresh** Apple identity, so two clones never share a serial/MAC.
 
 ## CLI
 
 ```bash
 go build -o cocoon-macos .
 
-# clone the golden image into a per-VM overlay and boot it (x86 Linux + /dev/kvm)
-cocoon-macos vm run ghcr-pulled-tahoe.qcow2 \
-  --name m1 --cpus 4 --memory 8192 --ssh-port 2222 --vnc 1 --random-smbios \
-  --opencore OpenCore.qcow2 --ovmf-code OVMF_CODE_4M.fd --ovmf-vars OVMF_VARS.fd
+# pull the golden qcow2 from ghcr into the local store (cocoon cloudimg; ~/.cocoon-macos)
+cocoon-macos image pull ghcr.io/cocoonstack/cocoon-macos/tahoe:26
+cocoon-macos image list        # also: inspect, rm
+
+# install the shared OpenCore loader + OVMF firmware ONCE into <state-dir>/firmware (reused by
+# every VM); afterwards vm create/run default to these, so --opencore/--ovmf-* become optional
+cocoon-macos firmware install --opencore OpenCore.qcow2 --ovmf-code OVMF_CODE_4M.fd --ovmf-vars OVMF_VARS.fd
+cocoon-macos firmware list
+
+# clone the golden image into a per-VM overlay and boot it (x86 Linux + /dev/kvm).
+# IMAGE is a store ref (above) or a direct qcow2 path; firmware defaults to the install above.
+cocoon-macos vm run ghcr.io/cocoonstack/cocoon-macos/tahoe:26 \
+  --name m1 --cpus 4 --memory 8192 --ssh-port 2222 --vnc 1 --random-smbios
 
 cocoon-macos vm list           # JSON of all VMs
 cocoon-macos vm inspect m1
 cocoon-macos vm stop m1
 cocoon-macos vm rm m1
 # also: create (no boot), start, console
+
+# networking — join the host's bridge/CNI plane instead of user-mode SLIRP (Linux):
+cocoon-macos vm run <IMAGE> --net bridge --bridge br0 --random-smbios  …   # auto-creates a TAP on br0
+cocoon-macos vm run <IMAGE> --net cni    --random-smbios  …               # CNI: TAP in a netns
+cocoon-macos vm run <IMAGE> --net tap    --tap tap0       …               # use a pre-created TAP verbatim
+
+# snapshot / restore / clone (VM stopped for snapshot/restore; clone gets a unique identity):
+cocoon-macos vm snapshot m1 --tag clean
+cocoon-macos vm restore  m1 --tag clean          # --force to stop+restore+relaunch a running VM
+cocoon-macos vm clone    m1 -n m2 --ssh-port 2223 --random-smbios
 ```
 
 `vm run` does: `qemu-img create -b <golden> overlay.qcow2` (instant CoW clone) → copy a
@@ -52,6 +83,13 @@ QEMU's VNC is loopback-only (`127.0.0.1:590<vnc>`) and offers `None` auth, which
 Screen Sharing hangs on**. Pass `--vnc-password <≤8 chars>` to start QEMU with `password=on`
 (set via the monitor post-launch) so Screen Sharing prompts and connects; tunnel first with
 `ssh -L 5901:127.0.0.1:5901 <host>`. Plain VNC clients (RealVNC/TigerVNC) work without a password.
+
+**Display sleep blanks VNC.** macOS only repaints the emulated framebuffer while the display is
+awake; once it sleeps (~idle), VNC shows a blank **white/black** screen with just the cursor even
+though the guest is healthy (SSH works, WindowServer is up). It is *not* a GPU/driver problem — a
+mouse move repaints it, and the full Tahoe desktop renders fine (Finder/Dock/menu bar). The golden
+image's first-boot daemon now runs `pmset -a displaysleep 0 disablesleep 1` system-wide (covers the
+pre-login loginwindow) so the framebuffer stays painted; older images need a `setup`-stage rebuild.
 
 ## CI image pipeline (`.github/workflows/build-macos-image.yml`, `scripts/build-qemu-macos.sh`)
 
@@ -76,7 +114,13 @@ runs in the Recovery Terminal against the installed Data volume (`dscl -f` offli
 Key host facts: GitHub `ubuntu-latest` exposes `/dev/kvm` (needs `chmod 666`); macOS Tahoe 26
 is the last Intel-supporting macOS, so this x86 path has a finite shelf life.
 
-## Boot-to-desktop (WIP — blocked on the macOS 26 Setup Assistant)
+## Boot-to-desktop (GUI renders; auto-skip of the Setup Assistant is the remaining WIP)
+
+The full Tahoe desktop **does render over VNC** — testbed-verified: boot → login window (the `cocoon`
+user) → type `cocoon` → Finder + Dock + menu bar + desktop widgets, all repainting normally. The
+earlier "white/black VNC" was purely **display sleep** (see the VNC note above), now fixed at the
+image level. What's left for a *fully unattended* boot-to-desktop is auto-skipping the first-run
+Setup Assistant + auto-login.
 
 The `desktop` build stage + `provision-macos.sh` aim to make `:26` boot straight to `cocoon`'s
 desktop (auto-login, no Setup Assistant). The **post-SA recipe is validated** (proven on a testbed
@@ -98,9 +142,47 @@ VZ on Apple Silicon caps ~2 macOS VMs/host and can't use the App Store; QEMU + O
 has neither limit (at the cost of per-VM identity + Apple-ID ban risk at fleet scale). See the
 deep-research notes that motivated this project.
 
+## E2E regression (`scripts/e2e.sh`)
+
+A testbed lifecycle regression (modeled on cocoon's), two tiers:
+
+- **`[DUMMY]`** — file-level lifecycle on a tiny throwaway qcow2, **no macOS boot**: image store
+  (`pull`-less `list`/`rm`), `vm create` overlay-on-shared-base, `--random-smbios` serial/MAC
+  uniqueness + MAC==ROM, `snapshot`/`restore` (qcow2-internal tag rollback), `clone` (CoW on the
+  shared base + distinct identity + clone-of-clone backing), `stop` PID-reuse-safe teardown,
+  `--net bridge` auto-TAP create + `tap_owned` + teardown-on-`rm` + user-`--tap` preservation +
+  negative paths — with post-conditions asserting no leaked TAPs/procs and backing-chain integrity.
+  Runs on any x86 Linux/KVM host; the `--random-smbios` rows need `root` + `nbd` + a real
+  `CM_OPENCORE`, the `--net` rows need `root` + a test bridge (they `SKIP`, not `FAIL`, otherwise).
+- **`[REAL]`** (`--real`) — boots `tahoe:26` from the store, passes the OpenCore picker over the HMP
+  monitor, asserts SSH-ready (`sw_vers` 26.x) + in-guest serial == injected. Testbed-only.
+
+```bash
+sudo CM_BIN=./cocoon-macos CM_OPENCORE=.../OpenCore.qcow2 ./scripts/e2e.sh           # [DUMMY] (30 rows)
+sudo CM_HOME=~/cm-demo CM_OPENCORE=... CM_OVMF_CODE=... CM_OVMF_VARS=... ./scripts/e2e.sh --real-only
+```
+
+The `[DUMMY]` tier is the behavioral gate today's CI structurally can't give (CI is pure `go
+test`/`vet`/build — nothing opens `/dev/kvm` or mutates netlink); it belongs on a privileged
+self-hosted KVM runner. `[REAL]` stays a manual/nightly testbed run (~15GB + cold boot).
+
+## Roadmap
+
+- **Port cocoon's bypass/passthrough surface.** cocoon exposes extra VM hardware that cocoon-macos
+  doesn't yet wire to QEMU; port it the same way as networking (Linux-tagged, reusing cocoon types):
+  - **Multi-disk / data disks** — cocoon's `types.DataDiskSpec` + `StorageRole` (`data`/`cow`/…) and
+    `--data-disk`. Maps to extra QEMU `-drive`/`-device virtio-blk` per disk (attach/detach lifecycle).
+  - **Hardware passthrough (VFIO)** — cocoon's `extend/vfio` (`vfio.Spec`/`Attacher`, BDF/sysfs) and
+    `cmd/vm attach`. Maps to QEMU `-device vfio-pci,host=<BDF>` for GPU/NIC/etc. passthrough.
+- **GUI boot-to-desktop** — finish the SA click-through (below).
+- **Live snapshot** is intentionally *not* on the roadmap: `-cpu +invtsc` makes the macOS guest
+  non-migratable, so resume-from-RAM can't work; snapshot stays offline/disk-only + cold clone.
+
 ## Out of scope (v0.x)
 
-cocoon engine integration (a `qemu` Hypervisor backend in cocoon) is a separate later phase.
-Per-VM SMBIOS injection (`--random-smbios`) is implemented + testbed-verified, but registering
-those identities with iServices/App Store is the consumer's policy concern — it needs validated
-(not just unique) serials and carries Apple-ID ban risk at fleet scale — so it is not done here.
+A `qemu` Hypervisor backend *inside* cocoon (so cocoon's own `cmd/core` dispatches macOS VMs) is a
+separate later phase — cocoon-macos currently **imports** cocoon's libraries (`cloudimg`, `network`,
+storage/CoW conventions) rather than the reverse. Per-VM SMBIOS injection (`--random-smbios`) is
+implemented + testbed-verified, but registering those identities with iServices/App Store is the
+consumer's policy concern — it needs validated (not just unique) serials and carries Apple-ID ban
+risk at fleet scale — so it is not done here.

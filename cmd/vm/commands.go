@@ -15,6 +15,9 @@ type Actions interface {
 	Inspect(cmd *cobra.Command, args []string) error
 	Console(cmd *cobra.Command, args []string) error
 	RM(cmd *cobra.Command, args []string) error
+	Snapshot(cmd *cobra.Command, args []string) error
+	Restore(cmd *cobra.Command, args []string) error
+	Clone(cmd *cobra.Command, args []string) error
 }
 
 // Command builds the `vm` subcommand tree against the given handler.
@@ -82,7 +85,33 @@ func Command(h Actions) *cobra.Command {
 		RunE:  h.RM,
 	}
 
-	vmCmd.AddCommand(createCmd, runCmd, startCmd, stopCmd, listCmd, inspectCmd, consoleCmd, rmCmd)
+	snapshotCmd := &cobra.Command{
+		Use:   "snapshot VM",
+		Short: "Take an offline qcow2-internal snapshot of a stopped VM (disk state; NVRAM if qcow2)",
+		Args:  cobra.ExactArgs(1),
+		RunE:  h.Snapshot,
+	}
+	snapshotCmd.Flags().String("tag", "", "snapshot tag (default: snap-<timestamp>)")
+
+	restoreCmd := &cobra.Command{
+		Use:   "restore VM",
+		Short: "Revert a VM to a snapshot (default: newest)",
+		Args:  cobra.ExactArgs(1),
+		RunE:  h.Restore,
+	}
+	restoreCmd.Flags().String("tag", "", "snapshot tag to restore (default: newest)")
+	restoreCmd.Flags().Bool("force", false, "stop the VM, restore, then relaunch if it was running")
+
+	cloneCmd := &cobra.Command{
+		Use:   "clone SRC",
+		Short: "Clone a VM: fresh CoW overlay on the shared base + a unique Apple identity + its own TAP",
+		Args:  cobra.ExactArgs(1),
+		RunE:  h.Clone,
+	}
+	addVMFlags(cloneCmd) // name/cpus/memory/vnc/ssh-port/random-smbios/net/tap/bridge — loader inherited from SRC
+
+	vmCmd.AddCommand(createCmd, runCmd, startCmd, stopCmd, listCmd, inspectCmd, consoleCmd, rmCmd,
+		snapshotCmd, restoreCmd, cloneCmd)
 	return vmCmd
 }
 
@@ -92,11 +121,14 @@ func addVMFlags(cmd *cobra.Command) {
 	cmd.Flags().String("memory", "8192", "guest memory in MiB")
 	cmd.Flags().Int("vnc", -1, "VNC display number (n => host 127.0.0.1:590n); <0 disables")
 	cmd.Flags().Int("ssh-port", 0, "host port forwarded to guest :22; 0 disables")
-	cmd.Flags().String("opencore", "", "OpenCore.qcow2 boot loader (required)")
-	cmd.Flags().String("ovmf-code", "", "OVMF_CODE firmware (required)")
-	cmd.Flags().String("ovmf-vars", "", "OVMF_VARS template (copied per-VM)")
+	cmd.Flags().String("opencore", "", "OpenCore.qcow2 boot loader (default: <state-dir>/firmware/OpenCore.qcow2; see `firmware install`)")
+	cmd.Flags().String("ovmf-code", "", "OVMF_CODE firmware (default: <state-dir>/firmware/OVMF_CODE.fd)")
+	cmd.Flags().String("ovmf-vars", "", "OVMF_VARS template, copied per-VM (default: <state-dir>/firmware/OVMF_VARS.fd)")
 	cmd.Flags().Bool("random-smbios", false, "inject a unique Apple SMBIOS identity per VM (serial/MLB/UUID/ROM)")
 	cmd.Flags().String("vnc-password", "", "set a VNC password (≤8 chars) so macOS Screen Sharing can connect (QEMU password auth)")
-	cmd.Flags().String("net", "user", "network mode: user (SLIRP + --ssh-port hostfwd) | tap (bridged/routed via --tap)")
-	cmd.Flags().String("tap", "", "pre-created host TAP ifname for --net tap (e.g. attached to a bridge / cocoon CNI)")
+	cmd.Flags().String("net", "user", "network mode: user (SLIRP + --ssh-port hostfwd) | tap | cni | bridge (cocoon auto-creates the TAP, Linux only)")
+	cmd.Flags().String("tap", "", "pre-created host TAP ifname (skips auto-create; e.g. an existing bridge port / cocoon CNI tap)")
+	cmd.Flags().String("bridge", "", "existing Linux bridge to enslave the auto-created TAP to (--net tap|bridge)")
+	cmd.Flags().String("cni-conf-dir", "", "CNI config dir for --net cni (default /etc/cni/net.d)")
+	cmd.Flags().String("cni-bin-dir", "", "CNI plugin dir for --net cni (default /opt/cni/bin)")
 }

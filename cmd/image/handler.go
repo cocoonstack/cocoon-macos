@@ -97,6 +97,10 @@ func (h *Handler) List(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if len(imgs) == 0 {
+		fmt.Println("[]") // an empty store is [], not null
+		return nil
+	}
 	b, _ := json.MarshalIndent(imgs, "", "  ")
 	fmt.Println(string(b))
 	return nil

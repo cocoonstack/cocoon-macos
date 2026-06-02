@@ -4,7 +4,10 @@
 // isa-applesmc OSK + OVMF + an OpenCore boot disk), proven to boot Tahoe in CI.
 package qemu
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // OSK is the Apple SMC key required for macOS guests (public, from OSX-KVM).
 const OSK = "ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
@@ -34,6 +37,11 @@ type Spec struct {
 // Args returns the qemu-system-x86_64 argument vector for the macOS guest.
 func (s Spec) Args() []string {
 	cores := max(s.CPUs/2, 1)
+	// NVRAM rolls back under qemu-img snapshot only if it's qcow2; a raw .fd is loaded as raw.
+	varsFmt := "raw"
+	if strings.HasSuffix(s.OVMFVars, ".qcow2") {
+		varsFmt = "qcow2"
+	}
 	a := []string{
 		"-enable-kvm", "-m", s.Memory,
 		"-cpu", macOSCPU,
@@ -44,7 +52,7 @@ func (s Spec) Args() []string {
 		"-device", "usb-tablet,bus=xhci.0",
 		"-device", "isa-applesmc,osk=" + OSK,
 		"-drive", "if=pflash,format=raw,readonly=on,file=" + s.OVMFCode,
-		"-drive", "if=pflash,format=raw,file=" + s.OVMFVars,
+		"-drive", "if=pflash,format=" + varsFmt + ",file=" + s.OVMFVars,
 		"-smbios", "type=2",
 		"-device", "ich9-ahci,id=sata",
 		"-drive", "id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,file=" + s.OpenCore,

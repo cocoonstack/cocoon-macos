@@ -59,7 +59,7 @@ touch "$VOL/Users/$USER_NAME/.skipbuddy"
 chown -R 501:20 "$VOL/Users/$USER_NAME"
 echo "OK user $USER_NAME created (complete home from template)"
 
-# 3) first-boot daemon: enable Remote Login (SSH) robustly, then remove itself.
+# 3) first-boot daemon: enable Remote Login (SSH) + disable display sleep, then remove itself.
 mkdir -p "$VOL/Library/LaunchDaemons" "$VOL/usr/local/bin"
 cat > "$VOL/usr/local/bin/cocoon-firstboot.sh" <<'SH'
 #!/bin/bash
@@ -70,6 +70,11 @@ echo "=== cocoon-firstboot $(date) ==="
 /bin/launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist
 /bin/launchctl kickstart -k system/com.openssh.sshd
 echo "remotelogin: $(/usr/sbin/systemsetup -getremotelogin)"
+# Never sleep the display: the QEMU/VNC framebuffer is only repainted while macOS keeps the display
+# awake — once it sleeps, VNC shows a blank (white/black) screen even though the guest is fine. This
+# is system-wide + persistent (pmset prefs), so it covers the pre-login loginwindow too.
+/usr/bin/pmset -a displaysleep 0 sleep 0 disablesleep 1
+echo "pmset: $(/usr/bin/pmset -g | tr '\n' ' ')"
 /bin/rm -f /Library/LaunchDaemons/com.cocoon.firstboot.plist /usr/local/bin/cocoon-firstboot.sh
 SH
 chmod 755 "$VOL/usr/local/bin/cocoon-firstboot.sh"

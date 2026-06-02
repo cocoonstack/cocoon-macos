@@ -420,6 +420,19 @@ stage_desktop() {  # turn the SSH-ready :26 into a boot-straight-to-desktop + sl
   capture_and_push "$GHCR_TAG"   # tahoe:26 = boots straight to cocoon's desktop, slimmed
 }
 
+stage_slim() {  # SA-INDEPENDENT slim: boot, reclaim stale clusters over SSH, re-push the same tag.
+  # Works on SSH-ready images (:26) regardless of the GUI being stuck at Setup Assistant — slimming
+  # only needs SSH (sudo+dd work at the SA stage) + the MacHDD discard=unmap,detect-zeroes=unmap.
+  boot_macintosh
+  log "waiting for SSH (slim is SA-independent; SSH comes up even with the GUI at Setup Assistant)"
+  wait_ssh 36 || { log "FATAL: SSH never came up"; return 1; }
+  slim_disk
+  log "clean shutdown"
+  gssh 'echo cocoon | sudo -S shutdown -h now' >/dev/null 2>&1 || true
+  sleep 20
+  capture_and_push "$GHCR_TAG"   # convert -c drops the now-zeroed/unmapped stale clusters
+}
+
 main() {
   require_kvm
   setup_osx_kvm
@@ -434,6 +447,8 @@ main() {
       pull_image "$GHCR_TAG"; configure_opencore hide; launch_qemu; stage_desktop ;;
     verify)
       pull_image "$GHCR_TAG"; configure_opencore hide; launch_qemu; stage_verify ;;
+    slim)
+      pull_image "$GHCR_TAG"; configure_opencore hide; launch_qemu; stage_slim ;;
     *)
       log "unknown STAGE=$STAGE"; exit 2 ;;
   esac

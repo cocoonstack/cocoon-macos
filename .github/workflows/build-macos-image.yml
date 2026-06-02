@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       stage:
-        description: "boot | install | setup (provision SSH) | desktop (auto-login + skip SA + slim, repush :26) | verify"
+        description: "boot | install | setup | desktop (WIP, blocked on SA) | verify | slim (reclaim stale clusters, repush same tag)"
         required: true
         default: "boot"
       version_tag:

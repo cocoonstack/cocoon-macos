@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cocoonstack/cocoon-macos/cmd/image"
 	"github.com/cocoonstack/cocoon-macos/cmd/vm"
 )
 
@@ -17,6 +18,7 @@ func Execute() {
 		SilenceUsage: true,
 	}
 	root.AddCommand(vm.Command(vm.NewHandler()))
+	root.AddCommand(image.Command(image.NewHandler()))
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

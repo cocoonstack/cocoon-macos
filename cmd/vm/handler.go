@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -13,8 +14,39 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cocoonstack/cocoon/config"
+	"github.com/cocoonstack/cocoon/images/cloudimg"
+	"github.com/cocoonstack/cocoon/types"
+	"github.com/cocoonstack/cocoon/utils"
+
 	"github.com/cocoonstack/cocoon-macos/qemu"
 )
+
+// resolveBase returns the immutable base qcow2 for IMAGE: a direct filesystem path (legacy), else
+// an image ref resolved through cocoon's cloudimg store (returns the content-addressed blob + its
+// digest). Per-VM overlays are baked on this base, which stays read-only.
+func resolveBase(cmd *cobra.Command, image, name string) (string, string, error) {
+	if _, err := os.Stat(image); err == nil {
+		return image, "", nil
+	}
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	store, err := cloudimg.New(ctx, &config.Config{RootDir: stateDir(cmd), DNS: "8.8.8.8,1.1.1.1"})
+	if err != nil {
+		return "", "", err
+	}
+	vm := &types.VMConfig{Config: types.Config{Image: image}, Name: name}
+	sc, _, err := store.Config(ctx, []*types.VMConfig{vm})
+	if err != nil {
+		return "", "", fmt.Errorf("resolve image %q (not a file, not in the store): %w", image, err)
+	}
+	if len(sc) == 0 || len(sc[0]) == 0 {
+		return "", "", fmt.Errorf("image %q resolved to no disk", image)
+	}
+	return sc[0][0].Path, vm.ImageDigest, nil
+}
 
 // Handler implements Actions by cloning a golden macOS qcow2 (copy-on-write overlay)
 // and launching qemu-system-x86_64 on an x86 Linux/KVM host.
@@ -23,21 +55,22 @@ type Handler struct{}
 func NewHandler() *Handler { return &Handler{} }
 
 type record struct {
-	Name     string       `json:"name"`
-	Image    string       `json:"image"`
-	Disk     string       `json:"disk"`
-	OpenCore string       `json:"opencore"`
-	OVMFCode string       `json:"ovmf_code"`
-	OVMFVars string       `json:"ovmf_vars"`
-	CPUs     int          `json:"cpus"`
-	Memory   string       `json:"memory"`
-	VNCDisp  int          `json:"vnc"`
-	SSHPort  int          `json:"ssh_port"`
-	PID      int          `json:"pid"`
-	Created  string       `json:"created"`
-	MAC      string       `json:"mac,omitempty"`
-	SMBIOS   *qemu.SMBIOS `json:"smbios,omitempty"`
-	VNCPass  string       `json:"vnc_password,omitempty"`
+	Name        string       `json:"name"`
+	Image       string       `json:"image"`
+	ImageDigest string       `json:"image_digest,omitempty"`
+	Disk        string       `json:"disk"`
+	OpenCore    string       `json:"opencore"`
+	OVMFCode    string       `json:"ovmf_code"`
+	OVMFVars    string       `json:"ovmf_vars"`
+	CPUs        int          `json:"cpus"`
+	Memory      string       `json:"memory"`
+	VNCDisp     int          `json:"vnc"`
+	SSHPort     int          `json:"ssh_port"`
+	PID         int          `json:"pid"`
+	Created     string       `json:"created"`
+	MAC         string       `json:"mac,omitempty"`
+	SMBIOS      *qemu.SMBIOS `json:"smbios,omitempty"`
+	VNCPass     string       `json:"vnc_password,omitempty"`
 }
 
 func stateDir(cmd *cobra.Command) string {
@@ -93,9 +126,18 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
+	base, digest, err := resolveBase(cmd, image, name)
+	if err != nil {
+		return nil, err
+	}
 	overlay := filepath.Join(dir, "disk.qcow2")
-	if out, err := exec.Command("qemu-img", "create", "-f", "qcow2", "-b", image, "-F", "qcow2", overlay).CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("qemu-img create overlay: %v: %s", err, out)
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	// bake a per-VM CoW overlay on the immutable base (cocoon's storage convention; base stays RO)
+	if err := utils.RunQemuImg(ctx, "create", "-f", "qcow2", "-F", "qcow2", "-b", base, overlay); err != nil {
+		return nil, fmt.Errorf("bake overlay on %s: %w", base, err)
 	}
 	ovmfVars := filepath.Join(dir, "OVMF_VARS.fd")
 	if err := copyFile(varsTmpl, ovmfVars); err != nil {
@@ -107,7 +149,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	ssh, _ := cmd.Flags().GetInt("ssh-port")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	r := &record{
-		Name: name, Image: image, Disk: overlay, OpenCore: oc, OVMFCode: code, OVMFVars: ovmfVars,
+		Name: name, Image: image, ImageDigest: digest, Disk: overlay, OpenCore: oc, OVMFCode: code, OVMFVars: ovmfVars,
 		CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: ssh, VNCPass: vncPass, Created: time.Now().Format(time.RFC3339),
 	}
 	if random, _ := cmd.Flags().GetBool("random-smbios"); random {

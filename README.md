@@ -38,7 +38,7 @@ disk image to ghcr; a thin Go CLI clones that image and boots VMs from it.
 ```bash
 go build -o cocoon-macos .
 
-# pull the golden qcow2 from ghcr into the local store (cocoon cloudimg; ~/.cocoon-macos)
+# pull the golden qcow2 from ghcr into the local store (cocoon cloudimg; /var/lib/cocoon-macos)
 cocoon-macos image pull ghcr.io/cocoonstack/cocoon-macos/tahoe:26
 cocoon-macos image list        # also: inspect, rm
 
@@ -72,7 +72,7 @@ cocoon-macos vm clone    m1 -n m2 --ssh-port 2223 --random-smbios
 `vm run` does: `qemu-img create -b <golden> overlay.qcow2` (instant CoW clone) → copy a
 per-VM `OVMF_VARS` → launch `qemu-system-x86_64` (validated OSX-KVM recipe in `qemu/launch.go`:
 Skylake-Client CPU spoofing GenuineIntel + `isa-applesmc` OSK + OVMF + OpenCore + the macOS
-qcow2) daemonized, recording state under `$COCOON_MACOS_HOME` (default `~/.cocoon-macos`).
+qcow2) daemonized, recording state under `--state-dir` / `$COCOON_MACOS_HOME` (default `/var/lib/cocoon-macos`, mirroring cocoon's `/var/lib/cocoon`).
 
 With `--random-smbios`, `create` also copies OpenCore per-VM and injects a generated identity
 into its `config.plist` `PlatformInfo/Generic` (via `qemu-nbd` mount); the model stays `iMac19,1`

@@ -24,7 +24,7 @@ type Actions interface {
 func Command(h Actions) *cobra.Command {
 	vmCmd := &cobra.Command{Use: "vm", Short: "Manage macOS VMs"}
 	// state-dir applies to every subcommand (locating VM records), so make it persistent
-	vmCmd.PersistentFlags().String("state-dir", "", "VM state root (default $COCOON_MACOS_HOME or ~/.cocoon-macos)")
+	vmCmd.PersistentFlags().String("state-dir", "", "VM state root (default $COCOON_MACOS_HOME or /var/lib/cocoon-macos)")
 
 	createCmd := &cobra.Command{
 		Use:   "create [flags] IMAGE",

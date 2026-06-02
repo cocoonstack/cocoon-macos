@@ -12,7 +12,7 @@ type Actions interface {
 // Command builds the `firmware` subcommand tree.
 func Command(h Actions) *cobra.Command {
 	fwCmd := &cobra.Command{Use: "firmware", Short: "Manage shared OpenCore/OVMF firmware under <state-dir>/firmware"}
-	fwCmd.PersistentFlags().String("state-dir", "", "VM state root (default $COCOON_MACOS_HOME or ~/.cocoon-macos)")
+	fwCmd.PersistentFlags().String("state-dir", "", "VM state root (default $COCOON_MACOS_HOME or /var/lib/cocoon-macos)")
 
 	installCmd := &cobra.Command{
 		Use:   "install",

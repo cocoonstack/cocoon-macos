@@ -30,8 +30,7 @@ func stateDir(cmd *cobra.Command) string {
 	if d := os.Getenv("COCOON_MACOS_HOME"); d != "" {
 		return d
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cocoon-macos")
+	return "/var/lib/cocoon-macos" // mirrors cocoon's /var/lib/cocoon
 }
 
 func (h *Handler) store(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) {

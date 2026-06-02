@@ -13,7 +13,7 @@ type Actions interface {
 // Command builds the `image` subcommand tree against the given handler.
 func Command(h Actions) *cobra.Command {
 	imageCmd := &cobra.Command{Use: "image", Short: "Manage macOS disk images (reuses cocoon's cloudimg store)"}
-	imageCmd.PersistentFlags().String("state-dir", "", "image/VM state root (default $COCOON_MACOS_HOME or ~/.cocoon-macos)")
+	imageCmd.PersistentFlags().String("state-dir", "", "image/VM state root (default $COCOON_MACOS_HOME or /var/lib/cocoon-macos)")
 
 	pull := &cobra.Command{
 		Use:   "pull REF",

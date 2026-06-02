@@ -26,6 +26,7 @@ import (
 const (
 	qemuBinary      = "qemu-system-x86_64"
 	stopGracePeriod = 10 * time.Second
+	defaultStateDir = "/var/lib/cocoon-macos" // mirrors cocoon's /var/lib/cocoon; override via --state-dir or $COCOON_MACOS_HOME
 )
 
 // resolveBase returns the immutable base qcow2 for IMAGE: a direct filesystem path (legacy), else
@@ -134,8 +135,7 @@ func stateDir(cmd *cobra.Command) string {
 	if d := os.Getenv("COCOON_MACOS_HOME"); d != "" {
 		return d
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cocoon-macos")
+	return defaultStateDir // /var/lib/cocoon-macos, mirroring cocoon's /var/lib/cocoon
 }
 
 func vmDir(cmd *cobra.Command, name string) string {

@@ -392,16 +392,16 @@ GUEST
 
 stage_desktop() {  # turn the SSH-ready :26 into a boot-straight-to-desktop + slimmed image, then re-push :26
   boot_macintosh
-  log "waiting for SSH on the SSH-ready image"
-  wait_ssh 16 || { log "FATAL: SSH never came up"; return 1; }
+  log "waiting for SSH on the SSH-ready image (complete-home first boot is slow, ~10min)"
+  wait_ssh 36 || { log "FATAL: SSH never came up"; return 1; }
   apply_desktop_recipe
   log "rebooting so the next boot auto-logs into cocoon's desktop"
   gssh 'echo cocoon | sudo -S reboot' >/dev/null 2>&1 || true   # SSH drops on reboot -> exit 255; do not let set -e abort
   sleep 40
   boot_macintosh
-  wait_ssh 16 || { log "FATAL: SSH not back after reboot"; return 1; }
+  wait_ssh 36 || { log "FATAL: SSH not back after reboot"; return 1; }
   local cu="" w
-  for w in $(seq 1 12); do cu=$(gssh 'stat -f %Su /dev/console' 2>/dev/null || true); [ "$cu" = cocoon ] && break; sleep 12; done
+  for w in $(seq 1 24); do cu=$(gssh 'stat -f %Su /dev/console' 2>/dev/null || true); [ "$cu" = cocoon ] && break; sleep 15; done
   python3 "$QMP_PY" "$QMP_SOCK" move 220 220 2>/dev/null || true; sleep 2
   screendump "desktop-01"
   log "console user after reboot: $cu"

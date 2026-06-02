@@ -36,7 +36,28 @@ dscl -f "$DS" localhost -create "$U" PrimaryGroupID 20
 dscl -f "$DS" localhost -create "$U" NFSHomeDirectory "/Users/$USER_NAME"
 dscl -f "$DS" localhost -passwd "$U" "$USER_PASS"
 dscl -f "$DS" localhost -append "/Local/Default/Groups/admin" GroupMembership "$USER_NAME"
-mkdir -p "$VOL/Users/$USER_NAME" && echo "OK user $USER_NAME created"
+# Populate a COMPLETE home from the User Template. macOS 14+ only skips the system Setup
+# Assistant (the _mbsetupuser pre-login wizard) when a *complete* local user exists — an empty
+# home dir is treated as incomplete, so the wizard still runs. (.AppleSetupDone alone no longer
+# suffices on Sonoma+/Tahoe.) .skipbuddy suppresses the per-user buddy.
+SYS="${VOL% - Data}"   # the installed System volume is the Data volume's sibling
+[ -d "$SYS/System/Library/User Template" ] || for v in /Volumes/*; do
+  [ "$v" = "$VOL" ] && continue
+  [ -d "$v/System/Library/User Template" ] && SYS="$v" && break
+done
+echo "=== SYSTEM VOLUME = [$SYS] ==="
+mkdir -p "$VOL/Users/$USER_NAME"
+if [ -n "$SYS" ]; then
+  TPL="$SYS/System/Library/User Template"
+  cp -R "$TPL/Non_localized/." "$VOL/Users/$USER_NAME/" 2>/dev/null
+  cp -R "$TPL/English.lproj/." "$VOL/Users/$USER_NAME/" 2>/dev/null
+  echo "populated home from $TPL"
+else
+  echo "WARN: User Template not found; home left empty (system SA may still run)"
+fi
+touch "$VOL/Users/$USER_NAME/.skipbuddy"
+chown -R 501:20 "$VOL/Users/$USER_NAME"
+echo "OK user $USER_NAME created (complete home from template)"
 
 # 3) first-boot daemon: enable Remote Login (SSH) robustly, then remove itself.
 mkdir -p "$VOL/Library/LaunchDaemons" "$VOL/usr/local/bin"

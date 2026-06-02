@@ -11,8 +11,10 @@ disk image to ghcr; a thin Go CLI clones that image and boots VMs from it.
   install → `RequestBootVarRouting` makes the install reboots auto-continue → Setup Assistant.
 - **Golden images on ghcr:**
   - `ghcr.io/cocoonstack/cocoon-macos/tahoe:26-base` — installed macOS Tahoe 26 at first-run Setup Assistant.
-  - `ghcr.io/cocoonstack/cocoon-macos/tahoe:26` — turnkey: provisioned via Recovery Terminal
-    (Setup Assistant skipped, admin user `cocoon`/`cocoon`, Remote Login/SSH enabled on first boot).
+  - `ghcr.io/cocoonstack/cocoon-macos/tahoe:26` — **SSH-ready**: provisioned via Recovery Terminal
+    (admin user `cocoon`/`cocoon`, a complete home, Remote Login/SSH on first boot). SSH + VNC login
+    work (verify stage confirms `cocoon@…`, macOS 26.5). **Known limitation:** the GUI first boot
+    still lands at the macOS 26 system Setup Assistant — see *Boot-to-desktop (WIP)* below.
 - **CLI** (`cocoon-macos vm …`) clones a golden image (copy-on-write qcow2 overlay) and launches QEMU.
 - **Per-VM identity** (`--random-smbios`, testbed-verified): injects a unique Apple SMBIOS
   (serial/MLB/UUID/ROM, with the guest NIC MAC set to the ROM) into a per-VM OpenCore so clones
@@ -73,6 +75,22 @@ runs in the Recovery Terminal against the installed Data volume (`dscl -f` offli
 
 Key host facts: GitHub `ubuntu-latest` exposes `/dev/kvm` (needs `chmod 666`); macOS Tahoe 26
 is the last Intel-supporting macOS, so this x86 path has a finite shelf life.
+
+## Boot-to-desktop (WIP — blocked on the macOS 26 Setup Assistant)
+
+The `desktop` build stage + `provision-macos.sh` aim to make `:26` boot straight to `cocoon`'s
+desktop (auto-login, no Setup Assistant). The **post-SA recipe is validated** (proven on a testbed
+VM): complete home + `com.apple.SetupAssistant` `DidSee*`/`LastSeen*` (Buddy=build `25F71`,
+Cloud=product `26.5`) + auto-login (`autoLoginUser` + `/etc/kcpassword` written via `perl pack` —
+macOS `/bin/bash` 3.2 has no `printf \xHH`) + keyboard-wizard suppress + `pmset` no-sleep.
+
+**The blocker:** a fresh macOS 26 Tahoe clone boots to the *system* Setup Assistant
+(`_mbsetupuser` / `SetupAssistantSpringboard`) and it resists every marker-based skip we tried
+(`.AppleSetupDone`, complete home from User Template, `.skipbuddy`, `DidSee*`, auto-login, a
+correctly-named killsa daemon, removing `/var/db/ConfigurationProfiles` [SIP-blocked]). macOS 14+
+broke the classic `.AppleSetupDone` skip. The keyboard does not register at the SA, so the only
+reliable automated skip is a **mouse/OCR click-through of the SA wizard** (the install-stage OCR
+machinery) — not yet implemented. Until then, `:26` is SSH/VNC-login-usable but the GUI lands at SA.
 
 ## Why QEMU (not Apple VZ)
 

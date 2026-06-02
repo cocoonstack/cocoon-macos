@@ -390,6 +390,12 @@ echo SLIM_OK
 GUEST
 }
 
+# WIP — BLOCKED on the macOS 26 system Setup Assistant. A fresh :26 boots to the system SA
+# (_mbsetupuser / SetupAssistantSpringboard) and it resists every marker-based skip we tried
+# (.AppleSetupDone, complete home, .skipbuddy, DidSee*, autologin, killsa, rm ConfigurationProfiles).
+# So this stage's recipe never runs to completion: console stays _mbsetupuser after the reboot.
+# The recipe itself (apply_desktop_recipe) IS validated post-SA. To finish this, the system SA must
+# be clicked through with the mouse/OCR (keyboard does not register at SA) before the recipe applies.
 stage_desktop() {  # turn the SSH-ready :26 into a boot-straight-to-desktop + slimmed image, then re-push :26
   boot_macintosh
   log "waiting for SSH on the SSH-ready image (complete-home first boot is slow, ~10min)"

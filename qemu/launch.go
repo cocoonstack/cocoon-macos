@@ -28,6 +28,7 @@ type Spec struct {
 	QMPSock  string // optional QMP unix socket
 	MAC      string // optional guest NIC MAC (set to the SMBIOS ROM for --random-smbios)
 	VNCPass  string // optional VNC password (enables QEMU password auth; set via monitor after launch)
+	Tap      string // optional pre-created host TAP ifname; set => bridged/routed (-netdev tap) instead of user-mode
 }
 
 // Args returns the qemu-system-x86_64 argument vector for the macOS guest.
@@ -52,9 +53,14 @@ func (s Spec) Args() []string {
 		"-device", "ide-hd,bus=sata.4,drive=MacHDD",
 		"-device", "vmware-svga",
 	}
-	if s.SSHPort > 0 {
+	switch {
+	case s.Tap != "":
+		// attach to a pre-created host TAP (cocoon's network plane / a bridge owns IP+forwarding);
+		// the macOS virtio-net front-end is unchanged, the guest just re-DHCPs off the bridge
+		a = append(a, "-netdev", "tap,id=net0,ifname="+s.Tap+",script=no,downscript=no")
+	case s.SSHPort > 0:
 		a = append(a, "-netdev", fmt.Sprintf("user,id=net0,hostfwd=tcp::%d-:22", s.SSHPort))
-	} else {
+	default:
 		a = append(a, "-netdev", "user,id=net0")
 	}
 	nic := "virtio-net-pci,netdev=net0,id=net0"

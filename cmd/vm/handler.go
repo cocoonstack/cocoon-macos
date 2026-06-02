@@ -71,6 +71,8 @@ type record struct {
 	MAC         string       `json:"mac,omitempty"`
 	SMBIOS      *qemu.SMBIOS `json:"smbios,omitempty"`
 	VNCPass     string       `json:"vnc_password,omitempty"`
+	NetMode     string       `json:"net_mode,omitempty"`
+	Tap         string       `json:"tap,omitempty"`
 }
 
 func stateDir(cmd *cobra.Command) string {
@@ -148,9 +150,15 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	ssh, _ := cmd.Flags().GetInt("ssh-port")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
+	netMode, _ := cmd.Flags().GetString("net")
+	tap, _ := cmd.Flags().GetString("tap")
+	if netMode == "tap" && tap == "" {
+		return nil, fmt.Errorf("--net tap requires --tap <ifname>")
+	}
 	r := &record{
 		Name: name, Image: image, ImageDigest: digest, Disk: overlay, OpenCore: oc, OVMFCode: code, OVMFVars: ovmfVars,
-		CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: ssh, VNCPass: vncPass, Created: time.Now().Format(time.RFC3339),
+		CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: ssh, VNCPass: vncPass, NetMode: netMode, Tap: tap,
+		Created: time.Now().Format(time.RFC3339),
 	}
 	if random, _ := cmd.Flags().GetBool("random-smbios"); random {
 		if err := assignSMBIOS(dir, oc, r); err != nil {
@@ -183,6 +191,9 @@ func (h *Handler) launch(dir string, r *record) error {
 		Name: r.Name, Disk: r.Disk, OpenCore: r.OpenCore, OVMFCode: r.OVMFCode, OVMFVars: r.OVMFVars,
 		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, SSHPort: r.SSHPort, MAC: r.MAC, VNCPass: r.VNCPass,
 		MonSock: filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
+	}
+	if r.NetMode == "tap" {
+		spec.Tap = r.Tap
 	}
 	pidfile := filepath.Join(dir, "qemu.pid")
 	args := append(spec.Args(), "-daemonize", "-pidfile", pidfile)

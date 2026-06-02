@@ -3,6 +3,7 @@ package vm
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,6 +37,7 @@ type record struct {
 	Created  string       `json:"created"`
 	MAC      string       `json:"mac,omitempty"`
 	SMBIOS   *qemu.SMBIOS `json:"smbios,omitempty"`
+	VNCPass  string       `json:"vnc_password,omitempty"`
 }
 
 func stateDir(cmd *cobra.Command) string {
@@ -103,9 +105,10 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	mem, _ := cmd.Flags().GetString("memory")
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	ssh, _ := cmd.Flags().GetInt("ssh-port")
+	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	r := &record{
 		Name: name, Image: image, Disk: overlay, OpenCore: oc, OVMFCode: code, OVMFVars: ovmfVars,
-		CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: ssh, Created: time.Now().Format(time.RFC3339),
+		CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: ssh, VNCPass: vncPass, Created: time.Now().Format(time.RFC3339),
 	}
 	if random, _ := cmd.Flags().GetBool("random-smbios"); random {
 		if err := assignSMBIOS(dir, oc, r); err != nil {
@@ -136,7 +139,7 @@ func assignSMBIOS(dir, oc string, r *record) error {
 func (h *Handler) launch(dir string, r *record) error {
 	spec := qemu.Spec{
 		Name: r.Name, Disk: r.Disk, OpenCore: r.OpenCore, OVMFCode: r.OVMFCode, OVMFVars: r.OVMFVars,
-		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, SSHPort: r.SSHPort, MAC: r.MAC,
+		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, SSHPort: r.SSHPort, MAC: r.MAC, VNCPass: r.VNCPass,
 		MonSock: filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
 	}
 	pidfile := filepath.Join(dir, "qemu.pid")
@@ -149,7 +152,39 @@ func (h *Handler) launch(dir string, r *record) error {
 	if b, err := os.ReadFile(pidfile); err == nil {
 		r.PID, _ = strconv.Atoi(strings.TrimSpace(string(b)))
 	}
+	if r.VNCPass != "" {
+		if err := setVNCPassword(spec.MonSock, r.VNCPass); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: VNC password not set: %v\n", err)
+		}
+	}
 	return saveRec(dir, r)
+}
+
+// setVNCPassword applies the VNC password over the HMP monitor (QEMU was started with
+// password=on); macOS Screen Sharing needs password auth, not QEMU's default "None".
+func setVNCPassword(monSock, pw string) error {
+	var conn net.Conn
+	var err error
+	for range 50 {
+		if conn, err = net.Dial("unix", monSock); err == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err != nil {
+		return fmt.Errorf("dial monitor: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := fmt.Fprintf(conn, "set_password vnc %s\n", pw); err != nil {
+		return err
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	buf := make([]byte, 4096)
+	n, _ := conn.Read(buf)
+	if strings.Contains(string(buf[:n]), "Could not") {
+		return fmt.Errorf("qemu: %s", strings.TrimSpace(string(buf[:n])))
+	}
+	return nil
 }
 
 func (h *Handler) Create(cmd *cobra.Command, args []string) error {

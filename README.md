@@ -46,6 +46,11 @@ into its `config.plist` `PlatformInfo/Generic` (via `qemu-nbd` mount); the model
 (proven to boot Tahoe) and only serial/MLB/UUID/ROM are randomized. The assigned identity is
 recorded and shown by `vm inspect`.
 
+QEMU's VNC is loopback-only (`127.0.0.1:590<vnc>`) and offers `None` auth, which **macOS
+Screen Sharing hangs on**. Pass `--vnc-password <≤8 chars>` to start QEMU with `password=on`
+(set via the monitor post-launch) so Screen Sharing prompts and connects; tunnel first with
+`ssh -L 5901:127.0.0.1:5901 <host>`. Plain VNC clients (RealVNC/TigerVNC) work without a password.
+
 ## CI image pipeline (`.github/workflows/build-macos-image.yml`, `scripts/build-qemu-macos.sh`)
 
 `workflow_dispatch` with `stage`:

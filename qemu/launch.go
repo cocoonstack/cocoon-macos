@@ -27,6 +27,7 @@ type Spec struct {
 	MonSock  string // optional HMP monitor unix socket
 	QMPSock  string // optional QMP unix socket
 	MAC      string // optional guest NIC MAC (set to the SMBIOS ROM for --random-smbios)
+	VNCPass  string // optional VNC password (enables QEMU password auth; set via monitor after launch)
 }
 
 // Args returns the qemu-system-x86_64 argument vector for the macOS guest.
@@ -62,7 +63,11 @@ func (s Spec) Args() []string {
 	}
 	a = append(a, "-device", nic)
 	if s.VNCDisp >= 0 {
-		a = append(a, "-display", "none", "-vnc", fmt.Sprintf("127.0.0.1:%d", s.VNCDisp))
+		vnc := fmt.Sprintf("127.0.0.1:%d", s.VNCDisp)
+		if s.VNCPass != "" {
+			vnc += ",password=on" // macOS Screen Sharing can't use QEMU's bare "None" auth; the password is set via monitor post-launch
+		}
+		a = append(a, "-display", "none", "-vnc", vnc)
 	}
 	if s.MonSock != "" {
 		a = append(a, "-monitor", "unix:"+s.MonSock+",server,nowait")

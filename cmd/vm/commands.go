@@ -96,4 +96,5 @@ func addVMFlags(cmd *cobra.Command) {
 	cmd.Flags().String("ovmf-code", "", "OVMF_CODE firmware (required)")
 	cmd.Flags().String("ovmf-vars", "", "OVMF_VARS template (copied per-VM)")
 	cmd.Flags().Bool("random-smbios", false, "inject a unique Apple SMBIOS identity per VM (serial/MLB/UUID/ROM)")
+	cmd.Flags().String("vnc-password", "", "set a VNC password (≤8 chars) so macOS Screen Sharing can connect (QEMU password auth)")
 }

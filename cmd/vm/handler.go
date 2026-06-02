@@ -175,16 +175,39 @@ func setVNCPassword(monSock, pw string) error {
 		return fmt.Errorf("dial monitor: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
+	// Wait for the HMP prompt before sending: right after -daemonize the monitor accepts the
+	// connection but discards input until it is ready, so an early set_password is silently lost
+	// (QEMU keeps password=on with no password set -> all auth fails).
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	if _, ok := readUntil(conn, "(qemu)"); !ok {
+		return fmt.Errorf("monitor prompt not seen")
+	}
 	if _, err := fmt.Fprintf(conn, "set_password vnc %s\n", pw); err != nil {
 		return err
 	}
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	buf := make([]byte, 4096)
-	n, _ := conn.Read(buf)
-	if strings.Contains(string(buf[:n]), "Could not") {
-		return fmt.Errorf("qemu: %s", strings.TrimSpace(string(buf[:n])))
+	// Wait for the NEXT prompt so QEMU has actually executed the line before we close — the HMP
+	// echoes input char-by-char, so reading only the first echo bytes and closing drops the command.
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	out, _ := readUntil(conn, "(qemu)")
+	if strings.Contains(out, "Could not") {
+		return fmt.Errorf("qemu: %s", strings.TrimSpace(out))
 	}
 	return nil
+}
+
+func readUntil(conn net.Conn, marker string) (string, bool) {
+	var acc []byte
+	buf := make([]byte, 1024)
+	for {
+		n, err := conn.Read(buf)
+		acc = append(acc, buf[:n]...)
+		if strings.Contains(string(acc), marker) {
+			return string(acc), true
+		}
+		if err != nil {
+			return string(acc), false
+		}
+	}
 }
 
 func (h *Handler) Create(cmd *cobra.Command, args []string) error {

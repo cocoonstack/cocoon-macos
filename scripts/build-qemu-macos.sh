@@ -366,8 +366,9 @@ echo cocoon | sudo -S defaults write $P MiniBuddyShouldLaunchToResumeSetup -bool
 echo cocoon | sudo -S defaults write $P MiniBuddyLaunchReason -integer 0
 echo cocoon | sudo -S chown -R cocoon:staff /Users/cocoon/Library/Preferences
 echo cocoon | sudo -S defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string cocoon
-# guest python3 is the Apple CLT stub -> printf the kcpassword bytes for "cocoon" (XOR Apple key, padded to 12)
-echo cocoon | sudo -S bash -c 'printf "\x1e\xe6\x31\x4c\xbd\xd2\xdd\xea\xa3\xb9\x1f\x7d" > /etc/kcpassword; chmod 600 /etc/kcpassword; chown root:wheel /etc/kcpassword'
+# kcpassword bytes for "cocoon" (XOR Apple key, padded to 12). guest python3 is the CLT stub and
+# macOS /bin/bash is 3.2 (no printf \xHH), so write the raw bytes with perl pack.
+echo cocoon | sudo -S bash -c 'perl -e "print pack(q{C*},30,230,49,76,189,210,221,234,163,185,31,125)" > /etc/kcpassword; chmod 600 /etc/kcpassword; chown root:wheel /etc/kcpassword'
 # suppress the Keyboard Setup Assistant for the QEMU USB keyboard (idVendor 1575, idProduct 1) -> ANSI(40)
 echo cocoon | sudo -S defaults write /Library/Preferences/com.apple.keyboardtype keyboardtype -dict-add "1-1575-0" -int 40
 echo cocoon | sudo -S pmset -a displaysleep 0 sleep 0 disksleep 0
@@ -395,12 +396,12 @@ stage_desktop() {  # turn the SSH-ready :26 into a boot-straight-to-desktop + sl
   wait_ssh 16 || { log "FATAL: SSH never came up"; return 1; }
   apply_desktop_recipe
   log "rebooting so the next boot auto-logs into cocoon's desktop"
-  gssh 'echo cocoon | sudo -S reboot' >/dev/null 2>&1
+  gssh 'echo cocoon | sudo -S reboot' >/dev/null 2>&1 || true   # SSH drops on reboot -> exit 255; do not let set -e abort
   sleep 40
   boot_macintosh
   wait_ssh 16 || { log "FATAL: SSH not back after reboot"; return 1; }
   local cu="" w
-  for w in $(seq 1 12); do cu=$(gssh 'stat -f %Su /dev/console' 2>/dev/null); [ "$cu" = cocoon ] && break; sleep 12; done
+  for w in $(seq 1 12); do cu=$(gssh 'stat -f %Su /dev/console' 2>/dev/null || true); [ "$cu" = cocoon ] && break; sleep 12; done
   python3 "$QMP_PY" "$QMP_SOCK" move 220 220 2>/dev/null || true; sleep 2
   screendump "desktop-01"
   log "console user after reboot: $cu"
@@ -408,7 +409,7 @@ stage_desktop() {  # turn the SSH-ready :26 into a boot-straight-to-desktop + sl
   log "=== DESKTOP OK: auto-logged into cocoon's desktop ==="
   slim_disk
   log "clean shutdown"
-  gssh 'echo cocoon | sudo -S shutdown -h now' >/dev/null 2>&1
+  gssh 'echo cocoon | sudo -S shutdown -h now' >/dev/null 2>&1 || true   # SSH drops on shutdown -> exit 255
   sleep 20
   capture_and_push "$GHCR_TAG"   # tahoe:26 = boots straight to cocoon's desktop, slimmed
 }

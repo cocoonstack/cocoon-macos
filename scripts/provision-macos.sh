@@ -59,6 +59,102 @@ touch "$VOL/Users/$USER_NAME/.skipbuddy"
 chown -R 501:20 "$VOL/Users/$USER_NAME"
 echo "OK user $USER_NAME created (complete home from template)"
 
+# 2b) Pre-seed the per-user Setup Assistant DidSee*/LastSeen* keys OFFLINE, into the user's home.
+#     This is the load-bearing post-user skip: it pre-answers the login-stage buddy panes
+#     (Migration/Transfer-Data, Apple ID, Appearance) that WHITE-SCREEN under QEMU's unaccelerated
+#     framebuffer. The repo validated this recipe POST-SA over SSH; the deadlock was that SA never
+#     cleared (white Migration pane) so the SSH step never ran — so we write it OFFLINE, before
+#     first boot, so SA's pane carousel is bypassed entirely and boot goes straight to the desktop.
+PV=""; BV=""
+if [ -f "$SYS/System/Library/CoreServices/SystemVersion.plist" ]; then
+  PV=$(/usr/libexec/PlistBuddy -c 'Print :ProductVersion' "$SYS/System/Library/CoreServices/SystemVersion.plist" 2>/dev/null)
+  BV=$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$SYS/System/Library/CoreServices/SystemVersion.plist" 2>/dev/null)
+fi
+PV="${PV:-26.5}"; BV="${BV:-25F71}"
+echo "=== SA-skip seed: PV=$PV BV=$BV ==="
+SAPREF="$VOL/Users/$USER_NAME/Library/Preferences"
+mkdir -p "$SAPREF"
+cat > "$SAPREF/com.apple.SetupAssistant.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>DidSeeCloudSetup</key><true/>
+  <key>DidSeeSiriSetup</key><true/>
+  <key>DidSeePrivacy</key><true/>
+  <key>DidSeeScreenTime</key><true/>
+  <key>DidSeeAppearanceSetup</key><true/>
+  <key>DidSeeTouchIDSetup</key><true/>
+  <key>DidSeeApplePaySetup</key><true/>
+  <key>DidSeeActivationLock</key><true/>
+  <key>DidSeeAccessibility</key><true/>
+  <key>DidSeeAvatarSetup</key><true/>
+  <key>DidSeeSyncSetup</key><true/>
+  <key>DidSeeSyncSetup2</key><true/>
+  <key>DidSeeTrueTone</key><true/>
+  <key>DidSeeTermsOfAddress</key><true/>
+  <key>DidSeeLockdownMode</key><true/>
+  <key>DidSeeAppStore</key><true/>
+  <key>DidSeeiCloudLoginForStorageServices</key><true/>
+  <key>GestureMovieSeen</key><string>none</string>
+  <key>MiniBuddyShouldLaunchToResumeSetup</key><false/>
+  <key>MiniBuddyLaunchReason</key><integer>0</integer>
+  <key>LastSeenCloudProductVersion</key><string>$PV</string>
+  <key>LastSeenBuddyBuildVersion</key><string>$BV</string>
+  <key>LastSeenDiagnosticsProductVersion</key><string>$PV</string>
+  <key>LastSeenSiriProductVersion</key><string>$PV</string>
+  <key>LastSeenSyncProductVersion</key><string>$PV</string>
+</dict></plist>
+PLIST
+chown -R 501:20 "$VOL/Users/$USER_NAME/Library"
+echo "OK seeded com.apple.SetupAssistant.plist"
+
+# 2c) Auto-login OFFLINE: autoLoginUser + /etc/kcpassword -> reaches the DESKTOP (not just the login
+#     window). kcpassword = "cocoon" XOR Apple's key, one 12-byte block (bash 3.2 has no printf \xHH,
+#     so emit raw bytes via perl pack). FileVault is never enabled here, so auto-login is honored.
+cat > "$VOL/Library/Preferences/com.apple.loginwindow.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>autoLoginUser</key><string>$USER_NAME</string>
+  <key>autoLoginUserUID</key><integer>501</integer>
+</dict></plist>
+PLIST
+chown 0:0 "$VOL/Library/Preferences/com.apple.loginwindow.plist"; chmod 644 "$VOL/Library/Preferences/com.apple.loginwindow.plist"
+mkdir -p "$VOL/etc"
+perl -e 'print pack(q{C*},30,230,49,76,189,210,221,234,163,185,31,125)' > "$VOL/etc/kcpassword"
+chown 0:0 "$VOL/etc/kcpassword"; chmod 600 "$VOL/etc/kcpassword"
+echo "OK kcpassword ($(stat -f %z "$VOL/etc/kcpassword" 2>/dev/null)b) + autoLoginUser=$USER_NAME"
+# Suppress the Keyboard Setup Assistant for the QEMU USB keyboard (idVendor 1575 / idProduct 1 -> ANSI 40)
+cat > "$VOL/Library/Preferences/com.apple.keyboardtype.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>keyboardtype</key><dict><key>1-1575-0</key><integer>40</integer></dict></dict></plist>
+PLIST
+chown 0:0 "$VOL/Library/Preferences/com.apple.keyboardtype.plist"; chmod 644 "$VOL/Library/Preferences/com.apple.keyboardtype.plist"
+
+# 2d) Belt-and-suspenders ONLY (non-DEP Macs may ignore it): System-scope managed-prefs with
+#     SkipSetupItems. "Restore" is the real key for the Migration/Transfer-Data pane (no "Migration"
+#     key exists). The pre-created-user (step 2) + DidSee* (2b) + auto-login (2c) is the actual contract.
+mkdir -p "$VOL/Library/Managed Preferences"
+cat > "$VOL/Library/Managed Preferences/com.apple.SetupAssistant.managed.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>SkipSetupItems</key>
+  <array>
+    <string>Restore</string><string>Welcome</string><string>OSShowcase</string>
+    <string>Privacy</string><string>AppleID</string><string>Siri</string>
+    <string>Intelligence</string><string>Diagnostics</string><string>Payment</string>
+    <string>ScreenTime</string><string>Biometric</string><string>Appearance</string>
+    <string>Wallpaper</string><string>TermsOfAddress</string><string>iCloudStorage</string>
+    <string>FileVault</string><string>Accessibility</string><string>SoftwareUpdate</string>
+  </array>
+</dict></plist>
+PLIST
+chown 0:0 "$VOL/Library/Managed Preferences/com.apple.SetupAssistant.managed.plist"
+chmod 644 "$VOL/Library/Managed Preferences/com.apple.SetupAssistant.managed.plist"
+echo "OK SkipSetupItems managed-pref dropped (belt-and-suspenders)"
+
 # 3) first-boot daemon: enable Remote Login (SSH) + disable display sleep, then remove itself.
 mkdir -p "$VOL/Library/LaunchDaemons" "$VOL/usr/local/bin"
 cat > "$VOL/usr/local/bin/cocoon-firstboot.sh" <<'SH'

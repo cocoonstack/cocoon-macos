@@ -88,11 +88,18 @@ modalagree() {  # the SLA confirm-sheet "Agree" is grey-on-grey and OCR-unreadab
   for y in 400 426 452; do click 688 "$y"; sleep 1; done
 }
 
-screendump() {  # screendump <label>
+screendump() {  # screendump <label> — via QMP, not HMP: the monitor `screendump` emits empty (6-byte)
+  # files on this QEMU, which silently blinds boot_macintosh's picker_size check. QMP screendump
+  # (the same path the OCR installer uses) writes a real PPM, so the artifact + picker detection work.
   local ppm="$WORKDIR/$1.ppm" png="$ARTIFACT_DIR/$1.png"
-  mon "screendump $ppm"
+  python3 "$QMP_PY" "$QMP_SOCK" screendump "$ppm" 2>/dev/null || true
   sleep 1
-  [[ -f "$ppm" ]] && { pnmtopng "$ppm" >"$png" 2>/dev/null || cp "$ppm" "$png"; rm -f "$ppm"; log "screenshot -> $1.png"; }
+  if [[ -s "$ppm" ]]; then
+    pnmtopng "$ppm" >"$png" 2>/dev/null || cp "$ppm" "$png"
+    rm -f "$ppm"; log "screenshot -> $1.png"
+  else
+    log "screenshot $1: empty frame"
+  fi
 }
 
 setup_osx_kvm() {
@@ -470,7 +477,9 @@ stage_slim() {  # SA-INDEPENDENT slim: boot, reclaim stale clusters over SSH, re
   # only needs SSH (sudo+dd work at the SA stage) + the MacHDD discard=unmap,detect-zeroes=unmap.
   boot_macintosh
   log "waiting for SSH (slim is SA-independent; SSH comes up even with the GUI at Setup Assistant)"
-  wait_ssh 36 || { log "FATAL: SSH never came up"; return 1; }
+  # Sequoia's cold first-boot to SSH is slow on the nested-KVM GHA runner (Tahoe verify came up in
+  # ~minutes, but a 12-min budget flaked); give it a generous ~22 min before declaring failure.
+  wait_ssh 66 || { log "FATAL: SSH never came up"; return 1; }
   slim_disk
   log "clean shutdown"
   gssh 'echo cocoon | sudo -S shutdown -h now' >/dev/null 2>&1 || true

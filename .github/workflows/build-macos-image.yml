@@ -3,14 +3,22 @@ name: build-macos-image
 on:
   workflow_dispatch:
     inputs:
+      macos:
+        description: "macOS version to build (tahoe=26, the last Intel macOS; sequoia=15)"
+        required: true
+        type: choice
+        default: tahoe
+        options:
+          - tahoe
+          - sequoia
       stage:
         description: "boot | install | setup | desktop (WIP, blocked on SA) | verify | slim (reclaim stale clusters, repush same tag)"
         required: true
         default: "boot"
       version_tag:
-        description: "Image tag under ghcr.io/cocoonstack/cocoon-macos/tahoe"
-        required: true
-        default: "26"
+        description: "Override the ghcr image tag (blank => 26 for tahoe, 15 for sequoia)"
+        required: false
+        default: ""
       disk_size:
         description: "Disk image size"
         required: true
@@ -26,11 +34,24 @@ jobs:
     timeout-minutes: 180
     env:
       STAGE: ${{ github.event.inputs.stage }}
-      GHCR_TAG: ${{ github.event.inputs.version_tag }}
       DISK_SIZE: ${{ github.event.inputs.disk_size }}
-      QCOW2_NAME: macos-tahoe-26.qcow2
     steps:
       - uses: actions/checkout@v5
+
+      - name: Resolve macOS target (shortname + ghcr repo/tag + qcow2 name)
+        run: |
+          case "${{ github.event.inputs.macos }}" in
+            sequoia) SHORT=sequoia; DEF_TAG=15; NAME=macos-sequoia-15.qcow2 ;;
+            tahoe|*) SHORT=tahoe;   DEF_TAG=26; NAME=macos-tahoe-26.qcow2 ;;
+          esac
+          TAG="${{ github.event.inputs.version_tag }}"; [ -z "$TAG" ] && TAG="$DEF_TAG"
+          {
+            echo "MACOS_SHORTNAME=$SHORT"
+            echo "GHCR_REPO=ghcr.io/cocoonstack/cocoon-macos/$SHORT"
+            echo "GHCR_TAG=$TAG"
+            echo "QCOW2_NAME=$NAME"
+          } >> "$GITHUB_ENV"
+          echo "building $SHORT (tag $TAG) -> ghcr.io/cocoonstack/cocoon-macos/$SHORT:$TAG"
 
       - name: Free disk space
         run: |
@@ -73,6 +94,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: macos-build-${{ github.event.inputs.stage }}
+          name: macos-build-${{ github.event.inputs.macos }}-${{ github.event.inputs.stage }}
           path: work/qemu-build/artifacts/
           if-no-files-found: warn

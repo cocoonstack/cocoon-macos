@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
-# Build a golden macOS (Tahoe 26) qcow2 on an x86 Linux/KVM host and push it to
-# ghcr. Leans on kholia/OSX-KVM (which already integrates LongQT-sea's Tahoe
+# Build a golden macOS qcow2 on an x86 Linux/KVM host and push it to ghcr. Which macOS is set by
+# MACOS_SHORTNAME (+ GHCR_REPO/GHCR_TAG/QCOW2_NAME) — the workflow derives them from its `macos`
+# input: tahoe=26 (the last Intel macOS) or sequoia=15. Leans on kholia/OSX-KVM (multi-version
 # OpenCore): it provides fetch-macOS-v2.py, OVMF, OpenCore.qcow2 and the OSK.
 #
 # STAGE controls how far we go (the macOS install has no autounattend, so it is
 # the iterated R&D spike — driven via the Action with retries):
 # This is an IMAGE-only pipeline (no Go); the CLI is exercised separately on a testbed.
+# (Stage names below use tahoe:26 as the example; the actual repo:tag is $GHCR_REPO:$GHCR_TAG.)
 #   boot    — boot headless to the macOS Recovery/installer, screenshot proof
-#   install — Recovery -> erase -> startosinstall headlessly, push tahoe:26-base
-#   setup   — provision the installed image (create cocoon user + SSH), push tahoe:26
-#   desktop — boot tahoe:26 -> auto-login cocoon + skip Setup Assistant + slim, re-push tahoe:26
-#   verify  — boot tahoe:26 + confirm SSH
+#   install — Recovery -> erase -> startosinstall headlessly, push <repo>:<tag>-base
+#   setup   — provision the installed image (create cocoon user + SSH), push <repo>:<tag>
+#   desktop — boot the image -> auto-login cocoon + skip Setup Assistant + slim, re-push <repo>:<tag>
+#   verify  — boot the image + confirm SSH
 set -euo pipefail
 
 STAGE=${STAGE:-boot}
@@ -213,7 +215,7 @@ start_reinstall_to_license() {  # chooser -> Reinstall -> intro -> license
 stage_install() {  # M2: OCR-driven Reinstall click-through, then start the install + observe
   boot_to_recovery
   erase_target            # Terminal: erase disk0 -> APFS "Macintosh"; back at chooser
-  log "Reinstall macOS Tahoe (OCR + Return for blue default buttons)"
+  log "Reinstall macOS $MACOS_SHORTNAME (OCR + Return for blue default buttons)"
   ocrclick Reinstall; sleep 1; ocrclick Continue; sleep 6; screendump "oc-00-intro"
   keys ret; sleep 6; screendump "oc-01-license"                   # intro: blue 'Continue' = Return
   ocrclick Agree 600 720; sleep 4; screendump "oc-02-confirm"      # license Agree (dark theme)

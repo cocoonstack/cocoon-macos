@@ -93,17 +93,27 @@ pre-login loginwindow) so the framebuffer stays painted; older images need a `se
 
 ## CI image pipeline (`.github/workflows/build-macos-image.yml`, `scripts/build-qemu-macos.sh`)
 
-`workflow_dispatch` with `stage`:
+`workflow_dispatch` with a `macos` version + a `stage`. **`macos`** selects which OS to build and
+where it lands on ghcr (the build script derives `MACOS_SHORTNAME`/`GHCR_REPO`/`GHCR_TAG` from it):
+
+| `macos` | fetch-macOS shortname | ghcr repo:tag |
+|---------|-----------------------|---------------|
+| `tahoe` (default) | `tahoe` | `…/tahoe:26` — macOS 26, the **last Intel** macOS |
+| `sequoia` | `sequoia` | `…/sequoia:15` — macOS 15 (n-1, still security-supported) |
+
+`stage` controls how far the build goes (shown for tahoe:26; the actual repo:tag follows `macos`):
 
 | stage | what |
 |-------|------|
-| `boot` | smoke: boot OpenCore → macOS Recovery (proves KVM + OpenCore + Tahoe recovery) |
-| `install` | full install from scratch → capture → push `tahoe:26-base` (~65 min) |
-| `setup` | pull `tahoe:26-base` → boot Recovery → `provision-macos.sh` (skip SA + user + SSH) → push `tahoe:26` |
-| `verify` | pull `tahoe:26` → boot → confirm login + SSH (`cocoon@localhost`) |
+| `boot` | smoke: boot OpenCore → macOS Recovery (proves KVM + OpenCore + recovery) |
+| `install` | full install from scratch → capture → push `<repo>:<tag>-base` (~65 min) |
+| `setup` | pull `<repo>:<tag>-base` → boot Recovery → `provision-macos.sh` (SA-skip recipe + user + SSH) → push `<repo>:<tag>` |
+| `slim` | pull `<repo>:<tag>` → boot → reclaim stale clusters → re-push `<repo>:<tag>` (smaller) |
+| `verify` | pull `<repo>:<tag>` → boot → confirm login + SSH (`cocoon@localhost`) |
 
-This pipeline is **image-only** (no Go); the CLI end-to-end (`vm run` + `--random-smbios`) is
-exercised on a KVM testbed, keeping image and Go CI separate.
+Same OSX-KVM (multi-version OpenCore) + the same provision recipe build either OS — only the
+recovery shortname + tag differ. This pipeline is **image-only** (no Go); the CLI end-to-end
+(`vm run` + `--random-smbios`) is exercised on a KVM testbed, keeping image and Go CI separate.
 
 Automation primitives (`scripts/qmp-input.py`): QMP absolute mouse click/move, keyboard
 type/chord, **tesseract+PIL OCR-click and title routing** (drives the macOS GUI installer where

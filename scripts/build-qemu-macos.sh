@@ -227,22 +227,23 @@ erase_target() {  # open Terminal (Shift-Cmd-T), erase disk0 as APFS "Macintosh"
 drive_installer() {  # adaptive: OCR the current installer pane each round, click the right control, until install starts.
   # Fixed sleeps fail across versions — Sequoia's "Loading Installation Information..." is far slower than Tahoe's,
   # so blind clicks fire while still on the intro. This loop waits per-pane instead.
-  local round txt
+  local round txt reached_disk=0
   for ((round = 1; round <= 40; round++)); do
     screendump "oc-$(printf '%02d' "$round")"
     txt="$(ocrtext)"
     log "installer round $round: $(printf '%s' "$txt" | head -c 100)"
     if printf '%s' "$txt" | grep -qiE "remaining|Installing macOS"; then
       log "install started at round $round"; return 0
-    elif printf '%s' "$txt" | grep -qiE "Select the disk|where you want to install|Show All Disk"; then
+    elif printf '%s' "$txt" | grep -qiE "Select the disk|where you want to install|Show All Disk|Macintosh"; then
       log "round $round: disk-select -> Macintosh + Continue (blue default, keys ret backup)"
+      reached_disk=1
       ocrclick Macintosh; sleep 2; ocrclick Continue; sleep 2; keys ret; sleep 8
-    elif printf '%s' "$txt" | grep -qiE "have read|read and agree"; then
-      log "round $round: confirm sheet -> modal Agree (centered; OCR can't read the grey button, click by position)"
-      modalagree; sleep 3
-    elif printf '%s' "$txt" | grep -qiE "agree to the|license agreement|must agree"; then
-      log "round $round: license pane -> Agree button (opens the confirm sheet)"
-      agreebtn; sleep 4
+    elif printf '%s' "$txt" | grep -qiE "Disagree|have read|must agree|agree to the|license agreement"; then
+      # OCR of the license/SLA body is unreliable frame-to-frame, but "Disagree" reads cleanly and appears
+      # only here. agreebtn clicks the bottom Agree (opens the confirm sheet); modalagree clicks the centered
+      # sheet Agree (OCR-unreadable, position-based). Doing both each round handles either pane.
+      log "round $round: license/SLA (Disagree present) -> agreebtn opens sheet + modalagree confirms"
+      agreebtn; sleep 3; modalagree; sleep 3
     elif printf '%s' "$txt" | grep -qiE "Loading Installation"; then
       log "round $round: still loading installation information, waiting"; sleep 12
     elif printf '%s' "$txt" | grep -qiE "set up the installation|click Continue"; then
@@ -251,7 +252,13 @@ drive_installer() {  # adaptive: OCR the current installer pane each round, clic
       log "round $round: unrecognized pane, waiting"; sleep 10
     fi
   done
-  log "drive_installer: install did not start after $round rounds"; return 1
+  # Ran out of rounds without seeing "remaining". If we reached disk-select, the install is likely running
+  # (progress-screen OCR is flaky) — let the monitor loop observe. If we never got past intro/license, it's
+  # genuinely hung, so fail fast and skip the 55-min monitor.
+  if [ "$reached_disk" = 1 ]; then
+    log "drive_installer: reached disk-select but never OCR'd progress; assuming install running"; return 0
+  fi
+  log "drive_installer: hung before disk-select after $round rounds"; return 1
 }
 
 stage_install() {  # M2: erase target, then adaptively drive the GUI installer to a real install
@@ -259,7 +266,7 @@ stage_install() {  # M2: erase target, then adaptively drive the GUI installer t
   erase_target            # Terminal: erase disk0 -> APFS "Macintosh"; back at chooser
   log "Reinstall macOS $MACOS_SHORTNAME (enter installer, then adaptive OCR click-through)"
   ocrclick Reinstall; sleep 1; ocrclick Continue; sleep 6
-  drive_installer || log "installer click-through did not confirm a start; monitor loop will still observe"
+  drive_installer || { log "click-through hung before disk-select — skipping the 55-min monitor + capture"; return 1; }
   screendump "oc-installing"
   log "monitoring install + jiggling mouse to defeat macOS display-sleep (black screen after ~34min was sleep)"
   local i

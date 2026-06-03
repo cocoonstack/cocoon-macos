@@ -71,6 +71,11 @@ ocrclick() {  # WORD [ymin ymax]; wakes the display (neutral move) before OCR so
   python3 "$QMP_PY" "$QMP_SOCK" ocrclick "$@" 2>&1 | sed 's/^/[ocr] /' || true
 }
 
+ocrtext() {  # wake display, then dump all on-screen OCR text (for adaptive installer-pane detection)
+  python3 "$QMP_PY" "$QMP_SOCK" move 60 400 2>/dev/null || true
+  python3 "$QMP_PY" "$QMP_SOCK" ocrtext 2>/dev/null || true
+}
+
 screendump() {  # screendump <label>
   local ppm="$WORKDIR/$1.ppm" png="$ARTIFACT_DIR/$1.png"
   mon "screendump $ppm"
@@ -207,34 +212,49 @@ erase_target() {  # open Terminal (Shift-Cmd-T), erase disk0 as APFS "Macintosh"
   chord meta_l q; sleep 3   # quit Terminal -> back to Recovery chooser
 }
 
-start_reinstall_to_license() {  # chooser -> Reinstall -> intro -> license
-  click 600 280; sleep 1; click 815 525; sleep 6   # Reinstall row + Continue -> intro
-  keys ret; sleep 5                                  # intro Continue (default) -> license
+drive_installer() {  # adaptive: OCR the current installer pane each round, click the right control, until install starts.
+  # Fixed sleeps fail across versions — Sequoia's "Loading Installation Information..." is far slower than Tahoe's,
+  # so blind clicks fire while still on the intro. This loop waits per-pane instead.
+  local round txt
+  for ((round = 1; round <= 40; round++)); do
+    screendump "oc-$(printf '%02d' "$round")"
+    txt="$(ocrtext)"
+    log "installer round $round: $(printf '%s' "$txt" | head -c 100)"
+    if printf '%s' "$txt" | grep -qiE "remaining|Installing macOS"; then
+      log "install started at round $round"; return 0
+    elif printf '%s' "$txt" | grep -qiE "Select the disk|where you want to install|Show All Disk"; then
+      log "round $round: disk-select -> Macintosh + Continue"
+      ocrclick Macintosh; sleep 2; ocrclick Continue; sleep 8
+    elif printf '%s' "$txt" | grep -qiE "agree to the terms|license agreement|must agree"; then
+      log "round $round: license -> Agree, then confirm-sheet Agree (both via OCR, position-independent)"
+      ocrclick Agree; sleep 3; ocrclick Agree; sleep 4
+    elif printf '%s' "$txt" | grep -qiE "Loading Installation"; then
+      log "round $round: still loading installation information, waiting"; sleep 12
+    elif printf '%s' "$txt" | grep -qiE "set up the installation|click Continue"; then
+      log "round $round: intro -> Continue"; ocrclick Continue; sleep 6
+    else
+      log "round $round: unrecognized pane, waiting"; sleep 10
+    fi
+  done
+  log "drive_installer: install did not start after $round rounds"; return 1
 }
 
-stage_install() {  # M2: OCR-driven Reinstall click-through, then start the install + observe
+stage_install() {  # M2: erase target, then adaptively drive the GUI installer to a real install
   boot_to_recovery
   erase_target            # Terminal: erase disk0 -> APFS "Macintosh"; back at chooser
-  log "Reinstall macOS $MACOS_SHORTNAME (OCR + Return for blue default buttons)"
-  ocrclick Reinstall; sleep 1; ocrclick Continue; sleep 6; screendump "oc-00-intro"
-  keys ret; sleep 6; screendump "oc-01-license"                   # intro: blue 'Continue' = Return
-  ocrclick Agree 600 720; sleep 4; screendump "oc-02-confirm"      # license Agree (dark theme)
-  # confirm sheet (Disagree=blue default): try keyboard Tab->Agree then Space (position-independent),
-  # then also the PIL pixel as backup.
-  keys tab; sleep 1; keys spc; sleep 2; screendump "oc-02b-tab"
-  click 676 399; sleep 6; screendump "oc-03-disksel"
-  log "disk-select: pick Macintosh, then Continue (clean — no menu-bar misclick)"
-  ocrclick Macintosh; sleep 2; ocrclick Continue 620 690; sleep 12
-  screendump "oc-04-installing"
+  log "Reinstall macOS $MACOS_SHORTNAME (enter installer, then adaptive OCR click-through)"
+  ocrclick Reinstall; sleep 1; ocrclick Continue; sleep 6
+  drive_installer || log "installer click-through did not confirm a start; monitor loop will still observe"
+  screendump "oc-installing"
   log "monitoring install + jiggling mouse to defeat macOS display-sleep (black screen after ~34min was sleep)"
   local i
   for ((i = 1; i <= 55; i++)); do
     python3 "$QMP_PY" "$QMP_SOCK" move $((420 + i % 180)) 420 2>/dev/null || true  # jiggle: keep display awake
     sleep 60
-    screendump "oc-05-$(printf '%02d' "$i")"
+    screendump "oc-mon-$(printf '%02d' "$i")"
     kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at install monitor $i"; return 1; }
   done
-  log "install monitor done — inspect oc-05-*.png for completion + Setup Assistant (display kept awake)"
+  log "install monitor done — inspect oc-mon-*.png for completion + Setup Assistant (display kept awake)"
   capture_and_push "$GHCR_TAG-base"
 }
 

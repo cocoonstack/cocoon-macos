@@ -76,6 +76,11 @@ ocrtext() {  # wake display, then dump all on-screen OCR text (for adaptive inst
   python3 "$QMP_PY" "$QMP_SOCK" ocrtext 2>/dev/null || true
 }
 
+agreebtn() {  # click the active SLA "Agree" button (Disagree-paired, topmost) — not body text, not the greyed bg button
+  python3 "$QMP_PY" "$QMP_SOCK" move 60 400 2>/dev/null || true
+  python3 "$QMP_PY" "$QMP_SOCK" agreebtn 2>&1 | sed 's/^/[agree] /' || true
+}
+
 screendump() {  # screendump <label>
   local ppm="$WORKDIR/$1.ppm" png="$ARTIFACT_DIR/$1.png"
   mon "screendump $ppm"
@@ -225,9 +230,9 @@ drive_installer() {  # adaptive: OCR the current installer pane each round, clic
     elif printf '%s' "$txt" | grep -qiE "Select the disk|where you want to install|Show All Disk"; then
       log "round $round: disk-select -> Macintosh + Continue"
       ocrclick Macintosh; sleep 2; ocrclick Continue; sleep 8
-    elif printf '%s' "$txt" | grep -qiE "agree to the terms|license agreement|must agree"; then
-      log "round $round: license -> Agree, then confirm-sheet Agree (both via OCR, position-independent)"
-      ocrclick Agree; sleep 3; ocrclick Agree; sleep 4
+    elif printf '%s' "$txt" | grep -qiE "agree to the|license agreement|must agree|read and agree|have read"; then
+      log "round $round: license/confirm -> Agree button (Disagree-paired); twice handles license->sheet->disk"
+      agreebtn; sleep 4; agreebtn; sleep 3
     elif printf '%s' "$txt" | grep -qiE "Loading Installation"; then
       log "round $round: still loading installation information, waiting"; sleep 12
     elif printf '%s' "$txt" | grep -qiE "set up the installation|click Continue"; then

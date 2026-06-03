@@ -161,6 +161,27 @@ class QMP:
         print("CLICK %s (%d,%d) conf=%.0f" % (word, cx, cy, conf))
         return True
 
+    def agree_button(self):
+        # The macOS SLA "Agree" button is the one immediately right of a same-row "Disagree".
+        # This excludes the body-text "...read and agree to the terms...", and when a confirm sheet
+        # overlays the license pane, the topmost such pair is the active modal button (the background
+        # license buttons sit lower and are greyed out). Works for the license pane (one pair) too.
+        ag = self.ocr_find("Agree")
+        dis = self.ocr_find("Disagree")
+        pairs = []
+        for ax, ay, _ in ag:
+            for dx, dy, _ in dis:
+                if abs(ay - dy) <= 14 and 0 < ax - dx <= 320:
+                    pairs.append((ay, ax))
+                    break
+        if pairs:
+            pairs.sort()  # smallest y first = topmost active button row
+            return pairs[0][1], pairs[0][0]
+        if ag:  # fallback: no Disagree paired — take the lowest Agree (plain license button at the bottom)
+            lo = max(ag, key=lambda t: t[1])
+            return lo[0], lo[1]
+        return None
+
 
 def main():
     sock, op = sys.argv[1], sys.argv[2]
@@ -182,6 +203,14 @@ def main():
         ymin = int(sys.argv[4]) if len(sys.argv) > 4 else 0
         ymax = int(sys.argv[5]) if len(sys.argv) > 5 else 10 ** 9
         sys.exit(0 if q.ocrclick(word, ymin, ymax) else 3)
+    elif op == "agreebtn":
+        btn = q.agree_button()
+        if btn:
+            q.click(*btn)
+            print("AGREE (%d,%d)" % btn)
+        else:
+            print("NO-AGREE-BUTTON")
+            sys.exit(3)
     elif op == "ocrtext":
         ymin = int(sys.argv[3]) if len(sys.argv) > 3 else 0
         ymax = int(sys.argv[4]) if len(sys.argv) > 4 else 10 ** 9

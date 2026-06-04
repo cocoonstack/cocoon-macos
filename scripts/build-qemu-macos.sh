@@ -354,18 +354,28 @@ picker_size() { stat -f%z "$ARTIFACT_DIR/$1.png" 2>/dev/null || stat -c%s "$ARTI
 boot_macintosh() {  # leave the OpenCore picker into the installed macOS: prefer auto-boot, else sendkey (retry ret)
   sleep 50
   screendump "vf-00"
-  if [ "$(picker_size vf-00)" -gt 30000 ]; then
-    log "still at picker ($(picker_size vf-00) bytes); selecting Macintosh via sendkey (right once, then ret)"
-    mon "sendkey right"; sleep 2
-    local a
-    for a in $(seq 1 8); do
-      mon "sendkey ret"; sleep 12
-      screendump "vf-pk-$a"
-      if [ "$(picker_size vf-pk-$a)" -lt 30000 ]; then log "left picker after $a ret"; break; fi
-    done
-  else
+  if [ "$(picker_size vf-00)" -le 30000 ]; then
     log "OpenCore auto-booted (frame $(picker_size vf-00) bytes)"
+    return 0
   fi
+  # Still at the picker. With HideAuxiliary the installed macOS is the sole/default entry, so a bare
+  # ret boots it — do NOT lead with 'right' (that moves selection OFF the only entry, which left Tahoe
+  # stuck). And confirm we actually left: one sub-threshold frame can be a transient/black flash during
+  # the keypress (Tahoe bounced straight back to the 35875-byte picker), so re-shoot after a settle.
+  log "still at picker ($(picker_size vf-00) bytes); booting the default entry via sendkey ret"
+  local a sz
+  for a in $(seq 1 10); do
+    mon "sendkey ret"; sleep 10
+    screendump "vf-pk-$a"
+    if [ "$(picker_size vf-pk-$a)" -le 30000 ]; then
+      sleep 10; screendump "vf-pk-${a}c"
+      sz=$(picker_size "vf-pk-${a}c")
+      [ "$sz" -le 30000 ] && { log "left picker after $a ret (confirmed $sz bytes)"; return 0; }
+      log "picker bounced back after $a ret ($sz bytes); retrying"
+    fi
+    [ $((a % 4)) -eq 0 ] && { log "nudging selection (right) in case the default is not macOS"; mon "sendkey right"; sleep 2; }
+  done
+  log "WARN: still at the picker after 10 ret attempts"
 }
 
 stage_verify() {  # boot the turnkey tahoe:26 and confirm SSH

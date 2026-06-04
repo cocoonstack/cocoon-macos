@@ -85,3 +85,25 @@ func TestArgsDiskTuning(t *testing.T) {
 		t.Fatalf("MacHDD missing perf tuning: %v", drives)
 	}
 }
+
+func TestArgsHugepages(t *testing.T) {
+	base := Spec{Disk: "/v/d.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/v.fd", CPUs: 2, Memory: "4096", VNCDisp: -1}
+	// off by default: no memory-backend object, plain -machine q35
+	if slices.ContainsFunc(base.Args(), func(a string) bool { return strings.Contains(a, "memory-backend") }) {
+		t.Fatalf("hugepages off must not add a memory-backend: %v", base.Args())
+	}
+	if got := argVals(base.Args(), "-machine"); len(got) != 1 || got[0] != "q35" {
+		t.Fatalf("machine without hugepages: %v", got)
+	}
+	// on: memfd hugetlb backend sized to the guest RAM, and -machine references it
+	h := base
+	h.Hugepages = true
+	if !slices.ContainsFunc(h.Args(), func(a string) bool {
+		return strings.Contains(a, "memory-backend-memfd") && strings.Contains(a, "hugetlb=on") && strings.Contains(a, "size=4096M")
+	}) {
+		t.Fatalf("hugepages on missing memfd backend: %v", h.Args())
+	}
+	if got := argVals(h.Args(), "-machine"); len(got) != 1 || got[0] != "q35,memory-backend=pc.ram" {
+		t.Fatalf("machine memory-backend: %v", got)
+	}
+}

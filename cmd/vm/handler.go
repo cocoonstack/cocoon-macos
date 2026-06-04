@@ -121,6 +121,7 @@ type record struct {
 	VNCPass     string       `json:"vnc_password,omitempty"`
 	NetMode     string       `json:"net_mode,omitempty"`
 	Tap         string       `json:"tap,omitempty"`
+	Hugepages   bool         `json:"hugepages,omitempty"`  // back guest RAM with 2 MiB hugepages
 	TapOwned    bool         `json:"tap_owned,omitempty"`  // cocoon auto-created the TAP (tear down on rm); false for user --tap
 	BridgeDev   string       `json:"bridge_dev,omitempty"` // bridge to enslave the TAP to; persisted so rm can tear down without --bridge
 	Netns       string       `json:"netns,omitempty"`      // netns path the qemu process runs in (CNI); "" otherwise
@@ -229,9 +230,10 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	netMode, _ := cmd.Flags().GetString("net")
 	tap, _ := cmd.Flags().GetString("tap")
+	huge, _ := cmd.Flags().GetBool("hugepages")
 	r := &record{
 		Name: name, Image: image, ImageDigest: digest, Disk: overlay, OpenCore: oc, OVMFCode: code, OVMFVars: ovmfVars,
-		CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: ssh, VNCPass: vncPass, NetMode: netMode, Tap: tap,
+		CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: ssh, VNCPass: vncPass, NetMode: netMode, Tap: tap, Hugepages: huge,
 		VMID: newVMID(), Created: time.Now().Format(time.RFC3339),
 	}
 	// SMBIOS before networking: assignSMBIOS sets r.MAC = ROM, which prepareNet keeps as the guest MAC.
@@ -276,8 +278,9 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	spec := qemu.Spec{
 		Name: r.Name, Disk: r.Disk, OpenCore: r.OpenCore, OVMFCode: r.OVMFCode, OVMFVars: r.OVMFVars,
 		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, SSHPort: r.SSHPort, MAC: r.MAC, VNCPass: r.VNCPass,
-		Tap:     r.Tap, // set for tap/bridge/cni (a real host TAP); empty => user-mode SLIRP
-		MonSock: filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
+		Tap:       r.Tap, // set for tap/bridge/cni (a real host TAP); empty => user-mode SLIRP
+		Hugepages: r.Hugepages,
+		MonSock:   filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
 	}
 	pidfile := filepath.Join(dir, "qemu.pid")
 	args := append(spec.Args(), "-daemonize", "-pidfile", pidfile)
@@ -569,6 +572,10 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	}
 	if cmd.Flags().Changed("memory") {
 		r.Memory, _ = cmd.Flags().GetString("memory")
+	}
+	r.Hugepages = srcRec.Hugepages
+	if cmd.Flags().Changed("hugepages") {
+		r.Hugepages, _ = cmd.Flags().GetBool("hugepages")
 	}
 	r.VNCDisp, _ = cmd.Flags().GetInt("vnc")
 	r.SSHPort, _ = cmd.Flags().GetInt("ssh-port")

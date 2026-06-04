@@ -18,20 +18,21 @@ const macOSCPU = "Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc," 
 
 // Spec is the per-VM input for launching a macOS guest from a golden qcow2.
 type Spec struct {
-	Name     string // VM name
-	Disk     string // per-VM macOS qcow2 (an overlay on the golden image)
-	OpenCore string // OpenCore.qcow2 (boot loader)
-	OVMFCode string // OVMF_CODE_4M.fd (read-only firmware)
-	OVMFVars string // per-VM OVMF_VARS.fd (writable NVRAM)
-	CPUs     int    // vCPU count
-	Memory   string // MiB, e.g. "8192"
-	VNCDisp  int    // VNC display number (n => host 127.0.0.1:590n); <0 disables
-	SSHPort  int    // host port forwarded to guest :22; 0 disables
-	MonSock  string // optional HMP monitor unix socket
-	QMPSock  string // optional QMP unix socket
-	MAC      string // optional guest NIC MAC (set to the SMBIOS ROM for --random-smbios)
-	VNCPass  string // optional VNC password (enables QEMU password auth; set via monitor after launch)
-	Tap      string // optional pre-created host TAP ifname; set => bridged/routed (-netdev tap) instead of user-mode
+	Name      string // VM name
+	Disk      string // per-VM macOS qcow2 (an overlay on the golden image)
+	OpenCore  string // OpenCore.qcow2 (boot loader)
+	OVMFCode  string // OVMF_CODE_4M.fd (read-only firmware)
+	OVMFVars  string // per-VM OVMF_VARS.fd (writable NVRAM)
+	CPUs      int    // vCPU count
+	Memory    string // MiB, e.g. "8192"
+	VNCDisp   int    // VNC display number (n => host 127.0.0.1:590n); <0 disables
+	SSHPort   int    // host port forwarded to guest :22; 0 disables
+	MonSock   string // optional HMP monitor unix socket
+	QMPSock   string // optional QMP unix socket
+	MAC       string // optional guest NIC MAC (set to the SMBIOS ROM for --random-smbios)
+	VNCPass   string // optional VNC password (enables QEMU password auth; set via monitor after launch)
+	Tap       string // optional pre-created host TAP ifname; set => bridged/routed (-netdev tap) instead of user-mode
+	Hugepages bool   // back guest RAM with 2 MiB hugepages (needs host hugepages reserved); off => default RAM
 }
 
 // Args returns the qemu-system-x86_64 argument vector for the macOS guest.
@@ -42,10 +43,19 @@ func (s Spec) Args() []string {
 	if strings.HasSuffix(s.OVMFVars, ".qcow2") {
 		varsFmt = "qcow2"
 	}
+	// Hugepages (opt-in): back guest RAM with 2 MiB hugetlb pages to cut TLB/EPT pressure on a
+	// memory-heavy GUI guest. Needs hugepages reserved on the host (else qemu won't start), so it's
+	// off by default — default anonymous guest RAM is already THP-eligible.
+	machine := "q35"
+	var memBackend []string
+	if s.Hugepages {
+		memBackend = []string{"-object", "memory-backend-memfd,id=pc.ram,size=" + s.Memory + "M,hugetlb=on,hugetlbsize=2M,prealloc=on,share=on"}
+		machine = "q35,memory-backend=pc.ram"
+	}
 	a := []string{
 		"-enable-kvm", "-m", s.Memory,
 		"-cpu", macOSCPU,
-		"-machine", "q35",
+		"-machine", machine,
 		"-smp", fmt.Sprintf("%d,cores=%d,sockets=1", s.CPUs, cores),
 		"-device", "qemu-xhci,id=xhci",
 		"-device", "usb-kbd,bus=xhci.0",
@@ -65,6 +75,7 @@ func (s Spec) Args() []string {
 		"-device", "ide-hd,bus=sata.4,drive=MacHDD",
 		"-device", "vmware-svga",
 	}
+	a = append(memBackend, a...) // -object must precede the -machine memory-backend reference
 	switch {
 	case s.Tap != "":
 		// attach to a pre-created host TAP (cocoon's network plane / a bridge owns IP+forwarding);

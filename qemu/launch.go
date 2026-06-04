@@ -14,7 +14,11 @@ const OSK = "ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
 
 // macOSCPU is the -cpu model for macOS Sequoia/Tahoe (older Penryn fails on 26).
 const macOSCPU = "Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc," +
-	"vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt,check"
+	"vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt," +
+	// PCID/INVPCID cut TLB-flush cost on the guest's frequent context switches; tsc-deadline gives a
+	// one-shot LAPIC timer (fewer timer-related VM exits); rdtscp/xsavec round out what macOS expects.
+	// Most are already in the Skylake-Client base — affirmed here so a base-model change can't drop them.
+	"+pcid,+invpcid,+tsc-deadline,+rdtscp,+xsavec,check"
 
 // Spec is the per-VM input for launching a macOS guest from a golden qcow2.
 type Spec struct {

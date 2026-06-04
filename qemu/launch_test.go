@@ -107,3 +107,17 @@ func TestArgsHugepages(t *testing.T) {
 		t.Fatalf("machine memory-backend: %v", got)
 	}
 }
+
+func TestArgsCPUPerfFlags(t *testing.T) {
+	s := Spec{Disk: "/v/d.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/v.fd", CPUs: 4, Memory: "4096", VNCDisp: -1}
+	cpu := argVals(s.Args(), "-cpu")
+	if len(cpu) != 1 {
+		t.Fatalf("-cpu count: %v", cpu)
+	}
+	// macOS contract (GenuineIntel + invtsc) plus the perf flags must all be present
+	for _, f := range []string{"vendor=GenuineIntel", "+invtsc", "+pcid", "+invpcid", "+tsc-deadline", "+rdtscp"} {
+		if !strings.Contains(cpu[0], f) {
+			t.Fatalf("-cpu missing %s: %s", f, cpu[0])
+		}
+	}
+}

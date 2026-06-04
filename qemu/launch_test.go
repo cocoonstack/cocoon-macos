@@ -72,3 +72,16 @@ func TestArgsOVMFVarsFormat(t *testing.T) {
 		t.Fatalf("raw NVRAM not format=raw: %v", s.Args())
 	}
 }
+
+func TestArgsDiskTuning(t *testing.T) {
+	s := Spec{Disk: "/v/d.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/v.fd", CPUs: 2, Memory: "4096", VNCDisp: -1}
+	drives := argVals(s.Args(), "-drive")
+	// the macOS OS disk must carry the perf knobs (io_uring + writeback + discard/detect-zeroes)
+	if !slices.ContainsFunc(drives, func(d string) bool {
+		return strings.Contains(d, "id=MacHDD") && strings.Contains(d, "cache=writeback") &&
+			strings.Contains(d, "aio=io_uring") && strings.Contains(d, "discard=unmap") &&
+			strings.Contains(d, "detect-zeroes=unmap")
+	}) {
+		t.Fatalf("MacHDD missing perf tuning: %v", drives)
+	}
+}

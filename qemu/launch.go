@@ -55,9 +55,13 @@ func (s Spec) Args() []string {
 		"-drive", "if=pflash,format=" + varsFmt + ",file=" + s.OVMFVars,
 		"-smbios", "type=2",
 		"-device", "ich9-ahci,id=sata",
-		"-drive", "id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,file=" + s.OpenCore,
+		"-drive", "id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,aio=io_uring,file=" + s.OpenCore,
 		"-device", "ide-hd,bus=sata.2,drive=OpenCoreBoot",
-		"-drive", "id=MacHDD,if=none,format=qcow2,file=" + s.Disk,
+		// MacHDD perf: io_uring beats the default threads aio backend; cache=writeback uses host RAM to
+		// mask qcow2-overlay + cloud-disk (GCP PD) latency — do NOT use cache=none here, O_DIRECT would
+		// hit the network disk on every I/O; discard/detect-zeroes reclaim freed clusters (also what the
+		// slim stage depends on). macOS has no virtio-blk driver, so the OS disk stays on AHCI/IDE.
+		"-drive", "id=MacHDD,if=none,format=qcow2,cache=writeback,aio=io_uring,discard=unmap,detect-zeroes=unmap,file=" + s.Disk,
 		"-device", "ide-hd,bus=sata.4,drive=MacHDD",
 		"-device", "vmware-svga",
 	}

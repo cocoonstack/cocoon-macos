@@ -171,6 +171,17 @@ echo "remotelogin: $(/usr/sbin/systemsetup -getremotelogin)"
 # is system-wide + persistent (pmset prefs), so it covers the pre-login loginwindow too.
 /usr/bin/pmset -a displaysleep 0 sleep 0 disablesleep 1
 echo "pmset: $(/usr/bin/pmset -g | tr '\n' ' ')"
+# Perf: kill the post-first-boot background storm. A fresh image spends its first many minutes with
+# Spotlight (mds/mdworker) indexing the whole disk plus a few analysis agents churning CPU+disk —
+# that is the "sluggish right after boot" feeling. Headless/demo VMs need none of it. mds may not be
+# up yet at RunAtLoad, so retry a few times (SSH is already enabled above, so this never delays login).
+for i in 1 2 3 4 5; do /usr/bin/mdutil -a -i off >/dev/null 2>&1 && break; sleep 5; done
+/usr/bin/mdutil -a -i off || true   # disable Spotlight indexing on every volume
+/usr/bin/mdutil -a -d   || true     # and turn the indexer off entirely
+for svc in com.apple.photoanalysisd com.apple.mediaanalysisd com.apple.parsecd com.apple.suggestd; do
+  /bin/launchctl disable "user/501/$svc" 2>/dev/null || true
+done
+echo "spotlight: $(/usr/bin/mdutil -a -s 2>/dev/null | tr '\n' ' ')"
 /bin/rm -f /Library/LaunchDaemons/com.cocoon.firstboot.plist /usr/local/bin/cocoon-firstboot.sh
 SH
 chmod 755 "$VOL/usr/local/bin/cocoon-firstboot.sh"

@@ -442,6 +442,26 @@ echo SLIM_OK
 GUEST
 }
 
+apply_perf_recipe() {  # macOS-side perf, baked over SSH during slim so an SSH-ready image re-bakes fast
+  # (no full `setup` re-run): kill the post-boot Spotlight/agent storm + cut GUI compositor work on the
+  # unaccelerated vmware-svga framebuffer. Applies to whichever macOS this stage booted (tahoe|sequoia).
+  log "applying perf recipe (Spotlight off, trim agents, reduce-motion) over SSH"
+  gssh 'bash -s' <<'GUEST'
+echo cocoon | sudo -S /usr/bin/mdutil -a -i off 2>/dev/null || true   # disable Spotlight indexing (the post-boot churn)
+echo cocoon | sudo -S /usr/bin/mdutil -a -d   2>/dev/null || true
+for svc in com.apple.photoanalysisd com.apple.mediaanalysisd com.apple.parsecd com.apple.suggestd; do
+  launchctl disable "gui/501/$svc" 2>/dev/null || true
+done
+defaults write com.apple.universalaccess reduceTransparency -bool true 2>/dev/null || true
+defaults write com.apple.universalaccess reduceMotion -bool true 2>/dev/null || true
+defaults write -g NSAutomaticWindowAnimationsEnabled -bool false 2>/dev/null || true
+defaults write com.apple.dock launchanim -bool false 2>/dev/null || true
+defaults write com.apple.dock expose-animation-duration -float 0 2>/dev/null || true
+killall cfprefsd 2>/dev/null || true   # flush prefs to disk so they survive the upcoming clean shutdown
+echo "PERF_OK spotlight=$(mdutil -a -s 2>/dev/null | head -1)"
+GUEST
+}
+
 # WIP — BLOCKED on the macOS 26 system Setup Assistant. A fresh :26 boots to the system SA
 # (_mbsetupuser / SetupAssistantSpringboard) and it resists every marker-based skip we tried
 # (.AppleSetupDone, complete home, .skipbuddy, DidSee*, autologin, killsa, rm ConfigurationProfiles).
@@ -480,6 +500,7 @@ stage_slim() {  # SA-INDEPENDENT slim: boot, reclaim stale clusters over SSH, re
   # Sequoia's cold first-boot to SSH is slow on the nested-KVM GHA runner (Tahoe verify came up in
   # ~minutes, but a 12-min budget flaked); give it a generous ~22 min before declaring failure.
   wait_ssh 66 || { log "FATAL: SSH never came up"; return 1; }
+  apply_perf_recipe   # bake the macOS-side perf tweaks into the image before reclaiming/repushing
   slim_disk
   log "clean shutdown"
   gssh 'echo cocoon | sudo -S shutdown -h now' >/dev/null 2>&1 || true

@@ -100,7 +100,11 @@ func (s Spec) Args() []string {
 		if s.VNCPass != "" {
 			vnc += ",password=on" // macOS Screen Sharing can't use QEMU's bare "None" auth; the password is set via monitor post-launch
 		}
-		a = append(a, "-display", "none", "-vnc", vnc)
+		// -k en-us: translate received VNC keysyms through the en-US keymap, which
+		// encodes the shift state for shifted keysyms. Without it, QEMU's default
+		// keysym mapping drops the shift on shifted characters coming from the
+		// guacamole VNC keyboard (V->v, &->7, $(->$9 — the "keyboard garbled" bug).
+		a = append(a, "-k", "en-us", "-display", "none", "-vnc", vnc)
 	}
 	if s.MonSock != "" {
 		a = append(a, "-monitor", "unix:"+s.MonSock+",server,nowait")

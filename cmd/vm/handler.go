@@ -1,11 +1,16 @@
 package vm
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/png"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -113,6 +118,7 @@ type record struct {
 	CPUs        int          `json:"cpus"`
 	Memory      string       `json:"memory"`
 	VNCDisp     int          `json:"vnc"`
+	VNCHost     string       `json:"vnc_host,omitempty"`
 	SSHPort     int          `json:"ssh_port"`
 	PID         int          `json:"pid"`
 	Created     string       `json:"created"`
@@ -226,6 +232,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	cpus, _ := cmd.Flags().GetInt("cpus")
 	mem, _ := cmd.Flags().GetString("memory")
 	vnc, _ := cmd.Flags().GetInt("vnc")
+	vncHost, _ := cmd.Flags().GetString("vnc-host")
 	ssh, _ := cmd.Flags().GetInt("ssh-port")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	netMode, _ := cmd.Flags().GetString("net")
@@ -233,7 +240,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	huge, _ := cmd.Flags().GetBool("hugepages")
 	r := &record{
 		Name: name, Image: image, ImageDigest: digest, Disk: overlay, OpenCore: oc, OVMFCode: code, OVMFVars: ovmfVars,
-		CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: ssh, VNCPass: vncPass, NetMode: netMode, Tap: tap, Hugepages: huge,
+		CPUs: cpus, Memory: mem, VNCDisp: vnc, VNCHost: vncHost, SSHPort: ssh, VNCPass: vncPass, NetMode: netMode, Tap: tap, Hugepages: huge,
 		VMID: newVMID(), Created: time.Now().Format(time.RFC3339),
 	}
 	// SMBIOS before networking: assignSMBIOS sets r.MAC = ROM, which prepareNet keeps as the guest MAC.
@@ -277,7 +284,7 @@ func assignSMBIOS(ctx context.Context, dir, ocBase string, r *record) error {
 func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	spec := qemu.Spec{
 		Name: r.Name, Disk: r.Disk, OpenCore: r.OpenCore, OVMFCode: r.OVMFCode, OVMFVars: r.OVMFVars,
-		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, SSHPort: r.SSHPort, MAC: r.MAC, VNCPass: r.VNCPass,
+		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, VNCHost: r.VNCHost, SSHPort: r.SSHPort, MAC: r.MAC, VNCPass: r.VNCPass,
 		Tap:       r.Tap, // set for tap/bridge/cni (a real host TAP); empty => user-mode SLIRP
 		Hugepages: r.Hugepages,
 		MonSock:   filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
@@ -299,7 +306,113 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 			fmt.Fprintf(os.Stderr, "warning: VNC password not set: %v\n", err)
 		}
 	}
+	// Leave the OpenCore picker into the installed macOS. The headless auto-boot
+	// (HideAuxiliary + Timeout, set by InjectSMBIOS) is unreliable when the ESP surfaces
+	// as a separate "EFI" entry that becomes the default — the VM then sits at the picker
+	// forever. Drive it the way the image-build CI does (sendkey right onto the macOS
+	// entry, then ret). Best-effort + bounded: the SSH readiness probe is the real gate,
+	// so a missed picker just surfaces as a slow/failed boot rather than a hang here.
+	driveBootPicker(spec.MonSock, dir)
 	return saveRec(dir, r)
+}
+
+// driveBootPicker leaves the OpenCore picker into macOS by moving the selection onto the
+// installed-macOS entry and pressing return, confirming via screendump that the bright
+// picker frame gave way to the near-black early-boot frame. Bounded and best-effort.
+func driveBootPicker(monSock, dir string) {
+	ppm := filepath.Join(dir, "boot-probe.ppm")
+	defer func() { _ = os.Remove(ppm) }()
+	time.Sleep(12 * time.Second) // let OpenCore render the picker
+	for a := 0; a < 8; a++ {
+		if sz, ok := screenshotPNGSize(monSock, ppm); ok && sz <= 30000 {
+			time.Sleep(6 * time.Second) // settle: a keypress flashes a transient sub-threshold frame
+			if sz2, ok2 := screenshotPNGSize(monSock, ppm); ok2 && sz2 <= 30000 {
+				return // left the picker; macOS is booting
+			}
+		}
+		// The ESP "EFI" entry is the default, so move right onto the macOS entry, then boot it.
+		monitorCmd(monSock, "sendkey right")
+		time.Sleep(700 * time.Millisecond)
+		monitorCmd(monSock, "sendkey ret")
+		time.Sleep(11 * time.Second)
+	}
+}
+
+// monitorCmd sends one HMP command over the QEMU monitor socket and waits for the next prompt.
+func monitorCmd(monSock, cmd string) {
+	conn, err := net.Dial("unix", monSock)
+	if err != nil {
+		return
+	}
+	defer func() { _ = conn.Close() }()
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if _, ok := readUntil(conn, "(qemu)"); !ok {
+		return
+	}
+	_, _ = fmt.Fprintf(conn, "%s\n", cmd)
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_, _ = readUntil(conn, "(qemu)")
+}
+
+// screenshotPNGSize screendumps the framebuffer and returns the PNG-compressed byte size,
+// a cheap content proxy: the bright OpenCore picker compresses to ~35 KB while the
+// near-black early-boot/login frame is a few KB (the build CI gates on the same ≤30 KB).
+func screenshotPNGSize(monSock, ppm string) (int, bool) {
+	_ = os.Remove(ppm)
+	conn, err := net.Dial("unix", monSock)
+	if err != nil {
+		return 0, false
+	}
+	defer func() { _ = conn.Close() }()
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if _, ok := readUntil(conn, "(qemu)"); !ok {
+		return 0, false
+	}
+	_, _ = fmt.Fprintf(conn, "screendump %s\n", ppm)
+	_ = conn.SetReadDeadline(time.Now().Add(8 * time.Second))
+	_, _ = readUntil(conn, "(qemu)")
+	img, err := readPPM(ppm)
+	if err != nil {
+		return 0, false
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return 0, false
+	}
+	return buf.Len(), true
+}
+
+// readPPM parses the binary (P6) PPM that `screendump` writes (no file suffix needed).
+func readPPM(path string) (image.Image, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	r := bufio.NewReader(f)
+	var magic string
+	var w, h, maxv int
+	if _, err := fmt.Fscan(r, &magic, &w, &h, &maxv); err != nil {
+		return nil, err
+	}
+	if magic != "P6" || maxv != 255 || w <= 0 || h <= 0 {
+		return nil, fmt.Errorf("unexpected ppm header %q %dx%d maxval %d", magic, w, h, maxv)
+	}
+	if _, err := r.ReadByte(); err != nil { // consume the single whitespace after maxval
+		return nil, err
+	}
+	px := make([]byte, w*h*3)
+	if _, err := io.ReadFull(r, px); err != nil {
+		return nil, err
+	}
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for i := 0; i < w*h; i++ {
+		img.Pix[i*4] = px[i*3]
+		img.Pix[i*4+1] = px[i*3+1]
+		img.Pix[i*4+2] = px[i*3+2]
+		img.Pix[i*4+3] = 255
+	}
+	return img, nil
 }
 
 // setVNCPassword applies the VNC password over the HMP monitor (QEMU was started with
@@ -579,6 +692,7 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 		r.Hugepages, _ = cmd.Flags().GetBool("hugepages")
 	}
 	r.VNCDisp, _ = cmd.Flags().GetInt("vnc")
+	r.VNCHost, _ = cmd.Flags().GetString("vnc-host")
 	r.SSHPort, _ = cmd.Flags().GetInt("ssh-port")
 	r.VNCPass, _ = cmd.Flags().GetString("vnc-password")
 	// fresh identity is mandatory when SRC has one; cold boot re-reads PlatformInfo from the overlay

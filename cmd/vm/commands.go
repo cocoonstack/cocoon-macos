@@ -121,6 +121,7 @@ func addVMFlags(cmd *cobra.Command) {
 	cmd.Flags().String("memory", "8192", "guest memory in MiB")
 	cmd.Flags().Bool("hugepages", false, "back guest RAM with 2 MiB hugepages (needs host hugepages reserved; lower TLB/EPT overhead)")
 	cmd.Flags().Int("vnc", -1, "VNC display number (n => host 127.0.0.1:590n); <0 disables")
+	cmd.Flags().String("vnc-host", "", "host/IP the VNC server binds to (default 127.0.0.1; set to the node IP so an off-node guacd can reach the framebuffer)")
 	cmd.Flags().Int("ssh-port", 0, "host port forwarded to guest :22; 0 disables")
 	cmd.Flags().String("opencore", "", "OpenCore.qcow2 boot loader (default: <state-dir>/firmware/OpenCore.qcow2; see `firmware install`)")
 	cmd.Flags().String("ovmf-code", "", "OVMF_CODE firmware (default: <state-dir>/firmware/OVMF_CODE.fd)")

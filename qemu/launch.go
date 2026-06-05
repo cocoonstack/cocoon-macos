@@ -29,7 +29,8 @@ type Spec struct {
 	OVMFVars  string // per-VM OVMF_VARS.fd (writable NVRAM)
 	CPUs      int    // vCPU count
 	Memory    string // MiB, e.g. "8192"
-	VNCDisp   int    // VNC display number (n => host 127.0.0.1:590n); <0 disables
+	VNCDisp   int    // VNC display number (n => host <VNCHost>:590n); <0 disables
+	VNCHost   string // host/IP the VNC server binds to (default 127.0.0.1; set to the node IP so an off-node guacd can reach it)
 	SSHPort   int    // host port forwarded to guest :22; 0 disables
 	MonSock   string // optional HMP monitor unix socket
 	QMPSock   string // optional QMP unix socket
@@ -96,7 +97,11 @@ func (s Spec) Args() []string {
 	}
 	a = append(a, "-device", nic)
 	if s.VNCDisp >= 0 {
-		vnc := fmt.Sprintf("127.0.0.1:%d", s.VNCDisp)
+		host := s.VNCHost
+		if host == "" {
+			host = "127.0.0.1"
+		}
+		vnc := fmt.Sprintf("%s:%d", host, s.VNCDisp)
 		if s.VNCPass != "" {
 			vnc += ",password=on" // macOS Screen Sharing can't use QEMU's bare "None" auth; the password is set via monitor post-launch
 		}

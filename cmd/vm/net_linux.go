@@ -101,6 +101,16 @@ func teardownNet(cmd *cobra.Command, r *record) {
 	}
 }
 
+// ensureNetnsLoopback brings up lo inside the CNI netns. A freshly-created netns has its loopback
+// DOWN, so qemu's -vnc 127.0.0.1:N (and any other loopback bind) fails with EADDRNOTAVAIL until lo
+// is up. No-op outside CNI (no netns).
+func ensureNetnsLoopback(r *record) {
+	if r.Netns == "" {
+		return
+	}
+	_ = exec.Command("ip", "netns", "exec", filepath.Base(r.Netns), "ip", "link", "set", "lo", "up").Run()
+}
+
 // launchCmd builds the qemu exec. For CNI the TAP lives inside a netns, so the qemu process must
 // run there (ip netns exec) for -netdev tap,ifname= to find it; ip netns exec is the fork-safe
 // path for a daemonized launch (no cgo/setns).

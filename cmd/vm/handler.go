@@ -284,6 +284,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	}
 	pidfile := filepath.Join(dir, "qemu.pid")
 	args := append(spec.Args(), "-daemonize", "-pidfile", pidfile)
+	ensureNetnsLoopback(r)  // CNI: a fresh netns has lo DOWN, so qemu's -vnc 127.0.0.1 would fail to bind
 	c := launchCmd(r, args) // CNI: wraps in `ip netns exec` so -netdev tap finds the in-netns TAP
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
 	if err := c.Run(); err != nil {

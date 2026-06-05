@@ -29,3 +29,6 @@ func teardownNet(_ *cobra.Command, _ *record) {}
 func launchCmd(_ *record, args []string) *exec.Cmd {
 	return exec.Command(qemuBinary, args...)
 }
+
+// ensureNetnsLoopback is a no-op off Linux (no CNI/netns there).
+func ensureNetnsLoopback(_ *record) {}

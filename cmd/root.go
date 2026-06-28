@@ -31,8 +31,7 @@ func Execute() {
 	}
 }
 
-// run builds the root command, derives a signal-cancellable context, and
-// executes it, returning any command error to Execute.
+// run executes the root command under a signal-cancellable context.
 func run(ctx context.Context) error {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -51,10 +50,9 @@ func run(ctx context.Context) error {
 	return root.ExecuteContext(ctx)
 }
 
-// setupLog initializes the core/log subsystem. SetupLog binds to os.Stdout for
-// its output target, so swap stderr in for the call to keep command data (e.g.
-// vm list JSON) on stdout while logs go to stderr. Level comes from
-// COCOON_MACOS_LOG_LEVEL (default "info").
+// setupLog initializes core/log. SetupLog binds to os.Stdout, so swap in stderr
+// for the call to keep command output (e.g. vm list JSON) on stdout while logs
+// go to stderr. Level comes from COCOON_MACOS_LOG_LEVEL.
 func setupLog(ctx context.Context) error {
 	level := os.Getenv("COCOON_MACOS_LOG_LEVEL")
 	if level == "" {

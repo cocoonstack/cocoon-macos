@@ -27,10 +27,9 @@ func TestImagesToSnapshot(t *testing.T) {
 	}
 }
 
-// TestPrepareNetNoProvision covers the paths that need no host networking (identical on every OS,
-// so they run in CI regardless of platform): user-mode allocates no TAP, a pre-created --tap is
-// returned verbatim. Auto-create / CNI / bridge need Linux + CAP_NET_ADMIN and are smoke-tested
-// on the testbed.
+// TestPrepareNetNoProvision covers the paths that need no host networking (OS-independent, so they
+// run in CI): user-mode allocates no TAP, a pre-created --tap is returned verbatim. Auto-create /
+// CNI / bridge need Linux + CAP_NET_ADMIN and are smoke-tested on the testbed.
 func TestPrepareNetNoProvision(t *testing.T) {
 	tests := []struct {
 		name                        string

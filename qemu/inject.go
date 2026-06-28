@@ -2,6 +2,7 @@ package qemu
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,7 +25,7 @@ func InjectSMBIOS(ocPath string, s SMBIOS) error {
 		return err
 	}
 	if out, cerr := exec.Command("qemu-nbd", "--connect="+nbd, "-f", "qcow2", ocPath).CombinedOutput(); cerr != nil {
-		return fmt.Errorf("qemu-nbd connect %s: %w (output: %s)", nbd, cerr, out)
+		return fmt.Errorf("connect qemu-nbd %s (output: %s): %w", nbd, out, cerr)
 	}
 	defer disconnectNBD(nbd, ocPath)
 	waitForPart(nbd)
@@ -95,7 +96,7 @@ func freeNBD() (string, error) {
 			return fmt.Sprintf("/dev/nbd%d", i), nil
 		}
 	}
-	return "", fmt.Errorf("no free /dev/nbd device (is the nbd module loaded?)")
+	return "", errors.New("no free /dev/nbd device (is the nbd module loaded)")
 }
 
 func patchPlist(path string, s SMBIOS) error {
@@ -111,11 +112,11 @@ func patchPlist(path string, s SMBIOS) error {
 	if err != nil {
 		return fmt.Errorf("decode ROM: %w", err)
 	}
-	pi := subMap(cfg, "PlatformInfo")
+	pi := ensureSubMap(cfg, "PlatformInfo")
 	pi["Automatic"] = true
 	pi["UpdateSMBIOS"] = true
 	pi["UpdateNVRAM"] = true
-	g := subMap(pi, "Generic")
+	g := ensureSubMap(pi, "Generic")
 	g["SystemProductName"] = s.Model
 	g["SystemSerialNumber"] = s.Serial
 	g["MLB"] = s.MLB
@@ -125,10 +126,10 @@ func patchPlist(path string, s SMBIOS) error {
 	// Auto-boot the installed macOS: hide the EFI/recovery aux entry + a short timeout, so the VM
 	// never stalls at the OpenCore picker (which can't be driven reliably headlessly — a missed
 	// sendkey boots the dead EFI entry and the VM never reaches macOS).
-	boot := subMap(subMap(cfg, "Misc"), "Boot")
+	boot := ensureSubMap(ensureSubMap(cfg, "Misc"), "Boot")
 	boot["HideAuxiliary"] = true
 	boot["Timeout"] = uint64(5)
-	subMap(subMap(cfg, "Booter"), "Quirks")["RequestBootVarRouting"] = true
+	ensureSubMap(ensureSubMap(cfg, "Booter"), "Quirks")["RequestBootVarRouting"] = true
 	out, err := plist.MarshalIndent(cfg, plist.XMLFormat, "\t")
 	if err != nil {
 		return fmt.Errorf("encode config.plist: %w", err)
@@ -136,7 +137,7 @@ func patchPlist(path string, s SMBIOS) error {
 	return os.WriteFile(path, out, 0o600)
 }
 
-func subMap(m map[string]any, key string) map[string]any {
+func ensureSubMap(m map[string]any, key string) map[string]any {
 	if sub, ok := m[key].(map[string]any); ok {
 		return sub
 	}

@@ -22,8 +22,7 @@ const (
 		"+pcid,+invpcid,+tsc-deadline,+rdtscp,+xsavec,check"
 )
 
-// Spec is the per-VM input for launching a macOS guest from a golden qcow2. Fields are grouped by
-// concern: identification, config, resources, runtime control sockets.
+// Spec is the per-VM input for launching a macOS guest from a golden qcow2.
 type Spec struct {
 	Name string
 
@@ -53,9 +52,8 @@ func (s Spec) Args() []string {
 	if strings.HasSuffix(s.OVMFVars, ".qcow2") {
 		varsFmt = "qcow2"
 	}
-	// Hugepages (opt-in): back guest RAM with 2 MiB hugetlb pages to cut TLB/EPT pressure on a
-	// memory-heavy GUI guest. Needs hugepages reserved on the host (else qemu won't start), so it's
-	// off by default — default anonymous guest RAM is already THP-eligible.
+	// 2 MiB hugetlb pages cut TLB/EPT pressure on a memory-heavy GUI guest, but the host must have
+	// them reserved (else qemu won't start); plain anonymous RAM is already THP-eligible.
 	machine := "q35"
 	var memBackend []string
 	if s.Hugepages {
@@ -104,7 +102,7 @@ func (s Spec) Args() []string {
 	if s.VNCDisp >= 0 {
 		vnc := fmt.Sprintf("127.0.0.1:%d", s.VNCDisp)
 		if s.VNCPass != "" {
-			vnc += ",password=on" // macOS Screen Sharing can't use QEMU's bare "None" auth; the password is set via monitor post-launch
+			vnc += ",password=on" // macOS Screen Sharing can't use QEMU's bare "None" auth
 		}
 		// -k en-us: translate received VNC keysyms through the en-US keymap, which
 		// encodes the shift state for shifted keysyms. Without it, QEMU's default

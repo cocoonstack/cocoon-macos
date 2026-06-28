@@ -3,9 +3,8 @@ package vm
 import "github.com/spf13/cobra"
 
 // Actions mirrors cocoon's cmd/vm Actions interface, trimmed to the v0.1 macOS
-// surface. The cobra tree below is copied from cocoon (its commands.go depends
-// only on cobra, but importing the whole package drags the Linux-only CH/netlink
-// backend, so we re-declare the tree here and import just cocoon's neutral types).
+// surface. The cobra tree is re-declared below rather than imported from cocoon,
+// whose commands.go drags in the Linux-only CH/netlink backend.
 type Actions interface {
 	Create(cmd *cobra.Command, args []string) error
 	Run(cmd *cobra.Command, args []string) error
@@ -108,7 +107,7 @@ func Command(h Actions) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE:  h.Clone,
 	}
-	addVMFlags(cloneCmd) // name/cpus/memory/vnc/ssh-port/random-smbios/net/tap/bridge — loader inherited from SRC
+	addVMFlags(cloneCmd) // loader is inherited from SRC
 
 	vmCmd.AddCommand(createCmd, runCmd, startCmd, stopCmd, listCmd, inspectCmd, consoleCmd, rmCmd,
 		snapshotCmd, restoreCmd, cloneCmd)

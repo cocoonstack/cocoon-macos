@@ -18,7 +18,7 @@ func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if running(r) {
+	if isRunning(r) {
 		return fmt.Errorf("vm %q is running (pid %d); stop it first (qemu-img snapshot on a live image corrupts it)", r.Name, r.PID)
 	}
 	tag, _ := cmd.Flags().GetString("tag")
@@ -47,7 +47,7 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	wasRunning := running(r)
+	wasRunning := isRunning(r)
 	if wasRunning {
 		if force, _ := cmd.Flags().GetBool("force"); !force {
 			return fmt.Errorf("vm %q is running; stop it first or pass --force to stop+restore", r.Name)

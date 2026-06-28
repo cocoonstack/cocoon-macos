@@ -12,7 +12,7 @@ import (
 )
 
 // prepareNet on non-Linux supports only user-mode and a pre-created --tap; auto-create / CNI /
-// bridge need CAP_NET_ADMIN + netlink + netns, so they are Linux-only (cocoon's network plane).
+// bridge need CAP_NET_ADMIN + netlink + netns, so they are Linux-only.
 func prepareNet(_ *cobra.Command, r *record) (tap, netns, mac string, err error) {
 	switch r.NetMode {
 	case "", netUser:

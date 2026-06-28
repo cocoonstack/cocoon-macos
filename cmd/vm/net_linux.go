@@ -4,6 +4,7 @@ package vm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -33,8 +34,8 @@ func newProvider(cmd *cobra.Command, r *record) (network.Network, error) {
 	conf := &config.Config{
 		RootDir:    home.Dir(cmd),
 		DNS:        "8.8.8.8,1.1.1.1",
-		CNIConfDir: flagStr(cmd, "cni-conf-dir", "/etc/cni/net.d"),
-		CNIBinDir:  flagStr(cmd, "cni-bin-dir", "/opt/cni/bin"),
+		CNIConfDir: flagOr(cmd, "cni-conf-dir", "/etc/cni/net.d"),
+		CNIBinDir:  flagOr(cmd, "cni-bin-dir", "/opt/cni/bin"),
 	}
 	switch r.NetMode {
 	case netCNI:
@@ -79,7 +80,7 @@ func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err erro
 		return "", "", "", fmt.Errorf("add network: %w", err)
 	}
 	if len(cfgs) == 0 {
-		return "", "", "", fmt.Errorf("network add returned no NIC")
+		return "", "", "", errors.New("network add returned no NIC")
 	}
 	mac = r.MAC // SMBIOS ROM wins as the guest MAC; cocoon's generated MAC is only a fallback
 	if mac == "" {
@@ -128,7 +129,7 @@ func launchCmd(r *record, args []string) *exec.Cmd {
 	return exec.Command(qemuBinary, args...)
 }
 
-func flagStr(cmd *cobra.Command, name, def string) string {
+func flagOr(cmd *cobra.Command, name, def string) string {
 	if v, _ := cmd.Flags().GetString(name); v != "" {
 		return v
 	}

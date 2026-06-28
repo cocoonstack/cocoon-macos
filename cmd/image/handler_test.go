@@ -6,8 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TestListEmptyStore checks that the cocoon cloudimg store initializes + lists cleanly under a
-// fresh state dir (no network, no qemu-img). Pull/import are exercised on a Linux testbed.
+// TestListEmptyStore: List on a fresh state dir must succeed with no network or qemu-img; pull/import are tested on Linux.
 func TestListEmptyStore(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().String("state-dir", t.TempDir(), "")

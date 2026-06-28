@@ -94,7 +94,7 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// create derives a per-VM copy-on-write overlay on the golden image and writes the record.
+// create is the shared worker behind Create and Run: overlay, identity, network, record.
 func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	name, _ := cmd.Flags().GetString("name")
 	if name == "" {
@@ -168,7 +168,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
 	if err := c.Run(); err != nil {
 		teardownNet(cmd, r) // don't leak an auto-created TAP/netns on a failed launch
-		return fmt.Errorf("qemu launch: %w", err)
+		return fmt.Errorf("launch qemu: %w", err)
 	}
 	if b, err := os.ReadFile(pidfile); err == nil {
 		r.PID, _ = strconv.Atoi(strings.TrimSpace(string(b)))

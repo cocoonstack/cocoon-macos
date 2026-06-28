@@ -25,7 +25,6 @@ var _ Actions = (*Handler)(nil)
 func NewHandler() *Handler { return &Handler{} }
 
 // record is the persisted per-VM state, stored as <state-dir>/vms/<name>/vm.json.
-// Fields are grouped by concern: identification, config, resources, runtime, state, timestamps.
 type record struct {
 	Name        string `json:"name"`
 	VMID        string `json:"vmid,omitempty"` // random network-plane id (cocoon VMIDPrefix); != Name

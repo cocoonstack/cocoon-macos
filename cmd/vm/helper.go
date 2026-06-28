@@ -105,10 +105,10 @@ func newVMID() string {
 	return hex.EncodeToString(b)
 }
 
-// running reports whether the VM's qemu process is alive AND is actually this VM's qemu (argv0 +
+// isRunning reports whether the VM's qemu process is alive AND is actually this VM's qemu (argv0 +
 // the overlay path in /proc/<pid>/cmdline), so a recycled PID isn't mistaken for a live VM; falls
 // back to a bare liveness probe on non-Linux.
-func running(r *record) bool {
+func isRunning(r *record) bool {
 	return utils.VerifyProcessCmdline(r.PID, qemuBinary, r.Disk)
 }
 

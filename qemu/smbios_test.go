@@ -42,7 +42,7 @@ func TestRandomSMBIOS(t *testing.T) {
 
 func TestRandomSMBIOSUnique(t *testing.T) {
 	seen := map[string]bool{}
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		s, err := RandomSMBIOS()
 		if err != nil {
 			t.Fatal(err)

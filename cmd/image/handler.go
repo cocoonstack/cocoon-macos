@@ -32,7 +32,7 @@ func NewHandler() *Handler { return &Handler{} }
 // Pull fetches IMAGE into the store: an http(s) URL goes straight through cloudimg; an OCI/ghcr ref
 // is pulled as a qcow2 artifact and imported.
 func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
-	ctx, s, err := h.store(cmd)
+	ctx, s, err := h.openStore(cmd)
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
 	if out, e := exec.CommandContext(ctx, "oras", "pull", ref, "-o", tmp).CombinedOutput(); e != nil {
-		return fmt.Errorf("oras pull %s: %w (output: %s)", ref, e, out)
+		return fmt.Errorf("oras pull %s (output: %s): %w", ref, out, e)
 	}
 	q, err := findQcow2(tmp)
 	if err != nil {
@@ -68,7 +68,7 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 
 // List prints every stored image as a JSON array ([] when empty, never null).
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {
-	ctx, s, err := h.store(cmd)
+	ctx, s, err := h.openStore(cmd)
 	if err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 
 // Inspect prints a single stored image's metadata as JSON.
 func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
-	ctx, s, err := h.store(cmd)
+	ctx, s, err := h.openStore(cmd)
 	if err != nil {
 		return err
 	}
@@ -105,7 +105,7 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 
 // RM deletes one or more images from the store, printing each removed ref.
 func (h *Handler) RM(cmd *cobra.Command, args []string) error {
-	ctx, s, err := h.store(cmd)
+	ctx, s, err := h.openStore(cmd)
 	if err != nil {
 		return err
 	}
@@ -119,8 +119,8 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// store opens the cloudimg store rooted at the resolved state dir, returning the command context.
-func (h *Handler) store(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) {
+// openStore opens the cloudimg store rooted at the resolved state dir, returning the command context.
+func (h *Handler) openStore(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) {
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()

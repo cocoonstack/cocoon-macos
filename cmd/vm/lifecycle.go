@@ -12,8 +12,6 @@ import (
 	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon/utils"
-
 	"github.com/cocoonstack/cocoon-macos/qemu"
 )
 
@@ -116,9 +114,8 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 		return nil, err
 	}
 	overlay := filepath.Join(dir, "disk.qcow2")
-	// bake a per-VM CoW overlay on the immutable base (cocoon's storage convention; base stays RO)
-	if err = utils.RunQemuImg(ctx, "create", "-f", "qcow2", "-F", "qcow2", "-b", base, overlay); err != nil {
-		return nil, fmt.Errorf("bake overlay on %s: %w", base, err)
+	if err = bakeOverlay(ctx, base, overlay); err != nil {
+		return nil, err
 	}
 	ovmfVars := filepath.Join(dir, "OVMF_VARS.fd")
 	if err = copyFile(varsTmpl, ovmfVars); err != nil {
@@ -143,15 +140,8 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 			return nil, err
 		}
 	}
-	netTap, netns, mac, err := prepareNet(cmd, r)
-	if err != nil {
+	if err = applyNet(cmd, r, tap); err != nil {
 		return nil, err
-	}
-	if r.MAC == "" {
-		r.MAC = mac
-	}
-	if netTap != "" {
-		r.Tap, r.Netns, r.TapOwned = netTap, netns, tap == "" // owned (auto-created) unless the user passed --tap
 	}
 	return r, saveRec(dir, r)
 }
@@ -200,8 +190,8 @@ func assignSMBIOS(ctx context.Context, dir, ocBase string, r *record) error {
 		return err
 	}
 	ocOverlay := filepath.Join(dir, "OpenCore.qcow2")
-	if err := utils.RunQemuImg(ctx, "create", "-f", "qcow2", "-F", "qcow2", "-b", ocBase, ocOverlay); err != nil {
-		return fmt.Errorf("bake OpenCore overlay on %s: %w", ocBase, err)
+	if err := bakeOverlay(ctx, ocBase, ocOverlay); err != nil {
+		return err
 	}
 	log.WithFunc("cmd.vm.assignSMBIOS").Debugf(ctx, "injecting SMBIOS into %s via qemu-nbd", ocOverlay)
 	if err := qemu.InjectSMBIOS(ocOverlay, sm); err != nil {

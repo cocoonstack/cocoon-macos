@@ -16,6 +16,8 @@ import (
 	"github.com/cocoonstack/cocoon/network/bridge"
 	"github.com/cocoonstack/cocoon/network/cni"
 	"github.com/cocoonstack/cocoon/types"
+
+	"github.com/cocoonstack/cocoon-macos/internal/home"
 )
 
 // --net modes (the r.NetMode / --net flag values).
@@ -31,7 +33,7 @@ const (
 // TAP must be a host-side bridge port); "cni" uses the CNI backend (TAP lives inside a netns).
 func newProvider(cmd *cobra.Command, r *record) (network.Network, error) {
 	conf := &config.Config{
-		RootDir:    stateDir(cmd),
+		RootDir:    home.Dir(cmd),
 		DNS:        "8.8.8.8,1.1.1.1",
 		CNIConfDir: flagStr(cmd, "cni-conf-dir", "/etc/cni/net.d"),
 		CNIBinDir:  flagStr(cmd, "cni-bin-dir", "/opt/cni/bin"),

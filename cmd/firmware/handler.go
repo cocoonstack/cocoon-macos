@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+
+	"github.com/cocoonstack/cocoon-macos/internal/home"
 )
 
 // asset maps an install flag to its managed filename under <state-dir>/firmware.
@@ -61,17 +63,7 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func stateDir(cmd *cobra.Command) string {
-	if d, _ := cmd.Flags().GetString("state-dir"); d != "" {
-		return d
-	}
-	if d := os.Getenv("COCOON_MACOS_HOME"); d != "" {
-		return d
-	}
-	return "/var/lib/cocoon-macos" // mirrors cocoon's /var/lib/cocoon
-}
-
-func dir(cmd *cobra.Command) string { return filepath.Join(stateDir(cmd), "firmware") }
+func dir(cmd *cobra.Command) string { return filepath.Join(home.Dir(cmd), "firmware") }
 
 func copyInto(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {

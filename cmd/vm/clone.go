@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/cocoonstack/cocoon/utils"
 )
 
 // Clone seeds a new VM from SRC's disk state via a fresh CoW overlay on the SAME immutable base,
@@ -35,8 +33,8 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	overlay := filepath.Join(dir, "disk.qcow2")
-	if err = utils.RunQemuImg(ctx, "create", "-f", "qcow2", "-F", "qcow2", "-b", base, overlay); err != nil {
-		return fmt.Errorf("bake clone overlay on %s: %w", base, err)
+	if err = bakeOverlay(ctx, base, overlay); err != nil {
+		return err
 	}
 	ovmfVars := filepath.Join(dir, filepath.Base(srcRec.OVMFVars))
 	if err = copyFile(srcRec.OVMFVars, ovmfVars); err != nil {
@@ -72,15 +70,8 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	r.NetMode, _ = cmd.Flags().GetString("net")
 	tapFlag, _ := cmd.Flags().GetString("tap")
 	r.Tap = tapFlag
-	netTap, netns, mac, err := prepareNet(cmd, r)
-	if err != nil {
+	if err = applyNet(cmd, r, tapFlag); err != nil {
 		return err
-	}
-	if r.MAC == "" {
-		r.MAC = mac
-	}
-	if netTap != "" {
-		r.Tap, r.Netns, r.TapOwned = netTap, netns, tapFlag == ""
 	}
 	if err := saveRec(dir, r); err != nil {
 		return err

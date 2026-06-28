@@ -18,29 +18,19 @@ import (
 	"github.com/cocoonstack/cocoon/images/cloudimg"
 	"github.com/cocoonstack/cocoon/types"
 	"github.com/cocoonstack/cocoon/utils"
-)
 
-// stateDir is the root for all cocoon-macos state: --state-dir wins, else
-// $COCOON_MACOS_HOME, else the default (mirrors cocoon's /var/lib/cocoon).
-func stateDir(cmd *cobra.Command) string {
-	if d, _ := cmd.Flags().GetString("state-dir"); d != "" {
-		return d
-	}
-	if d := os.Getenv("COCOON_MACOS_HOME"); d != "" {
-		return d
-	}
-	return defaultStateDir
-}
+	"github.com/cocoonstack/cocoon-macos/internal/home"
+)
 
 // vmDir is the per-VM state directory <state-dir>/vms/<name>.
 func vmDir(cmd *cobra.Command, name string) string {
-	return filepath.Join(stateDir(cmd), "vms", name)
+	return filepath.Join(home.Dir(cmd), "vms", name)
 }
 
 // firmwareDir is the managed home for shared loader/firmware assets (OpenCore base, OVMF_CODE,
 // OVMF_VARS template) — populated by `cocoon-macos firmware install`, reused across all VMs.
 func firmwareDir(cmd *cobra.Command) string {
-	return filepath.Join(stateDir(cmd), "firmware")
+	return filepath.Join(home.Dir(cmd), "firmware")
 }
 
 // ctxOf returns the command's context, falling back to a fresh background
@@ -83,6 +73,30 @@ func copyFile(src, dst string) error {
 	return nil
 }
 
+// bakeOverlay creates a per-VM CoW qcow2 overlay on the immutable base (which stays read-only).
+func bakeOverlay(ctx context.Context, base, dst string) error {
+	if err := utils.RunQemuImg(ctx, "create", "-f", "qcow2", "-F", "qcow2", "-b", base, dst); err != nil {
+		return fmt.Errorf("bake overlay on %s: %w", base, err)
+	}
+	return nil
+}
+
+// applyNet provisions networking for r and records the result. userTap is the user's --tap value:
+// an auto-created TAP is "owned" (torn down on rm) only when the user did not pass --tap.
+func applyNet(cmd *cobra.Command, r *record, userTap string) error {
+	netTap, netns, mac, err := prepareNet(cmd, r)
+	if err != nil {
+		return err
+	}
+	if r.MAC == "" {
+		r.MAC = mac
+	}
+	if netTap != "" {
+		r.Tap, r.Netns, r.TapOwned = netTap, netns, userTap == ""
+	}
+	return nil
+}
+
 // newVMID is the network-plane id (cocoon truncates it to 8 chars via VMIDPrefix); random so
 // same-second names don't collide.
 func newVMID() string {
@@ -114,7 +128,7 @@ func resolveBase(cmd *cobra.Command, image, name string) (string, string, error)
 		return image, "", nil
 	}
 	ctx := ctxOf(cmd)
-	root := stateDir(cmd)
+	root := home.Dir(cmd)
 	ensureCloudimgFirmware(root)
 	store, err := cloudimg.New(ctx, &config.Config{RootDir: root, DNS: "8.8.8.8,1.1.1.1"})
 	if err != nil {

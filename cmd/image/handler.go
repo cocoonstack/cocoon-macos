@@ -15,6 +15,8 @@ import (
 	"github.com/cocoonstack/cocoon/config"
 	"github.com/cocoonstack/cocoon/images/cloudimg"
 	"github.com/cocoonstack/cocoon/progress"
+
+	"github.com/cocoonstack/cocoon-macos/internal/home"
 )
 
 // Handler implements Actions on cocoon's cloudimg store (content-addressed qcow2 blobs under
@@ -121,21 +123,11 @@ func (h *Handler) store(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	s, err := cloudimg.New(ctx, &config.Config{RootDir: stateDir(cmd), DNS: "8.8.8.8,1.1.1.1"})
+	s, err := cloudimg.New(ctx, &config.Config{RootDir: home.Dir(cmd), DNS: "8.8.8.8,1.1.1.1"})
 	if err != nil {
 		return ctx, nil, fmt.Errorf("init cloudimg store: %w", err)
 	}
 	return ctx, s, nil
-}
-
-func stateDir(cmd *cobra.Command) string {
-	if d, _ := cmd.Flags().GetString("state-dir"); d != "" {
-		return d
-	}
-	if d := os.Getenv("COCOON_MACOS_HOME"); d != "" {
-		return d
-	}
-	return "/var/lib/cocoon-macos" // mirrors cocoon's /var/lib/cocoon
 }
 
 func isURL(s string) bool {

@@ -9,7 +9,6 @@ import (
 const (
 	qemuBinary      = "qemu-system-x86_64"
 	stopGracePeriod = 10 * time.Second
-	defaultStateDir = "/var/lib/cocoon-macos" // mirrors cocoon's /var/lib/cocoon; override via --state-dir or $COCOON_MACOS_HOME
 )
 
 // Handler implements the vm Actions by cloning a golden macOS qcow2 (copy-on-write overlay)

@@ -7,14 +7,17 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+
+	"github.com/cocoonstack/cocoon-macos/internal/home"
 )
 
 // List prints every VM's record as a JSON array.
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {
-	ents, _ := os.ReadDir(filepath.Join(stateDir(cmd), "vms"))
+	vmsDir := filepath.Join(home.Dir(cmd), "vms")
+	ents, _ := os.ReadDir(vmsDir)
 	recs := []*record{}
 	for _, e := range ents {
-		if r, err := loadRec(filepath.Join(stateDir(cmd), "vms", e.Name())); err == nil {
+		if r, err := loadRec(filepath.Join(vmsDir, e.Name())); err == nil {
 			recs = append(recs, r)
 		}
 	}

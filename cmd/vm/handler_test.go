@@ -1,21 +1,29 @@
 package vm
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
 
 func TestImagesToSnapshot(t *testing.T) {
-	// raw .fd NVRAM can't hold internal snapshots, so only the disk is captured
-	got := imagesToSnapshot(&record{Disk: "/v/disk.qcow2", OVMFVars: "/v/OVMF_VARS.fd"})
-	if len(got) != 1 || got[0] != "/v/disk.qcow2" {
-		t.Fatalf("raw NVRAM: want [disk], got %v", got)
+	tests := []struct {
+		name string
+		rec  *record
+		want []string
+	}{
+		// raw .fd NVRAM can't hold internal snapshots, so only the disk is captured
+		{"raw nvram captures disk only", &record{Disk: "/v/disk.qcow2", OVMFVars: "/v/OVMF_VARS.fd"}, []string{"/v/disk.qcow2"}},
+		// a qcow2 NVRAM rolls back too
+		{"qcow2 nvram captures both", &record{Disk: "/v/disk.qcow2", OVMFVars: "/v/OVMF_VARS.qcow2"}, []string{"/v/disk.qcow2", "/v/OVMF_VARS.qcow2"}},
 	}
-	// a qcow2 NVRAM rolls back too
-	got = imagesToSnapshot(&record{Disk: "/v/disk.qcow2", OVMFVars: "/v/OVMF_VARS.qcow2"})
-	if len(got) != 2 || got[1] != "/v/OVMF_VARS.qcow2" {
-		t.Fatalf("qcow2 NVRAM: want [disk, nvram], got %v", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := imagesToSnapshot(tt.rec); !slices.Equal(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -24,16 +32,25 @@ func TestImagesToSnapshot(t *testing.T) {
 // returned verbatim. Auto-create / CNI / bridge need Linux + CAP_NET_ADMIN and are smoke-tested
 // on the testbed.
 func TestPrepareNetNoProvision(t *testing.T) {
-	cmd := &cobra.Command{}
-	cmd.SetContext(t.Context())
-
-	tap, netns, mac, err := prepareNet(cmd, &record{NetMode: "user", MAC: "aa:bb:cc:dd:ee:ff"})
-	if err != nil || tap != "" || netns != "" || mac != "aa:bb:cc:dd:ee:ff" {
-		t.Fatalf("user-mode: got tap=%q netns=%q mac=%q err=%v", tap, netns, mac, err)
+	tests := []struct {
+		name                        string
+		rec                         *record
+		wantTap, wantNetns, wantMAC string
+	}{
+		{"user-mode", &record{NetMode: "user", MAC: "aa:bb:cc:dd:ee:ff"}, "", "", "aa:bb:cc:dd:ee:ff"},
+		{"pre-created tap", &record{NetMode: "tap", Tap: "tap0", MAC: "aa:bb:cc:dd:ee:ff"}, "tap0", "", "aa:bb:cc:dd:ee:ff"},
 	}
-
-	tap, netns, _, err = prepareNet(cmd, &record{NetMode: "tap", Tap: "tap0", MAC: "aa:bb:cc:dd:ee:ff"})
-	if err != nil || tap != "tap0" || netns != "" {
-		t.Fatalf("pre-created tap: got tap=%q netns=%q err=%v", tap, netns, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.SetContext(t.Context())
+			tap, netns, mac, err := prepareNet(cmd, tt.rec)
+			if err != nil {
+				t.Fatalf("prepareNet: %v", err)
+			}
+			if tap != tt.wantTap || netns != tt.wantNetns || mac != tt.wantMAC {
+				t.Errorf("got tap=%q netns=%q mac=%q; want %q %q %q", tap, netns, mac, tt.wantTap, tt.wantNetns, tt.wantMAC)
+			}
+		})
 	}
 }

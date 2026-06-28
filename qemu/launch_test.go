@@ -20,22 +20,23 @@ func argVals(args []string, flag string) []string {
 
 func TestArgsNetModes(t *testing.T) {
 	base := Spec{Name: "m", Disk: "/v/disk.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/code.fd", OVMFVars: "/v/vars.fd", CPUs: 4, Memory: "8192"}
-
-	// user-mode, no ssh-port => bare SLIRP
-	if got := argVals(base.Args(), "-netdev"); len(got) != 1 || got[0] != "user,id=net0" {
-		t.Fatalf("user-mode netdev: %v", got)
+	tests := []struct {
+		name   string
+		mutate func(s *Spec)
+		want   string
+	}{
+		{"user-mode without ssh-port is bare SLIRP", func(_ *Spec) {}, "user,id=net0"},
+		{"user-mode with ssh-port adds hostfwd", func(s *Spec) { s.SSHPort = 2222 }, "user,id=net0,hostfwd=tcp::2222-:22"},
+		{"tap attaches to the pre-created TAP", func(s *Spec) { s.Tap = "tap0" }, "tap,id=net0,ifname=tap0,script=no,downscript=no"},
 	}
-	// user-mode + ssh-port => hostfwd
-	s := base
-	s.SSHPort = 2222
-	if got := argVals(s.Args(), "-netdev"); got[0] != "user,id=net0,hostfwd=tcp::2222-:22" {
-		t.Fatalf("hostfwd netdev: %v", got)
-	}
-	// tap => attach to the pre-created TAP, never user-mode
-	s = base
-	s.Tap = "tap0"
-	if got := argVals(s.Args(), "-netdev"); got[0] != "tap,id=net0,ifname=tap0,script=no,downscript=no" {
-		t.Fatalf("tap netdev: %v", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := base
+			tt.mutate(&s)
+			if got := argVals(s.Args(), "-netdev"); len(got) != 1 || got[0] != tt.want {
+				t.Errorf("got %v, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

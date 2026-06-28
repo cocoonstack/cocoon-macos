@@ -41,7 +41,7 @@ type record struct {
 
 	Disk         string       `json:"disk"`
 	OpenCore     string       `json:"opencore"`
-	OpenCoreBase string       `json:"opencore_base,omitempty"` // immutable base the OpenCore overlay rests on; "" when OpenCore is itself the base. clone bakes its fresh identity on this so it never backing-chains through the source VM.
+	OpenCoreBase string       `json:"opencore_base,omitempty"` // base the OpenCore overlay rests on (clone overlays here); "" when OpenCore is itself the base
 	OVMFCode     string       `json:"ovmf_code"`
 	OVMFVars     string       `json:"ovmf_vars"`
 	MAC          string       `json:"mac,omitempty"`

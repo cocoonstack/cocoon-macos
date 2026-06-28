@@ -7,9 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TestCloneOpenCoreBase guards the clone backing-chain fix: a clone's fresh identity must overlay the
-// recorded base (so it stays independent of the source VM), never srcRec.OpenCore — which for a
-// SMBIOS source is the source's own per-VM overlay.
+// TestCloneOpenCoreBase guards the clone backing-chain fix: the fresh identity overlays the recorded
+// base, never SRC's per-VM overlay.
 func TestCloneOpenCoreBase(t *testing.T) {
 	tests := []struct {
 		name string

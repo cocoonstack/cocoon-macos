@@ -62,9 +62,7 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	r.VNCPass, _ = cmd.Flags().GetString("vnc-password")
 	// fresh identity is mandatory when SRC has one; cold boot re-reads PlatformInfo from the overlay
 	if random, _ := cmd.Flags().GetBool("random-smbios"); srcRec.SMBIOS != nil || random {
-		// Bake the fresh identity on the base SRC's loader rests on — never on srcRec.OpenCore itself,
-		// which for a SMBIOS source is SRC's per-VM overlay (the clone would backing-chain through SRC
-		// and break when `vm rm SRC` deletes it).
+		// overlay the recorded base, never SRC's per-VM overlay (would break on `vm rm SRC`)
 		ocBase, baseErr := cloneOpenCoreBase(cmd, srcRec)
 		if baseErr != nil {
 			return baseErr
@@ -89,10 +87,9 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// cloneOpenCoreBase returns the immutable OpenCore base a clone's fresh identity should overlay:
-// the base recorded for SRC at create time (so a custom --opencore is inherited exactly); if SRC has
-// no identity its OpenCore is itself the base; otherwise (a legacy record with no recorded base) fall
-// back to the shared firmware so the clone still never backing-chains through SRC's per-VM overlay.
+// cloneOpenCoreBase returns the immutable base a clone's fresh identity overlays: SRC's recorded
+// base (inherits a custom --opencore), else SRC's OpenCore when it is itself the base, else the
+// shared firmware (legacy records). Never SRC's per-VM overlay.
 func cloneOpenCoreBase(cmd *cobra.Command, src *record) (string, error) {
 	switch {
 	case src.OpenCoreBase != "":

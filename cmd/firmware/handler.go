@@ -9,13 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Handler installs/lists the shared loader+firmware under <state-dir>/firmware. OVMF_CODE is used
-// read-only by every VM; OpenCore + OVMF_VARS are the base/template per-VM copies derive from.
-type Handler struct{}
-
-func NewHandler() *Handler { return &Handler{} }
-
-// asset maps an install flag to its managed filename.
+// asset maps an install flag to its managed filename under <state-dir>/firmware.
 type asset struct{ flag, name string }
 
 var assets = []asset{
@@ -24,39 +18,16 @@ var assets = []asset{
 	{"ovmf-vars", "OVMF_VARS.fd"},
 }
 
-func stateDir(cmd *cobra.Command) string {
-	if d, _ := cmd.Flags().GetString("state-dir"); d != "" {
-		return d
-	}
-	if d := os.Getenv("COCOON_MACOS_HOME"); d != "" {
-		return d
-	}
-	return "/var/lib/cocoon-macos" // mirrors cocoon's /var/lib/cocoon
-}
+// Handler installs/lists the shared loader+firmware under <state-dir>/firmware. OVMF_CODE is used
+// read-only by every VM; OpenCore + OVMF_VARS are the base/template per-VM copies derive from.
+type Handler struct{}
 
-func dir(cmd *cobra.Command) string { return filepath.Join(stateDir(cmd), "firmware") }
+// NewHandler returns a Handler that manages the shared firmware store.
+func NewHandler() *Handler { return &Handler{} }
 
-func copyInto(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	in, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("open %s: %w", src, err)
-	}
-	defer func() { _ = in.Close() }()
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = out.Close() }()
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return out.Close()
-}
-
-func (h *Handler) Install(cmd *cobra.Command, args []string) error {
+// Install copies each firmware asset supplied via flags into the shared store, printing what it
+// installed. It errors if no asset flag was given.
+func (h *Handler) Install(cmd *cobra.Command, _ []string) error {
 	installed := 0
 	for _, a := range assets {
 		src, _ := cmd.Flags().GetString(a.flag)
@@ -76,7 +47,8 @@ func (h *Handler) Install(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func (h *Handler) List(cmd *cobra.Command, args []string) error {
+// List prints each managed firmware file under <state-dir>/firmware with its size, or (absent).
+func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	d := dir(cmd)
 	fmt.Println(d + ":")
 	for _, n := range []string{"OpenCore.qcow2", "OVMF_CODE.fd", "OVMF_VARS.fd", "CLOUDHV.fd"} {
@@ -85,6 +57,41 @@ func (h *Handler) List(cmd *cobra.Command, args []string) error {
 		} else {
 			fmt.Printf("  %-16s (absent)\n", n)
 		}
+	}
+	return nil
+}
+
+func stateDir(cmd *cobra.Command) string {
+	if d, _ := cmd.Flags().GetString("state-dir"); d != "" {
+		return d
+	}
+	if d := os.Getenv("COCOON_MACOS_HOME"); d != "" {
+		return d
+	}
+	return "/var/lib/cocoon-macos" // mirrors cocoon's /var/lib/cocoon
+}
+
+func dir(cmd *cobra.Command) string { return filepath.Join(stateDir(cmd), "firmware") }
+
+func copyInto(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", filepath.Dir(dst), err)
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", src, err)
+	}
+	defer func() { _ = in.Close() }()
+	out, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", dst, err)
+	}
+	defer func() { _ = out.Close() }()
+	if _, err := io.Copy(out, in); err != nil {
+		return fmt.Errorf("copy %s -> %s: %w", src, dst, err)
+	}
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", dst, err)
 	}
 	return nil
 }

@@ -6,6 +6,11 @@ import (
 	"fmt"
 )
 
+const (
+	smbiosModel    = "iMac19,1"
+	serialAlphabet = "ABCDEFGHIJKLMNPQRSTUVWXYZ0123456789" // Apple omits O (0/O ambiguity)
+)
+
 // SMBIOS is a per-VM Apple machine identity injected into OpenCore PlatformInfo/Generic so
 // cloned VMs do not all share one identity. The values are format-valid + unique but NOT
 // Apple-validated: iServices/App Store registration is the consumer's policy concern.
@@ -17,10 +22,35 @@ type SMBIOS struct {
 	ROM    string `json:"rom"`    // 6-byte ROM as hex; also the guest en0 MAC
 }
 
-const (
-	smbiosModel    = "iMac19,1"
-	serialAlphabet = "ABCDEFGHIJKLMNPQRSTUVWXYZ0123456789" // Apple omits O (0/O ambiguity)
-)
+// MAC returns the ROM formatted as the guest NIC MAC (so en0 == ROM, as iServices expects).
+func (s SMBIOS) MAC() string {
+	b, err := hex.DecodeString(s.ROM)
+	if err != nil || len(b) != 6 {
+		return ""
+	}
+	return fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x", b[0], b[1], b[2], b[3], b[4], b[5])
+}
+
+// RandomSMBIOS generates a unique per-VM identity (fixed model + random serial/MLB/UUID/ROM).
+func RandomSMBIOS() (SMBIOS, error) {
+	serial, err := randString(12)
+	if err != nil {
+		return SMBIOS{}, err
+	}
+	mlb, err := randString(17)
+	if err != nil {
+		return SMBIOS{}, err
+	}
+	uuid, err := randUUID()
+	if err != nil {
+		return SMBIOS{}, err
+	}
+	rom, err := randROM()
+	if err != nil {
+		return SMBIOS{}, err
+	}
+	return SMBIOS{Model: smbiosModel, Serial: serial, MLB: mlb, UUID: uuid, ROM: rom}, nil
+}
 
 func randString(n int) (string, error) {
 	b := make([]byte, n)
@@ -50,34 +80,4 @@ func randROM() (string, error) {
 	}
 	b[0] = (b[0] & 0xfe) | 0x02 // locally administered, unicast
 	return hex.EncodeToString(b), nil
-}
-
-// RandomSMBIOS generates a unique per-VM identity (fixed model + random serial/MLB/UUID/ROM).
-func RandomSMBIOS() (SMBIOS, error) {
-	serial, err := randString(12)
-	if err != nil {
-		return SMBIOS{}, err
-	}
-	mlb, err := randString(17)
-	if err != nil {
-		return SMBIOS{}, err
-	}
-	uuid, err := randUUID()
-	if err != nil {
-		return SMBIOS{}, err
-	}
-	rom, err := randROM()
-	if err != nil {
-		return SMBIOS{}, err
-	}
-	return SMBIOS{Model: smbiosModel, Serial: serial, MLB: mlb, UUID: uuid, ROM: rom}, nil
-}
-
-// MAC returns the ROM formatted as the guest NIC MAC (so en0 == ROM, as iServices expects).
-func (s SMBIOS) MAC() string {
-	b, err := hex.DecodeString(s.ROM)
-	if err != nil || len(b) != 6 {
-		return ""
-	}
-	return fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x", b[0], b[1], b[2], b[3], b[4], b[5])
 }

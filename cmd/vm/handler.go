@@ -20,23 +20,21 @@ type Handler struct{}
 func NewHandler() *Handler { return &Handler{} }
 
 // record is the persisted per-VM state, stored as <state-dir>/vms/<name>/vm.json.
+// Fields are grouped by concern: identification, config, resources, runtime, state, timestamps.
 type record struct {
-	// identification
 	Name        string `json:"name"`
 	VMID        string `json:"vmid,omitempty"` // random network-plane id (cocoon VMIDPrefix); != Name
 	Image       string `json:"image"`
 	ImageDigest string `json:"image_digest,omitempty"`
 
-	// config
 	CPUs      int    `json:"cpus"`
 	Memory    string `json:"memory"`
 	VNCDisp   int    `json:"vnc"`
 	VNCPass   string `json:"vnc_password,omitempty"`
 	SSHPort   int    `json:"ssh_port"`
 	NetMode   string `json:"net_mode,omitempty"`
-	Hugepages bool   `json:"hugepages,omitempty"` // back guest RAM with 2 MiB hugepages
+	Hugepages bool   `json:"hugepages,omitempty"`
 
-	// resources
 	Disk      string       `json:"disk"`
 	OpenCore  string       `json:"opencore"`
 	OVMFCode  string       `json:"ovmf_code"`
@@ -48,12 +46,9 @@ type record struct {
 	BridgeDev string       `json:"bridge_dev,omitempty"` // bridge to enslave the TAP to; persisted so rm can tear down without --bridge
 	Netns     string       `json:"netns,omitempty"`      // netns path the qemu process runs in (CNI); "" otherwise
 
-	// runtime
 	PID int `json:"pid"`
 
-	// state
 	Snapshots []string `json:"snapshots,omitempty"` // qcow2-internal snapshot tags, newest last
 
-	// timestamps
 	Created string `json:"created"`
 }

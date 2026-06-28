@@ -203,6 +203,7 @@ func assignSMBIOS(ctx context.Context, dir, ocBase string, r *record) error {
 	if err := utils.RunQemuImg(ctx, "create", "-f", "qcow2", "-F", "qcow2", "-b", ocBase, ocOverlay); err != nil {
 		return fmt.Errorf("bake OpenCore overlay on %s: %w", ocBase, err)
 	}
+	log.WithFunc("cmd.vm.assignSMBIOS").Debugf(ctx, "injecting SMBIOS into %s via qemu-nbd", ocOverlay)
 	if err := qemu.InjectSMBIOS(ocOverlay, sm); err != nil {
 		return fmt.Errorf("inject SMBIOS: %w", err)
 	}

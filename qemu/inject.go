@@ -11,10 +11,12 @@ import (
 	"howett.net/plist"
 )
 
-// InjectSMBIOS writes the identity into a per-VM OpenCore config.plist (PlatformInfo/Generic)
-// by mounting the OpenCore qcow2 via qemu-nbd. Requires root + the nbd kernel module. The
-// shipped OpenCore has Automatic=true + Vault=Optional, so Generic is the SMBIOS source and
-// no vault signature rejects the edit.
+// InjectSMBIOS writes the identity into a per-VM OpenCore config.plist (PlatformInfo/Generic) by
+// mapping the OpenCore qcow2 as a block device with qemu-nbd and mounting its EFI partition.
+// Requires root + the nbd kernel module. qemu-nbd is the authoritative way to map a qcow2 (no Go
+// library can read/write a FAT partition inside a qcow2), so this shells out by necessity. The
+// shipped OpenCore has Automatic=true + Vault=Optional, so Generic is the SMBIOS source and no
+// vault signature rejects the edit.
 func InjectSMBIOS(ocPath string, s SMBIOS) error {
 	_ = exec.Command("modprobe", "nbd", "max_part=8").Run()
 	nbd, err := freeNBD()
@@ -22,13 +24,13 @@ func InjectSMBIOS(ocPath string, s SMBIOS) error {
 		return err
 	}
 	if out, cerr := exec.Command("qemu-nbd", "--connect="+nbd, "-f", "qcow2", ocPath).CombinedOutput(); cerr != nil {
-		return fmt.Errorf("qemu-nbd connect %s: %v: %s", nbd, cerr, out)
+		return fmt.Errorf("qemu-nbd connect %s: %w (output: %s)", nbd, cerr, out)
 	}
 	defer disconnectNBD(nbd, ocPath)
 	waitForPart(nbd)
 	mnt, err := os.MkdirTemp("", "oc-efi-")
 	if err != nil {
-		return err
+		return fmt.Errorf("create mount dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(mnt) }()
 	mounted := false

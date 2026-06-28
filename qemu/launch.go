@@ -9,34 +9,40 @@ import (
 	"strings"
 )
 
-// OSK is the Apple SMC key required for macOS guests (public, from OSX-KVM).
-const OSK = "ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
+const (
+	// OSK is the Apple SMC key required for macOS guests (public, from OSX-KVM).
+	OSK = "ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
 
-// macOSCPU is the -cpu model for macOS Sequoia/Tahoe (older Penryn fails on 26).
-const macOSCPU = "Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc," +
-	"vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt," +
-	// PCID/INVPCID cut TLB-flush cost on the guest's frequent context switches; tsc-deadline gives a
-	// one-shot LAPIC timer (fewer timer-related VM exits); rdtscp/xsavec round out what macOS expects.
-	// Most are already in the Skylake-Client base — affirmed here so a base-model change can't drop them.
-	"+pcid,+invpcid,+tsc-deadline,+rdtscp,+xsavec,check"
+	// macOSCPU is the -cpu model for macOS Sequoia/Tahoe (older Penryn fails on 26). PCID/INVPCID cut
+	// TLB-flush cost on the guest's frequent context switches; tsc-deadline gives a one-shot LAPIC timer
+	// (fewer timer-related VM exits); rdtscp/xsavec round out what macOS expects. Most are already in the
+	// Skylake-Client base — affirmed here so a base-model change can't silently drop them.
+	macOSCPU = "Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc," +
+		"vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt," +
+		"+pcid,+invpcid,+tsc-deadline,+rdtscp,+xsavec,check"
+)
 
-// Spec is the per-VM input for launching a macOS guest from a golden qcow2.
+// Spec is the per-VM input for launching a macOS guest from a golden qcow2. Fields are grouped by
+// concern: identification, config, resources, runtime control sockets.
 type Spec struct {
-	Name      string // VM name
-	Disk      string // per-VM macOS qcow2 (an overlay on the golden image)
-	OpenCore  string // OpenCore.qcow2 (boot loader)
-	OVMFCode  string // OVMF_CODE_4M.fd (read-only firmware)
-	OVMFVars  string // per-VM OVMF_VARS.fd (writable NVRAM)
-	CPUs      int    // vCPU count
+	Name string
+
+	CPUs      int
 	Memory    string // MiB, e.g. "8192"
-	VNCDisp   int    // VNC display number (n => host 127.0.0.1:590n); <0 disables
+	VNCDisp   int    // n => host 127.0.0.1:590n; <0 disables
+	VNCPass   string // set via the monitor post-launch (macOS Screen Sharing needs password auth)
 	SSHPort   int    // host port forwarded to guest :22; 0 disables
-	MonSock   string // optional HMP monitor unix socket
-	QMPSock   string // optional QMP unix socket
-	MAC       string // optional guest NIC MAC (set to the SMBIOS ROM for --random-smbios)
-	VNCPass   string // optional VNC password (enables QEMU password auth; set via monitor after launch)
-	Tap       string // optional pre-created host TAP ifname; set => bridged/routed (-netdev tap) instead of user-mode
-	Hugepages bool   // back guest RAM with 2 MiB hugepages (needs host hugepages reserved); off => default RAM
+	Hugepages bool   // needs host hugepages reserved; off => default RAM
+
+	Disk     string
+	OpenCore string
+	OVMFCode string
+	OVMFVars string
+	MAC      string // set to the SMBIOS ROM for --random-smbios
+	Tap      string // pre-created host TAP; set => -netdev tap (bridged/routed), empty => user-mode SLIRP
+
+	MonSock string
+	QMPSock string
 }
 
 // Args returns the qemu-system-x86_64 argument vector for the macOS guest.

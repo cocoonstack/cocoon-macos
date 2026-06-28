@@ -1,6 +1,7 @@
 package firmware
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -37,7 +38,7 @@ func (h *Handler) Install(cmd *cobra.Command, _ []string) error {
 		installed++
 	}
 	if installed == 0 {
-		return fmt.Errorf("nothing to install: pass --opencore and/or --ovmf-code and/or --ovmf-vars")
+		return errors.New("nothing to install: pass --opencore and/or --ovmf-code and/or --ovmf-vars")
 	}
 	return nil
 }

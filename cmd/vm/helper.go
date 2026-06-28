@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -198,7 +199,7 @@ func setVNCPassword(monSock, pw string) error {
 	// (QEMU keeps password=on with no password set -> all auth fails).
 	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	if _, ok := readUntil(conn, "(qemu)"); !ok {
-		return fmt.Errorf("monitor prompt not seen")
+		return errors.New("monitor prompt not seen")
 	}
 	if _, err := fmt.Fprintf(conn, "set_password vnc %s\n", pw); err != nil {
 		return fmt.Errorf("send set_password: %w", err)

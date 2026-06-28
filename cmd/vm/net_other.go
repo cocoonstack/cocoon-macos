@@ -3,6 +3,7 @@
 package vm
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"runtime"
@@ -31,4 +32,4 @@ func launchCmd(_ *record, args []string) *exec.Cmd {
 }
 
 // ensureNetnsLoopback is a no-op off Linux (no CNI/netns there).
-func ensureNetnsLoopback(_ *record) {}
+func ensureNetnsLoopback(_ context.Context, _ *record) {}

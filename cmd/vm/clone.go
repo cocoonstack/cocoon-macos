@@ -1,0 +1,90 @@
+package vm
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	"github.com/cocoonstack/cocoon/utils"
+)
+
+// Clone seeds a new VM from SRC's disk state via a fresh CoW overlay on the SAME immutable base,
+// with a unique Apple identity (cold boot re-runs OpenCore PlatformInfo) and its own TAP — so two
+// clones never share a serial/MAC (App Store ban risk). Network/VNC/SSH come from flags so a clone
+// doesn't collide on the source's host ports; CPUs/Memory/loader are inherited unless overridden.
+func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
+	src := args[0]
+	srcRec, err := loadRec(vmDir(cmd, src))
+	if err != nil {
+		return err
+	}
+	name, _ := cmd.Flags().GetString("name")
+	if name == "" {
+		name = src + "-clone-" + time.Now().Format("150405")
+	}
+	dir := vmDir(cmd, name)
+	if err = os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("mkdir vm dir: %w", err)
+	}
+	ctx := ctxOf(cmd)
+	base, digest, err := resolveBase(cmd, srcRec.Image, name)
+	if err != nil {
+		return err
+	}
+	overlay := filepath.Join(dir, "disk.qcow2")
+	if err = utils.RunQemuImg(ctx, "create", "-f", "qcow2", "-F", "qcow2", "-b", base, overlay); err != nil {
+		return fmt.Errorf("bake clone overlay on %s: %w", base, err)
+	}
+	ovmfVars := filepath.Join(dir, filepath.Base(srcRec.OVMFVars))
+	if err = copyFile(srcRec.OVMFVars, ovmfVars); err != nil {
+		return fmt.Errorf("copy OVMF_VARS: %w", err)
+	}
+	r := &record{
+		Name: name, Image: srcRec.Image, ImageDigest: digest, Disk: overlay,
+		OVMFCode: srcRec.OVMFCode, OVMFVars: ovmfVars, CPUs: srcRec.CPUs, Memory: srcRec.Memory,
+		VMID: newVMID(), Created: time.Now().Format(time.RFC3339),
+	}
+	if cmd.Flags().Changed("cpus") {
+		r.CPUs, _ = cmd.Flags().GetInt("cpus")
+	}
+	if cmd.Flags().Changed("memory") {
+		r.Memory, _ = cmd.Flags().GetString("memory")
+	}
+	r.Hugepages = srcRec.Hugepages
+	if cmd.Flags().Changed("hugepages") {
+		r.Hugepages, _ = cmd.Flags().GetBool("hugepages")
+	}
+	r.VNCDisp, _ = cmd.Flags().GetInt("vnc")
+	r.SSHPort, _ = cmd.Flags().GetInt("ssh-port")
+	r.VNCPass, _ = cmd.Flags().GetString("vnc-password")
+	// fresh identity is mandatory when SRC has one; cold boot re-reads PlatformInfo from the overlay
+	if random, _ := cmd.Flags().GetBool("random-smbios"); srcRec.SMBIOS != nil || random {
+		if err = assignSMBIOS(ctx, dir, srcRec.OpenCore, r); err != nil {
+			return err
+		}
+	} else {
+		// no identity to vary: reuse SRC's loader verbatim (read-only via snapshot=on), no copy
+		r.OpenCore, r.MAC = srcRec.OpenCore, srcRec.MAC
+	}
+	r.NetMode, _ = cmd.Flags().GetString("net")
+	tapFlag, _ := cmd.Flags().GetString("tap")
+	r.Tap = tapFlag
+	netTap, netns, mac, err := prepareNet(cmd, r)
+	if err != nil {
+		return err
+	}
+	if r.MAC == "" {
+		r.MAC = mac
+	}
+	if netTap != "" {
+		r.Tap, r.Netns, r.TapOwned = netTap, netns, tapFlag == ""
+	}
+	if err := saveRec(dir, r); err != nil {
+		return err
+	}
+	fmt.Println(name)
+	return nil
+}

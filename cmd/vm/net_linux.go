@@ -3,10 +3,12 @@
 package vm
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 
+	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
 
 	"github.com/cocoonstack/cocoon/config"
@@ -103,17 +105,21 @@ func teardownNet(cmd *cobra.Command, r *record) {
 
 // ensureNetnsLoopback brings up lo inside the CNI netns. A freshly-created netns has its loopback
 // DOWN, so qemu's -vnc 127.0.0.1:N (and any other loopback bind) fails with EADDRNOTAVAIL until lo
-// is up. No-op outside CNI (no netns).
-func ensureNetnsLoopback(r *record) {
+// is up. No-op outside CNI (no netns). Shells out to `ip` because the qemu launch already runs via
+// `ip netns exec` (the fork-safe, cgo-free way to run a daemonized process in a netns).
+func ensureNetnsLoopback(ctx context.Context, r *record) {
 	if r.Netns == "" {
 		return
 	}
-	_ = exec.Command("ip", "netns", "exec", filepath.Base(r.Netns), "ip", "link", "set", "lo", "up").Run()
+	ns := filepath.Base(r.Netns)
+	log.WithFunc("cmd.vm.ensureNetnsLoopback").Debugf(ctx, "bringing up lo in netns %s via `ip netns exec`", ns)
+	_ = exec.Command("ip", "netns", "exec", ns, "ip", "link", "set", "lo", "up").Run()
 }
 
 // launchCmd builds the qemu exec. For CNI the TAP lives inside a netns, so the qemu process must
 // run there (ip netns exec) for -netdev tap,ifname= to find it; ip netns exec is the fork-safe
-// path for a daemonized launch (no cgo/setns).
+// path for a daemonized launch (no cgo/setns), which is why this shells out rather than using
+// netlink. qemu-system-x86_64 itself is the authoritative VMM with no Go-native equivalent.
 func launchCmd(r *record, args []string) *exec.Cmd {
 	if r.Netns != "" {
 		ns := filepath.Base(r.Netns)

@@ -24,6 +24,8 @@ var assets = []asset{
 // read-only by every VM; OpenCore + OVMF_VARS are the base/template per-VM copies derive from.
 type Handler struct{}
 
+var _ Actions = (*Handler)(nil)
+
 // NewHandler returns a Handler that manages the shared firmware store.
 func NewHandler() *Handler { return &Handler{} }
 

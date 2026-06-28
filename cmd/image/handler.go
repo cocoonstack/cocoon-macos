@@ -24,6 +24,8 @@ import (
 // cloudimg shape; vm clone bakes a CoW overlay on the resolved blob (see cmd/vm).
 type Handler struct{}
 
+var _ Actions = (*Handler)(nil)
+
 // NewHandler returns a Handler backed by the cloudimg store.
 func NewHandler() *Handler { return &Handler{} }
 

@@ -33,15 +33,14 @@ func InjectSMBIOS(ocPath string, s SMBIOS) error {
 		return fmt.Errorf("create mount dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(mnt) }()
-	mounted := false
+	var mountErr error
 	for _, p := range []string{nbd + "p1", nbd + "p2", nbd} {
-		if exec.Command("mount", p, mnt).Run() == nil {
-			mounted = true
+		if mountErr = exec.Command("mount", p, mnt).Run(); mountErr == nil {
 			break
 		}
 	}
-	if !mounted {
-		return fmt.Errorf("mount OpenCore EFI partition on %s failed", nbd)
+	if mountErr != nil {
+		return fmt.Errorf("mount OpenCore EFI partition on %s: %w", nbd, mountErr)
 	}
 	defer func() { _ = exec.Command("umount", mnt).Run() }()
 	return patchPlist(filepath.Join(mnt, "EFI", "OC", "config.plist"), s)

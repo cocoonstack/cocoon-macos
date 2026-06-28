@@ -9,11 +9,17 @@ import (
 const (
 	qemuBinary      = "qemu-system-x86_64"
 	stopGracePeriod = 10 * time.Second
+
+	// --net modes handled on every platform (bridge/cni are Linux-only, see net_linux.go).
+	netUser = "user"
+	netTAP  = "tap"
 )
 
 // Handler implements the vm Actions by cloning a golden macOS qcow2 (copy-on-write overlay)
 // and launching qemu-system-x86_64 on an x86 Linux/KVM host.
 type Handler struct{}
+
+var _ Actions = (*Handler)(nil)
 
 // NewHandler returns a Handler ready to serve the vm subcommands.
 func NewHandler() *Handler { return &Handler{} }

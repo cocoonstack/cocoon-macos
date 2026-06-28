@@ -20,10 +20,8 @@ import (
 	"github.com/cocoonstack/cocoon-macos/internal/home"
 )
 
-// --net modes (the r.NetMode / --net flag values).
+// --net modes available only on Linux (cocoon's bridge/CNI network plane).
 const (
-	netUser   = "user"
-	netTAP    = "tap"
 	netBridge = "bridge"
 	netCNI    = "cni"
 )

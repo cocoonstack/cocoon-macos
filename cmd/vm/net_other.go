@@ -15,9 +15,9 @@ import (
 // bridge need CAP_NET_ADMIN + netlink + netns, so they are Linux-only (cocoon's network plane).
 func prepareNet(_ *cobra.Command, r *record) (tap, netns, mac string, err error) {
 	switch r.NetMode {
-	case "", "user":
+	case "", netUser:
 		return "", "", r.MAC, nil
-	case "tap":
+	case netTAP:
 		if r.Tap != "" {
 			return r.Tap, "", r.MAC, nil
 		}

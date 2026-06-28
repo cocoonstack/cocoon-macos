@@ -5,6 +5,7 @@ import (
 	"runtime"
 )
 
+// Build metadata, injected at release time via -ldflags (see Makefile / .goreleaser.yml).
 var (
 	VERSION  = "unknown"
 	REVISION = "HEAD"

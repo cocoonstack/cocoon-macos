@@ -52,6 +52,10 @@ func TestArgsMACAndVNC(t *testing.T) {
 	if got := argVals(args, "-vnc"); len(got) != 1 || got[0] != "127.0.0.1:9,password=on" {
 		t.Fatalf("vnc: %v", got)
 	}
+	// VNC enabled => -k en-us so the guacamole keyboard's shifted keysyms map correctly
+	if got := argVals(args, "-k"); len(got) != 1 || got[0] != "en-us" {
+		t.Errorf("keymap: got %v, want [en-us]", got)
+	}
 
 	s.VNCPass = ""
 	if got := argVals(s.Args(), "-vnc"); got[0] != "127.0.0.1:9" {

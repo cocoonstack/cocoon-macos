@@ -7,6 +7,31 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// TestCloneOpenCoreBase guards the clone backing-chain fix: a clone's fresh identity must overlay the
+// recorded base (so it stays independent of the source VM), never srcRec.OpenCore — which for a
+// SMBIOS source is the source's own per-VM overlay.
+func TestCloneOpenCoreBase(t *testing.T) {
+	tests := []struct {
+		name string
+		src  *record
+		want string
+	}{
+		{"recorded base is inherited, not the source overlay", &record{OpenCore: "/vms/src/OpenCore.qcow2", OpenCoreBase: "/fw/OpenCore.qcow2"}, "/fw/OpenCore.qcow2"},
+		{"no identity: OpenCore is itself the base", &record{OpenCore: "/fw/OpenCore.qcow2"}, "/fw/OpenCore.qcow2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := cloneOpenCoreBase(&cobra.Command{}, tt.src)
+			if err != nil {
+				t.Fatalf("cloneOpenCoreBase: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestImagesToSnapshot(t *testing.T) {
 	tests := []struct {
 		name string

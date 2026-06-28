@@ -198,6 +198,6 @@ func assignSMBIOS(ctx context.Context, dir, ocBase string, r *record) error {
 	if err := qemu.InjectSMBIOS(ocOverlay, sm); err != nil {
 		return fmt.Errorf("inject SMBIOS: %w", err)
 	}
-	r.OpenCore, r.SMBIOS, r.MAC = ocOverlay, &sm, sm.MAC()
+	r.OpenCore, r.OpenCoreBase, r.SMBIOS, r.MAC = ocOverlay, ocBase, &sm, sm.MAC()
 	return nil
 }

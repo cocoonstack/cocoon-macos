@@ -1,8 +1,10 @@
-// Package home resolves the cocoon-macos state directory shared by every subcommand.
+// Package home resolves the cocoon-macos state directory and its layout, shared by every subcommand.
 package home
 
 import (
+	"context"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -20,4 +22,28 @@ func Dir(cmd *cobra.Command) string {
 		return d
 	}
 	return Default
+}
+
+// FirmwareDir is the shared loader/firmware directory under the state root.
+func FirmwareDir(cmd *cobra.Command) string {
+	return filepath.Join(Dir(cmd), "firmware")
+}
+
+// VMsDir is the directory holding every per-VM state directory.
+func VMsDir(cmd *cobra.Command) string {
+	return filepath.Join(Dir(cmd), "vms")
+}
+
+// VMDir is the per-VM state directory under VMsDir.
+func VMDir(cmd *cobra.Command, name string) string {
+	return filepath.Join(VMsDir(cmd), name)
+}
+
+// Ctx returns the command's context, falling back to context.Background() if cobra never set one
+// (e.g. a unit test invoking a handler directly).
+func Ctx(cmd *cobra.Command) context.Context {
+	if ctx := cmd.Context(); ctx != nil {
+		return ctx
+	}
+	return context.Background()
 }

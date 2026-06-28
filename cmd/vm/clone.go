@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/cocoonstack/cocoon-macos/internal/home"
 )
 
 // Clone seeds a new VM from SRC's disk state via a fresh CoW overlay on the SAME immutable base,
@@ -15,7 +17,7 @@ import (
 // doesn't collide on the source's host ports; CPUs/Memory/loader are inherited unless overridden.
 func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	src := args[0]
-	srcRec, err := loadRec(vmDir(cmd, src))
+	srcRec, err := loadRec(home.VMDir(cmd, src))
 	if err != nil {
 		return err
 	}
@@ -23,11 +25,11 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	if name == "" {
 		name = src + "-clone-" + time.Now().Format("150405")
 	}
-	dir := vmDir(cmd, name)
+	dir := home.VMDir(cmd, name)
 	if err = os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("mkdir vm dir: %w", err)
 	}
-	ctx := ctxOf(cmd)
+	ctx := home.Ctx(cmd)
 	base, digest, err := resolveBase(cmd, srcRec.Image, name)
 	if err != nil {
 		return err

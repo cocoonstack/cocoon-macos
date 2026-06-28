@@ -13,7 +13,7 @@ import (
 
 // List prints every VM's record as a JSON array.
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {
-	vmsDir := filepath.Join(home.Dir(cmd), "vms")
+	vmsDir := home.VMsDir(cmd)
 	ents, _ := os.ReadDir(vmsDir)
 	recs := []*record{}
 	for _, e := range ents {
@@ -28,7 +28,7 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 
 // Inspect prints a single VM's record as JSON.
 func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
-	r, err := loadRec(vmDir(cmd, args[0]))
+	r, err := loadRec(home.VMDir(cmd, args[0]))
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 
 // Console prints the VNC display and SSH command for reaching a VM.
 func (h *Handler) Console(cmd *cobra.Command, args []string) error {
-	r, err := loadRec(vmDir(cmd, args[0]))
+	r, err := loadRec(home.VMDir(cmd, args[0]))
 	if err != nil {
 		return err
 	}

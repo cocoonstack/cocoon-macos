@@ -7,13 +7,14 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cocoonstack/cocoon-macos/internal/home"
 	"github.com/cocoonstack/cocoon-macos/qemu"
 )
 
 // Snapshot takes an offline qcow2-internal snapshot of a stopped VM (a live snapshot would corrupt
 // the image, and +invtsc blocks the live-migration codepath savevm relies on).
 func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {
-	dir := vmDir(cmd, args[0])
+	dir := home.VMDir(cmd, args[0])
 	r, err := loadRec(dir)
 	if err != nil {
 		return err
@@ -25,7 +26,7 @@ func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {
 	if tag == "" {
 		tag = "snap-" + time.Now().Format("20060102-150405")
 	}
-	ctx := ctxOf(cmd)
+	ctx := home.Ctx(cmd)
 	for _, img := range imagesToSnapshot(r) {
 		if err := qemu.SnapCreate(ctx, img, tag); err != nil {
 			return err
@@ -42,7 +43,7 @@ func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {
 // Restore reverts a VM to a snapshot tag (default: newest). A running VM is refused unless --force,
 // which stops it, reverts, and relaunches.
 func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
-	dir := vmDir(cmd, args[0])
+	dir := home.VMDir(cmd, args[0])
 	r, err := loadRec(dir)
 	if err != nil {
 		return err
@@ -52,7 +53,7 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 		if force, _ := cmd.Flags().GetBool("force"); !force {
 			return fmt.Errorf("vm %q is running; stop it first or pass --force to stop+restore", r.Name)
 		}
-		terminate(ctxOf(cmd), r, stopGracePeriod)
+		terminate(home.Ctx(cmd), r, stopGracePeriod)
 		r.PID = 0
 	}
 	tag, _ := cmd.Flags().GetString("tag")
@@ -62,7 +63,7 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 		}
 		tag = r.Snapshots[len(r.Snapshots)-1]
 	}
-	ctx := ctxOf(cmd)
+	ctx := home.Ctx(cmd)
 	for _, img := range imagesToSnapshot(r) {
 		if err := qemu.SnapApply(ctx, img, tag); err != nil {
 			return err

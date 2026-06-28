@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
 
+	"github.com/cocoonstack/cocoon/utils"
+
+	"github.com/cocoonstack/cocoon-macos/internal/home"
 	"github.com/cocoonstack/cocoon-macos/qemu"
 )
 
@@ -32,7 +33,7 @@ func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := h.launch(cmd, vmDir(cmd, r.Name), r); err != nil {
+	if err := h.launch(cmd, home.VMDir(cmd, r.Name), r); err != nil {
 		return err
 	}
 	fmt.Printf("%s (pid %d)\n", r.Name, r.PID)
@@ -43,7 +44,7 @@ func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 // across stop/start (only rm tears those down).
 func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 	for _, n := range args {
-		dir := vmDir(cmd, n)
+		dir := home.VMDir(cmd, n)
 		r, err := loadRec(dir)
 		if err != nil {
 			return err
@@ -62,9 +63,9 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 	if force, _ := cmd.Flags().GetBool("force"); force {
 		grace = 0
 	}
-	ctx := ctxOf(cmd)
+	ctx := home.Ctx(cmd)
 	for _, n := range args {
-		dir := vmDir(cmd, n)
+		dir := home.VMDir(cmd, n)
 		r, err := loadRec(dir)
 		if err != nil {
 			return err
@@ -81,9 +82,9 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 // user-mode), and removes the VM's state directory.
 func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 	for _, n := range args {
-		dir := vmDir(cmd, n)
+		dir := home.VMDir(cmd, n)
 		if r, err := loadRec(dir); err == nil {
-			terminate(ctxOf(cmd), r, stopGracePeriod)
+			terminate(home.Ctx(cmd), r, stopGracePeriod)
 			teardownNet(cmd, r)
 		}
 		if err := os.RemoveAll(dir); err != nil {
@@ -104,11 +105,11 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir := vmDir(cmd, name)
+	dir := home.VMDir(cmd, name)
 	if err = os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("mkdir vm dir: %w", err)
 	}
-	ctx := ctxOf(cmd)
+	ctx := home.Ctx(cmd)
 	base, digest, err := resolveBase(cmd, image, name)
 	if err != nil {
 		return nil, err
@@ -148,7 +149,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 
 // launch boots qemu for the record's spec, records the PID, and applies the VNC password (if any).
 func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
-	ctx := ctxOf(cmd)
+	ctx := home.Ctx(cmd)
 	logger := log.WithFunc("cmd.vm.launch")
 	spec := qemu.Spec{
 		Name: r.Name, Disk: r.Disk, OpenCore: r.OpenCore, OVMFCode: r.OVMFCode, OVMFVars: r.OVMFVars,
@@ -170,8 +171,8 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		teardownNet(cmd, r) // don't leak an auto-created TAP/netns on a failed launch
 		return fmt.Errorf("launch qemu: %w", err)
 	}
-	if b, err := os.ReadFile(pidfile); err == nil {
-		r.PID, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+	if pid, err := utils.ReadPIDFile(pidfile); err == nil {
+		r.PID = pid
 	}
 	if r.VNCPass != "" {
 		if err := setVNCPassword(spec.MonSock, r.VNCPass); err != nil {

@@ -121,10 +121,7 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 
 // openStore opens the cloudimg store rooted at the resolved state dir, returning the command context.
 func (h *Handler) openStore(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) {
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx := home.Ctx(cmd)
 	s, err := cloudimg.New(ctx, &config.Config{RootDir: home.Dir(cmd), DNS: "8.8.8.8,1.1.1.1"})
 	if err != nil {
 		return ctx, nil, fmt.Errorf("init cloudimg store: %w", err)

@@ -23,34 +23,10 @@ import (
 	"github.com/cocoonstack/cocoon-macos/internal/home"
 )
 
-// vmDir is the per-VM state directory <state-dir>/vms/<name>.
-func vmDir(cmd *cobra.Command, name string) string {
-	return filepath.Join(home.Dir(cmd), "vms", name)
-}
-
-// firmwareDir is the managed home for shared loader/firmware assets (OpenCore base, OVMF_CODE,
-// OVMF_VARS template) — populated by `cocoon-macos firmware install`, reused across all VMs.
-func firmwareDir(cmd *cobra.Command) string {
-	return filepath.Join(home.Dir(cmd), "firmware")
-}
-
-// ctxOf returns the command's context, falling back to a fresh background
-// context if cobra never set one (e.g. a unit test invoking the handler directly).
-func ctxOf(cmd *cobra.Command) context.Context {
-	if ctx := cmd.Context(); ctx != nil {
-		return ctx
-	}
-	return context.Background()
-}
-
 func loadRec(dir string) (*record, error) {
-	b, err := os.ReadFile(filepath.Join(dir, "vm.json"))
-	if err != nil {
-		return nil, fmt.Errorf("read vm record: %w", err)
-	}
 	var r record
-	if err := json.Unmarshal(b, &r); err != nil {
-		return nil, fmt.Errorf("parse vm record %s: %w", dir, err)
+	if err := utils.ReadJSONFile(filepath.Join(dir, "vm.json"), &r); err != nil {
+		return nil, err
 	}
 	return &r, nil
 }
@@ -128,10 +104,9 @@ func resolveBase(cmd *cobra.Command, image, name string) (string, string, error)
 	if _, err := os.Stat(image); err == nil {
 		return image, "", nil
 	}
-	ctx := ctxOf(cmd)
-	root := home.Dir(cmd)
-	ensureCloudimgFirmware(root)
-	store, err := cloudimg.New(ctx, &config.Config{RootDir: root, DNS: "8.8.8.8,1.1.1.1"})
+	ctx := home.Ctx(cmd)
+	ensureCloudimgFirmware(cmd)
+	store, err := cloudimg.New(ctx, &config.Config{RootDir: home.Dir(cmd), DNS: "8.8.8.8,1.1.1.1"})
 	if err != nil {
 		return "", "", fmt.Errorf("init cloudimg store: %w", err)
 	}
@@ -149,8 +124,8 @@ func resolveBase(cmd *cobra.Command, image, name string) (string, string, error)
 // ensureCloudimgFirmware writes a placeholder CLOUDHV.fd where cocoon's cloudimg.Config insists a
 // UEFI firmware exists (it targets cloud-hypervisor). cocoon-macos boots via OVMF + OpenCore and
 // DISCARDS that BootConfig, so the file is never read — it only unblocks Config's validation.
-func ensureCloudimgFirmware(rootDir string) {
-	fw := filepath.Join(rootDir, "firmware", "CLOUDHV.fd")
+func ensureCloudimgFirmware(cmd *cobra.Command) {
+	fw := filepath.Join(home.FirmwareDir(cmd), "CLOUDHV.fd")
 	if utils.ValidFile(fw) {
 		return
 	}
@@ -163,7 +138,7 @@ func ensureCloudimgFirmware(rootDir string) {
 // else the shared managed copy under <state-dir>/firmware/. OVMF_CODE is shared read-only; the
 // OpenCore + OVMF_VARS here are the base/template that per-VM copies (overlay/NVRAM) derive from.
 func resolveFirmware(cmd *cobra.Command) (opencore, code, vars string, err error) {
-	fw := firmwareDir(cmd)
+	fw := home.FirmwareDir(cmd)
 	pick := func(flag, managed string) string {
 		if v, _ := cmd.Flags().GetString(flag); v != "" {
 			return v

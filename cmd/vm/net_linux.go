@@ -68,7 +68,7 @@ func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err erro
 	if err != nil {
 		return "", "", "", err
 	}
-	ctx := ctxOf(cmd)
+	ctx := home.Ctx(cmd)
 	// CPU=1 => NetNumQueues yields a single-queue TAP matching QEMU's single-queue -netdev tap,ifname=
 	vmCfg := &types.VMConfig{Config: types.Config{CPU: 1}, Name: r.Name}
 	nsPath, err := provider.Prepare(ctx, r.VMID, vmCfg)
@@ -95,7 +95,7 @@ func teardownNet(cmd *cobra.Command, r *record) {
 		return
 	}
 	if provider, err := newProvider(cmd, r); err == nil {
-		_, _ = provider.Delete(ctxOf(cmd), []string{r.VMID})
+		_, _ = provider.Delete(home.Ctx(cmd), []string{r.VMID})
 	}
 	// CleanupTAPs runs unconditionally: it removes bt<vmid>-* by name and must not be gated on
 	// newProvider succeeding (rm has no --bridge flag), or an auto-created TAP would leak.

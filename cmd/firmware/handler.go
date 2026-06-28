@@ -30,7 +30,7 @@ func (h *Handler) Install(cmd *cobra.Command, _ []string) error {
 		if src == "" {
 			continue
 		}
-		dst := filepath.Join(dir(cmd), a.name)
+		dst := filepath.Join(home.FirmwareDir(cmd), a.name)
 		if err := copyInto(src, dst); err != nil {
 			return err
 		}
@@ -45,7 +45,7 @@ func (h *Handler) Install(cmd *cobra.Command, _ []string) error {
 
 // List prints each managed firmware file under <state-dir>/firmware with its size, or (absent).
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {
-	d := dir(cmd)
+	d := home.FirmwareDir(cmd)
 	fmt.Println(d + ":")
 	for _, n := range []string{"OpenCore.qcow2", "OVMF_CODE.fd", "OVMF_VARS.fd", "CLOUDHV.fd"} {
 		if fi, err := os.Stat(filepath.Join(d, n)); err == nil {
@@ -65,8 +65,6 @@ var assets = []asset{
 	{"ovmf-code", "OVMF_CODE.fd"},
 	{"ovmf-vars", "OVMF_VARS.fd"},
 }
-
-func dir(cmd *cobra.Command) string { return filepath.Join(home.Dir(cmd), "firmware") }
 
 func copyInto(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {

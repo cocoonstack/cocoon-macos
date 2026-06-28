@@ -134,7 +134,7 @@ func patchPlist(path string, s SMBIOS) error {
 	if err != nil {
 		return fmt.Errorf("encode config.plist: %w", err)
 	}
-	return os.WriteFile(path, out, 0o644)
+	return os.WriteFile(path, out, 0o600)
 }
 
 func subMap(m map[string]any, key string) map[string]any {

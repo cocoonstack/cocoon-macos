@@ -107,7 +107,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 		return nil, err
 	}
 	dir := vmDir(cmd, name)
-	if err = os.MkdirAll(dir, 0o755); err != nil {
+	if err = os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("mkdir vm dir: %w", err)
 	}
 	ctx := ctxOf(cmd)

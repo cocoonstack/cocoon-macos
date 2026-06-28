@@ -17,6 +17,7 @@ linters:
     - gocritic
     - gocyclo
     - goprintffuncname
+    - gosec
     - govet
     - ineffassign
     - misspell
@@ -32,6 +33,12 @@ linters:
     gocritic:
       disabled-checks:
         - captLocal
+    gosec:
+      excludes:
+        # G204 (subprocess from a variable) and G304 (file path from a variable) are inherent to a
+        # VMM launcher that drives qemu/ip and reads its own state files by computed path.
+        - G204
+        - G304
     govet:
       enable-all: true
       disable:

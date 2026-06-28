@@ -74,7 +74,7 @@ func stateDir(cmd *cobra.Command) string {
 func dir(cmd *cobra.Command) string { return filepath.Join(stateDir(cmd), "firmware") }
 
 func copyInto(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
 		return fmt.Errorf("mkdir %s: %w", filepath.Dir(dst), err)
 	}
 	in, err := os.Open(src)

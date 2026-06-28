@@ -26,7 +26,7 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 		name = src + "-clone-" + time.Now().Format("150405")
 	}
 	dir := vmDir(cmd, name)
-	if err = os.MkdirAll(dir, 0o755); err != nil {
+	if err = os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("mkdir vm dir: %w", err)
 	}
 	ctx := ctxOf(cmd)

@@ -66,7 +66,7 @@ func loadRec(dir string) (*record, error) {
 
 func saveRec(dir string, r *record) error {
 	b, _ := json.MarshalIndent(r, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, "vm.json"), b, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "vm.json"), b, 0o600); err != nil {
 		return fmt.Errorf("write vm record: %w", err)
 	}
 	return nil
@@ -77,7 +77,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", src, err)
 	}
-	if err := os.WriteFile(dst, b, 0o644); err != nil {
+	if err := os.WriteFile(dst, b, 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", dst, err)
 	}
 	return nil
@@ -139,8 +139,8 @@ func ensureCloudimgFirmware(rootDir string) {
 	if utils.ValidFile(fw) {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(fw), 0o755); err == nil {
-		_ = os.WriteFile(fw, []byte("placeholder: cocoon-macos boots via OVMF, not CLOUDHV\n"), 0o644)
+	if err := os.MkdirAll(filepath.Dir(fw), 0o750); err == nil {
+		_ = os.WriteFile(fw, []byte("placeholder: cocoon-macos boots via OVMF, not CLOUDHV\n"), 0o600)
 	}
 }
 

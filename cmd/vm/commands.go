@@ -79,10 +79,11 @@ func Command(h Actions) *cobra.Command {
 
 	rmCmd := &cobra.Command{
 		Use:   "rm VM [VM...]",
-		Short: "Remove created/stopped VM(s)",
+		Short: "Remove VM(s): stop if running, tear down networking, delete state",
 		Args:  cobra.MinimumNArgs(1),
 		RunE:  h.RM,
 	}
+	rmCmd.Flags().Bool("force", false, "force kill (immediate SIGKILL, skip the ACPI grace window)")
 
 	snapshotCmd := &cobra.Command{
 		Use:   "snapshot VM",

@@ -97,6 +97,15 @@ func terminate(ctx context.Context, r *record, grace time.Duration) {
 	}
 }
 
+// graceFromFlags is the terminate grace period: 0 (immediate SIGKILL) when --force is set, else the
+// default ACPI grace window.
+func graceFromFlags(cmd *cobra.Command) time.Duration {
+	if force, _ := cmd.Flags().GetBool("force"); force {
+		return 0
+	}
+	return stopGracePeriod
+}
+
 // resolveBase returns the immutable base qcow2 for image: a direct filesystem path (legacy), else
 // an image ref resolved through cocoon's cloudimg store (returns the content-addressed blob + its
 // digest). Per-VM overlays are baked on this base, which stays read-only.

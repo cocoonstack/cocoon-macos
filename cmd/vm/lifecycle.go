@@ -59,10 +59,7 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 
 // Stop terminates one or more running VMs. --force skips the ACPI grace window (immediate SIGKILL).
 func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
-	grace := stopGracePeriod
-	if force, _ := cmd.Flags().GetBool("force"); force {
-		grace = 0
-	}
+	grace := graceFromFlags(cmd)
 	ctx := home.Ctx(cmd)
 	for _, n := range args {
 		dir := home.VMDir(cmd, n)
@@ -79,12 +76,15 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 }
 
 // RM stops one or more VMs, tears down any auto-created TAP/netns (no-op for a user --tap or
-// user-mode), and removes the VM's state directory.
+// user-mode), and removes the VM's state directory. --force skips the ACPI grace window
+// (immediate SIGKILL), which also reaps a wedged qemu.
 func (h *Handler) RM(cmd *cobra.Command, args []string) error {
+	grace := graceFromFlags(cmd)
+	ctx := home.Ctx(cmd)
 	for _, n := range args {
 		dir := home.VMDir(cmd, n)
 		if r, err := loadRec(dir); err == nil {
-			terminate(home.Ctx(cmd), r, stopGracePeriod)
+			terminate(ctx, r, grace)
 			teardownNet(cmd, r)
 		}
 		if err := os.RemoveAll(dir); err != nil {

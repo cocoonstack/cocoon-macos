@@ -12,11 +12,22 @@ import (
 	"github.com/cocoonstack/cocoon-macos/internal/home"
 )
 
+// asset maps an install flag to its managed filename under <state-dir>/firmware.
+type asset struct{ flag, name string }
+
+var (
+	_ Actions = (*Handler)(nil)
+
+	assets = []asset{
+		{"opencore", "OpenCore.qcow2"},
+		{"ovmf-code", "OVMF_CODE.fd"},
+		{"ovmf-vars", "OVMF_VARS.fd"},
+	}
+)
+
 // Handler installs/lists the shared loader+firmware under <state-dir>/firmware. OVMF_CODE is used
 // read-only by every VM; OpenCore + OVMF_VARS are the base/template per-VM copies derive from.
 type Handler struct{}
-
-var _ Actions = (*Handler)(nil)
 
 // NewHandler returns a Handler that manages the shared firmware store.
 func NewHandler() *Handler { return &Handler{} }
@@ -55,15 +66,6 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	return nil
-}
-
-// asset maps an install flag to its managed filename under <state-dir>/firmware.
-type asset struct{ flag, name string }
-
-var assets = []asset{
-	{"opencore", "OpenCore.qcow2"},
-	{"ovmf-code", "OVMF_CODE.fd"},
-	{"ovmf-vars", "OVMF_VARS.fd"},
 }
 
 func copyInto(src, dst string) error {

@@ -26,7 +26,7 @@ import (
 func loadRec(dir string) (*record, error) {
 	var r record
 	if err := utils.ReadJSONFile(filepath.Join(dir, "vm.json"), &r); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read vm record: %w", err)
 	}
 	return &r, nil
 }
@@ -139,13 +139,9 @@ func ensureCloudimgFirmware(cmd *cobra.Command) {
 // OpenCore + OVMF_VARS here are the base/template that per-VM copies (overlay/NVRAM) derive from.
 func resolveFirmware(cmd *cobra.Command) (opencore, code, vars string, err error) {
 	fw := home.FirmwareDir(cmd)
-	pick := func(flag, managed string) string {
-		if v, _ := cmd.Flags().GetString(flag); v != "" {
-			return v
-		}
-		return filepath.Join(fw, managed)
-	}
-	opencore, code, vars = pick("opencore", "OpenCore.qcow2"), pick("ovmf-code", "OVMF_CODE.fd"), pick("ovmf-vars", "OVMF_VARS.fd")
+	opencore = flagOr(cmd, "opencore", filepath.Join(fw, "OpenCore.qcow2"))
+	code = flagOr(cmd, "ovmf-code", filepath.Join(fw, "OVMF_CODE.fd"))
+	vars = flagOr(cmd, "ovmf-vars", filepath.Join(fw, "OVMF_VARS.fd"))
 	for _, p := range []string{opencore, code, vars} {
 		if !utils.ValidFile(p) {
 			return "", "", "", fmt.Errorf("firmware not found: %s — pass --opencore/--ovmf-code/--ovmf-vars or run `cocoon-macos firmware install`", p)
@@ -202,4 +198,12 @@ func readUntil(conn net.Conn, marker string) (string, bool) {
 			return string(acc), false
 		}
 	}
+}
+
+// flagOr returns the named string flag's value, or def when the flag is unset/empty.
+func flagOr(cmd *cobra.Command, name, def string) string {
+	if v, _ := cmd.Flags().GetString(name); v != "" {
+		return v
+	}
+	return def
 }

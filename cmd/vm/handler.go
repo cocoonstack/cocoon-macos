@@ -15,11 +15,11 @@ const (
 	netTAP  = "tap"
 )
 
+var _ Actions = (*Handler)(nil)
+
 // Handler implements the vm Actions by cloning a golden macOS qcow2 (copy-on-write overlay)
 // and launching qemu-system-x86_64 on an x86 Linux/KVM host.
 type Handler struct{}
-
-var _ Actions = (*Handler)(nil)
 
 // NewHandler returns a Handler ready to serve the vm subcommands.
 func NewHandler() *Handler { return &Handler{} }

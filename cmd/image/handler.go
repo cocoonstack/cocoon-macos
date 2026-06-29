@@ -19,12 +19,12 @@ import (
 	"github.com/cocoonstack/cocoon-macos/internal/home"
 )
 
+var _ Actions = (*Handler)(nil)
+
 // Handler implements Actions on cocoon's cloudimg store (content-addressed qcow2 blobs under
 // <state-dir>/cloudimg). The macOS golden disk is a single immutable qcow2, which is exactly the
 // cloudimg shape; vm clone bakes a CoW overlay on the resolved blob (see cmd/vm).
 type Handler struct{}
-
-var _ Actions = (*Handler)(nil)
 
 // NewHandler returns a Handler backed by the cloudimg store.
 func NewHandler() *Handler { return &Handler{} }
@@ -80,8 +80,7 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 		fmt.Println("[]")
 		return nil
 	}
-	b, _ := json.MarshalIndent(imgs, "", "  ")
-	fmt.Println(string(b))
+	printJSON(imgs)
 	return nil
 }
 
@@ -98,8 +97,7 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 	if img == nil {
 		return fmt.Errorf("image not found: %s", args[0])
 	}
-	b, _ := json.MarshalIndent(img, "", "  ")
-	fmt.Println(string(b))
+	printJSON(img)
 	return nil
 }
 
@@ -131,6 +129,11 @@ func (h *Handler) openStore(cmd *cobra.Command) (context.Context, *cloudimg.Clou
 
 func isURL(s string) bool {
 	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
+}
+
+func printJSON(v any) {
+	b, _ := json.MarshalIndent(v, "", "  ")
+	fmt.Println(string(b))
 }
 
 func findQcow2(dir string) (string, error) {

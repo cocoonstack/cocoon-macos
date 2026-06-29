@@ -128,10 +128,3 @@ func launchCmd(r *record, args []string) *exec.Cmd {
 	}
 	return exec.Command(qemuBinary, args...)
 }
-
-func flagOr(cmd *cobra.Command, name, def string) string {
-	if v, _ := cmd.Flags().GetString(name); v != "" {
-		return v
-	}
-	return def
-}

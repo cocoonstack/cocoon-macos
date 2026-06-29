@@ -21,8 +21,7 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 			recs = append(recs, r)
 		}
 	}
-	b, _ := json.MarshalIndent(recs, "", "  ")
-	fmt.Println(string(b))
+	printJSON(recs)
 	return nil
 }
 
@@ -32,8 +31,7 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	b, _ := json.MarshalIndent(r, "", "  ")
-	fmt.Println(string(b))
+	printJSON(r)
 	return nil
 }
 
@@ -45,4 +43,9 @@ func (h *Handler) Console(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("VNC 127.0.0.1:590%d   SSH: ssh -p %d cocoon@localhost\n", r.VNCDisp, r.SSHPort)
 	return nil
+}
+
+func printJSON(v any) {
+	b, _ := json.MarshalIndent(v, "", "  ")
+	fmt.Println(string(b))
 }

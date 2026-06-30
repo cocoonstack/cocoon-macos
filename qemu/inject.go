@@ -12,13 +12,11 @@ import (
 	"howett.net/plist"
 )
 
-// InjectSMBIOS writes the identity into a per-VM OpenCore config.plist (PlatformInfo/Generic) by
-// mapping the OpenCore qcow2 as a block device with qemu-nbd and mounting its EFI partition.
-// Requires root + the nbd kernel module. qemu-nbd is the authoritative way to map a qcow2 (no Go
-// library can read/write a FAT partition inside a qcow2), so this shells out by necessity. The
-// shipped OpenCore has Automatic=true + Vault=Optional, so Generic is the SMBIOS source and no
-// vault signature rejects the edit.
-func InjectSMBIOS(ocPath string, s SMBIOS) error {
+// InjectConfig mounts the OpenCore qcow2 (via qemu-nbd — the only way to edit a FAT partition inside
+// a qcow2; requires root + the nbd module) and patches its config.plist with a per-VM SMBIOS identity
+// (PlatformInfo/Generic; the shipped OpenCore has Automatic=true + Vault=Optional so Generic is the
+// source and no vault signature rejects the edit).
+func InjectConfig(ocPath string, sm *SMBIOS) error {
 	_ = exec.Command("modprobe", "nbd", "max_part=8").Run()
 	nbd, err := freeNBD()
 	if err != nil {
@@ -44,7 +42,7 @@ func InjectSMBIOS(ocPath string, s SMBIOS) error {
 		return fmt.Errorf("mount OpenCore EFI partition on %s: %w", nbd, mountErr)
 	}
 	defer func() { _ = exec.Command("umount", mnt).Run() }()
-	return patchPlist(filepath.Join(mnt, "EFI", "OC", "config.plist"), s)
+	return patchPlist(filepath.Join(mnt, "EFI", "OC", "config.plist"), sm)
 }
 
 // waitForPart blocks until the kernel has scanned the qcow2's partition table (nbd partition
@@ -99,7 +97,7 @@ func freeNBD() (string, error) {
 	return "", errors.New("no free /dev/nbd device (is the nbd module loaded)")
 }
 
-func patchPlist(path string, s SMBIOS) error {
+func patchPlist(path string, sm *SMBIOS) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read config.plist: %w", err)
@@ -108,28 +106,30 @@ func patchPlist(path string, s SMBIOS) error {
 	if _, perr := plist.Unmarshal(b, &cfg); perr != nil {
 		return fmt.Errorf("parse config.plist: %w", perr)
 	}
-	rom, err := hex.DecodeString(s.ROM)
-	if err != nil {
-		return fmt.Errorf("decode ROM: %w", err)
+	if sm != nil {
+		rom, derr := hex.DecodeString(sm.ROM)
+		if derr != nil {
+			return fmt.Errorf("decode ROM: %w", derr)
+		}
+		pi := ensureSubMap(cfg, "PlatformInfo")
+		pi["Automatic"] = true
+		pi["UpdateSMBIOS"] = true
+		pi["UpdateNVRAM"] = true
+		g := ensureSubMap(pi, "Generic")
+		g["SystemProductName"] = sm.Model
+		g["SystemSerialNumber"] = sm.Serial
+		g["MLB"] = sm.MLB
+		g["SystemUUID"] = sm.UUID
+		g["ROM"] = rom
+		g["SpoofVendor"] = true
 	}
-	pi := ensureSubMap(cfg, "PlatformInfo")
-	pi["Automatic"] = true
-	pi["UpdateSMBIOS"] = true
-	pi["UpdateNVRAM"] = true
-	g := ensureSubMap(pi, "Generic")
-	g["SystemProductName"] = s.Model
-	g["SystemSerialNumber"] = s.Serial
-	g["MLB"] = s.MLB
-	g["SystemUUID"] = s.UUID
-	g["ROM"] = rom
-	g["SpoofVendor"] = true
 	// Auto-boot the installed macOS: hide the EFI/recovery aux entry + a short timeout, so the VM
 	// never stalls at the OpenCore picker (which can't be driven reliably headlessly — a missed
 	// sendkey boots the dead EFI entry and the VM never reaches macOS).
 	boot := ensureSubMap(ensureSubMap(cfg, "Misc"), "Boot")
 	boot["HideAuxiliary"] = true
 	boot["Timeout"] = uint64(5)
-	ensureSubMap(ensureSubMap(cfg, "Booter"), "Quirks")["RequestBootVarRouting"] = true
+	ensureSubMap(ensureSubMap(cfg, "UEFI"), "Quirks")["RequestBootVarRouting"] = true
 	out, err := plist.MarshalIndent(cfg, plist.XMLFormat, "\t")
 	if err != nil {
 		return fmt.Errorf("encode config.plist: %w", err)

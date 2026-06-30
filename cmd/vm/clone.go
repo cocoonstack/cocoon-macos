@@ -60,19 +60,19 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	r.VNCDisp, _ = cmd.Flags().GetInt("vnc")
 	r.SSHPort, _ = cmd.Flags().GetInt("ssh-port")
 	r.VNCPass, _ = cmd.Flags().GetString("vnc-password")
-	// fresh identity is mandatory when SRC has one; cold boot re-reads PlatformInfo from the overlay
-	if random, _ := cmd.Flags().GetBool("random-smbios"); srcRec.SMBIOS != nil || random {
-		// overlay the recorded base, never SRC's per-VM overlay (would break on `vm rm SRC`)
-		ocBase, baseErr := cloneOpenCoreBase(cmd, srcRec)
-		if baseErr != nil {
-			return baseErr
-		}
-		if err = assignSMBIOS(ctx, dir, ocBase, r); err != nil {
-			return err
-		}
-	} else {
-		// no identity to vary: reuse SRC's loader verbatim (read-only via snapshot=on), no copy
-		r.OpenCore, r.MAC = srcRec.OpenCore, srcRec.MAC
+	// fresh identity when SRC has one or --random-smbios (cold boot re-reads PlatformInfo from the overlay)
+	random, _ := cmd.Flags().GetBool("random-smbios")
+	freshIdentity := random || srcRec.SMBIOS != nil
+	// overlay the recorded base, never SRC's per-VM overlay (would break on `vm rm SRC`)
+	ocBase, baseErr := cloneOpenCoreBase(cmd, srcRec)
+	if baseErr != nil {
+		return baseErr
+	}
+	if err = prepareOpenCore(ctx, dir, ocBase, freshIdentity, r); err != nil {
+		return err
+	}
+	if !freshIdentity {
+		r.MAC = srcRec.MAC // no fresh identity: inherit SRC's MAC
 	}
 	r.NetMode, _ = cmd.Flags().GetString("net")
 	tapFlag, _ := cmd.Flags().GetString("tap")

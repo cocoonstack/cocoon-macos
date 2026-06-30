@@ -131,15 +131,14 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	tap, _ := cmd.Flags().GetString("tap")
 	huge, _ := cmd.Flags().GetBool("hugepages")
 	r := &record{
-		Name: name, Image: image, ImageDigest: digest, Disk: overlay, OpenCore: oc, OVMFCode: code, OVMFVars: ovmfVars,
+		Name: name, Image: image, ImageDigest: digest, Disk: overlay, OVMFCode: code, OVMFVars: ovmfVars,
 		CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: ssh, VNCPass: vncPass, NetMode: netMode, Tap: tap, Hugepages: huge,
 		VMID: newVMID(), Created: time.Now().Format(time.RFC3339),
 	}
-	// SMBIOS before networking: assignSMBIOS sets r.MAC = ROM, which prepareNet keeps as the guest MAC.
-	if random, _ := cmd.Flags().GetBool("random-smbios"); random {
-		if err = assignSMBIOS(ctx, dir, oc, r); err != nil {
-			return nil, err
-		}
+	// OpenCore before networking: a random SMBIOS sets r.MAC = ROM, which prepareNet keeps as the guest MAC.
+	random, _ := cmd.Flags().GetBool("random-smbios")
+	if err = prepareOpenCore(ctx, dir, oc, random, r); err != nil {
+		return nil, err
 	}
 	if err = applyNet(cmd, r, tap); err != nil {
 		return nil, err
@@ -151,6 +150,13 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	ctx := home.Ctx(cmd)
 	logger := log.WithFunc("cmd.vm.launch")
+	if hostIsAMD() {
+		// macOS reads MSRs an AMD host lacks; without kvm.ignore_msrs KVM injects #GP. Best-effort,
+		// host-global, and only set on AMD where macOS needs it.
+		if err := os.WriteFile("/sys/module/kvm/parameters/ignore_msrs", []byte("1\n"), 0o600); err != nil {
+			logger.Warnf(ctx, "set kvm ignore_msrs for AMD: %v", err)
+		}
+	}
 	spec := qemu.Spec{
 		Name: r.Name, Disk: r.Disk, OpenCore: r.OpenCore, OVMFCode: r.OVMFCode, OVMFVars: r.OVMFVars,
 		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, SSHPort: r.SSHPort, MAC: r.MAC, VNCPass: r.VNCPass,
@@ -182,10 +188,15 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	return saveRec(dir, r)
 }
 
-// assignSMBIOS gives the VM a unique identity by injecting PlatformInfo/Generic into a per-VM
-// OpenCore that is a CoW OVERLAY on the shared base loader (ocBase) — only the injected delta is
-// stored per-VM, so the 19MB base is reused, not copied N times.
-func assignSMBIOS(ctx context.Context, dir, ocBase string, r *record) error {
+// prepareOpenCore points r.OpenCore at the loader to boot. Without a random identity the shared base
+// is used directly (no per-VM copy). Otherwise a per-VM CoW overlay is baked on ocBase (only the
+// injected delta is stored, so the base is reused, not copied N times) and its config.plist patched
+// in one qemu-nbd mount with a unique SMBIOS identity.
+func prepareOpenCore(ctx context.Context, dir, ocBase string, randomSMBIOS bool, r *record) error {
+	if !randomSMBIOS {
+		r.OpenCore, r.OpenCoreBase = ocBase, ""
+		return nil
+	}
 	sm, err := qemu.RandomSMBIOS()
 	if err != nil {
 		return err
@@ -194,10 +205,11 @@ func assignSMBIOS(ctx context.Context, dir, ocBase string, r *record) error {
 	if err := bakeOverlay(ctx, ocBase, ocOverlay); err != nil {
 		return err
 	}
-	log.WithFunc("cmd.vm.assignSMBIOS").Debugf(ctx, "injecting SMBIOS into %s via qemu-nbd", ocOverlay)
-	if err := qemu.InjectSMBIOS(ocOverlay, sm); err != nil {
-		return fmt.Errorf("inject SMBIOS: %w", err)
+	log.WithFunc("cmd.vm.prepareOpenCore").Debugf(ctx, "patching OpenCore %s via qemu-nbd (smbios)", ocOverlay)
+	if err := qemu.InjectConfig(ocOverlay, &sm); err != nil {
+		return fmt.Errorf("inject opencore config: %w", err)
 	}
-	r.OpenCore, r.OpenCoreBase, r.SMBIOS, r.MAC = ocOverlay, ocBase, &sm, sm.MAC()
+	r.OpenCore, r.OpenCoreBase = ocOverlay, ocBase
+	r.SMBIOS, r.MAC = &sm, sm.MAC()
 	return nil
 }

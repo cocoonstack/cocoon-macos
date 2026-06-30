@@ -70,9 +70,9 @@ cocoon-macos vm clone    m1 -n m2 --ssh-port 2223 --random-smbios
 ```
 
 `vm run` does: `qemu-img create -b <golden> overlay.qcow2` (instant CoW clone) → copy a
-per-VM `OVMF_VARS` → launch `qemu-system-x86_64` (validated OSX-KVM recipe in `qemu/launch.go`:
-Skylake-Client CPU spoofing GenuineIntel + `isa-applesmc` OSK + OVMF + OpenCore + the macOS
-qcow2) daemonized, recording state under `--state-dir` / `$COCOON_MACOS_HOME` (default `/var/lib/cocoon-macos`, mirroring cocoon's `/var/lib/cocoon`).
+per-VM `OVMF_VARS` → launch `qemu-system-x86_64` (recipe in `qemu/launch.go`: a `Skylake-Client-v4`
+CPU spoofing GenuineIntel + `isa-applesmc` OSK + OVMF + the LongQT OpenCore loader + the macOS
+qcow2) daemonized, recording state under `--state-dir` / `$COCOON_MACOS_HOME` (default `/var/lib/cocoon-macos`, mirroring cocoon's `/var/lib/cocoon`). The same recipe boots macOS identically on Intel and AMD hosts; on AMD it also sets `kvm.ignore_msrs=1` (macOS reads MSRs AMD lacks).
 
 With `--random-smbios`, `create` also copies OpenCore per-VM and injects a generated identity
 into its `config.plist` `PlatformInfo/Generic` (via `qemu-nbd` mount); the model stays `iMac19,1`

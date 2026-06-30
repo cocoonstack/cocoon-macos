@@ -106,6 +106,13 @@ func graceFromFlags(cmd *cobra.Command) time.Duration {
 	return stopGracePeriod
 }
 
+// hostIsAMD reports whether the host CPU is AMD, which needs kvm.ignore_msrs=1 so macOS's reads of
+// MSRs AMD lacks return 0 instead of #GP. Reads /proc/cpuinfo; false off Linux, where these VMs don't run.
+func hostIsAMD() bool {
+	b, err := os.ReadFile("/proc/cpuinfo")
+	return err == nil && strings.Contains(string(b), "AuthenticAMD")
+}
+
 // resolveBase returns the immutable base qcow2 for image: a direct filesystem path (legacy), else
 // an image ref resolved through cocoon's cloudimg store (returns the content-addressed blob + its
 // digest). Per-VM overlays are baked on this base, which stays read-only.

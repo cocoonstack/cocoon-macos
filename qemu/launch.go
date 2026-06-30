@@ -1,7 +1,7 @@
 // Package qemu builds and launches the qemu-system-x86_64 command for booting
-// macOS (Tahoe 26) via OpenCore on an x86 Linux/KVM host. The argument vector is
-// the validated OSX-KVM recipe (Skylake-Client CPU spoofing GenuineIntel +
-// isa-applesmc OSK + OVMF + an OpenCore boot disk), proven to boot Tahoe in CI.
+// macOS (Sequoia 15 / Tahoe 26) via OpenCore on an x86 Linux/KVM host. The argument vector spoofs a
+// GenuineIntel Skylake-Client-v4 + isa-applesmc OSK + OVMF + an OpenCore boot disk; with the LongQT
+// OpenCore EFI it boots identically on Intel and AMD hosts.
 package qemu
 
 import (
@@ -13,13 +13,10 @@ const (
 	// OSK is the Apple SMC key required for macOS guests (public, from OSX-KVM).
 	OSK = "ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
 
-	// macOSCPU is the -cpu model for macOS Sequoia/Tahoe (older Penryn fails on 26). PCID/INVPCID cut
-	// TLB-flush cost on the guest's frequent context switches; tsc-deadline gives a one-shot LAPIC timer
-	// (fewer timer-related VM exits); rdtscp/xsavec round out what macOS expects. Most are already in the
-	// Skylake-Client base — affirmed here so a base-model change can't silently drop them.
-	macOSCPU = "Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc," +
-		"vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt," +
-		"+pcid,+invpcid,+tsc-deadline,+rdtscp,+xsavec,check"
+	// macOSCPU spoofs a GenuineIntel Skylake-Client-v4 — the model the LongQT OpenCore expects, which
+	// boots macOS identically on Intel and AMD hosts (AMD support lives in the OpenCore EFI, not the
+	// -cpu). kvm=on exposes the hypervisor CPUID leaf macOS reads for the invtsc frequency.
+	macOSCPU = "Skylake-Client-v4,vendor=GenuineIntel,kvm=on"
 )
 
 // Spec is the per-VM input for launching a macOS guest from a golden qcow2.

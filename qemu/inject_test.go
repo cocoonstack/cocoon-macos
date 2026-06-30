@@ -58,7 +58,7 @@ func TestPatchPlist(t *testing.T) {
 		Model: "iMac19,1", Serial: "ABC123DEF456", MLB: "AABBCCDDEEFF00112",
 		UUID: "11223344-5566-4788-99AA-BBCCDDEEFF00", ROM: "020406080a0c",
 	}
-	if err := patchPlist(p, sm); err != nil {
+	if err := patchPlist(p, &sm); err != nil {
 		t.Fatalf("patchPlist: %v", err)
 	}
 	b, err := os.ReadFile(p)

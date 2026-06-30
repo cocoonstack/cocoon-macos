@@ -3,7 +3,7 @@ package image
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon-macos/internal/cli"
+	"github.com/cocoonstack/cocoon-macos/cli"
 )
 
 // Actions is the image-subcommand surface, backed by cocoon's cloudimg store.

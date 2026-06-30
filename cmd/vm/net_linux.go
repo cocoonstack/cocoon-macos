@@ -19,7 +19,7 @@ import (
 	"github.com/cocoonstack/cocoon/network/cni"
 	"github.com/cocoonstack/cocoon/types"
 
-	"github.com/cocoonstack/cocoon-macos/internal/home"
+	"github.com/cocoonstack/cocoon-macos/home"
 )
 
 // --net modes available only on Linux (cocoon's bridge/CNI network plane).

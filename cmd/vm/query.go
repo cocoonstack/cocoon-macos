@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon-macos/internal/cli"
-	"github.com/cocoonstack/cocoon-macos/internal/home"
+	"github.com/cocoonstack/cocoon-macos/cli"
+	"github.com/cocoonstack/cocoon-macos/home"
 )
 
 // List renders every VM as a table (NAME STATE CPU MEM NET VNC SSH IMAGE CREATED), or JSON with -o json.

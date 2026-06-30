@@ -10,7 +10,7 @@ import (
 
 	"github.com/cocoonstack/cocoon/utils"
 
-	"github.com/cocoonstack/cocoon-macos/internal/home"
+	"github.com/cocoonstack/cocoon-macos/home"
 )
 
 // Clone seeds a new VM from SRC's disk state via a fresh CoW overlay on the SAME immutable base,

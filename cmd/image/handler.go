@@ -14,8 +14,8 @@ import (
 
 	"github.com/cocoonstack/cocoon/progress"
 
-	"github.com/cocoonstack/cocoon-macos/internal/cli"
-	"github.com/cocoonstack/cocoon-macos/internal/home"
+	"github.com/cocoonstack/cocoon-macos/cli"
+	"github.com/cocoonstack/cocoon-macos/home"
 )
 
 var _ Actions = (*Handler)(nil)

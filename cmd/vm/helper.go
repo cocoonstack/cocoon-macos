@@ -18,7 +18,7 @@ import (
 	"github.com/cocoonstack/cocoon/types"
 	"github.com/cocoonstack/cocoon/utils"
 
-	"github.com/cocoonstack/cocoon-macos/internal/home"
+	"github.com/cocoonstack/cocoon-macos/home"
 )
 
 func loadRec(dir string) (*record, error) {

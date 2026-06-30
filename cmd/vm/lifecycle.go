@@ -12,7 +12,7 @@ import (
 
 	"github.com/cocoonstack/cocoon/utils"
 
-	"github.com/cocoonstack/cocoon-macos/internal/home"
+	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon-macos/qemu"
 )
 

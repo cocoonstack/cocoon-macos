@@ -3,7 +3,7 @@ package vm
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon-macos/internal/cli"
+	"github.com/cocoonstack/cocoon-macos/cli"
 )
 
 // Actions mirrors cocoon's cmd/vm Actions interface, trimmed to the v0.1 macOS

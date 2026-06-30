@@ -2,8 +2,6 @@ package vm
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,17 +37,6 @@ func saveRec(dir string, r *record) error {
 	return nil
 }
 
-func copyFile(src, dst string) error {
-	b, err := os.ReadFile(src)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", src, err)
-	}
-	if err := os.WriteFile(dst, b, 0o600); err != nil {
-		return fmt.Errorf("write %s: %w", dst, err)
-	}
-	return nil
-}
-
 // bakeOverlay creates a per-VM CoW qcow2 overlay on the immutable base (which stays read-only).
 func bakeOverlay(ctx context.Context, base, dst string) error {
 	if err := utils.RunQemuImg(ctx, "create", "-f", "qcow2", "-F", "qcow2", "-b", base, dst); err != nil {
@@ -72,14 +59,6 @@ func applyNet(cmd *cobra.Command, r *record, userTap string) error {
 		r.Tap, r.Netns, r.TapOwned = netTap, netns, userTap == ""
 	}
 	return nil
-}
-
-// newVMID is the network-plane id (cocoon truncates it to 8 chars via VMIDPrefix); random so
-// same-second names don't collide.
-func newVMID() string {
-	b := make([]byte, 8)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
 }
 
 // isRunning reports whether the VM's qemu process is alive AND is actually this VM's qemu (argv0 +
@@ -120,11 +99,10 @@ func resolveBase(cmd *cobra.Command, image, name string) (string, string, error)
 	if _, err := os.Stat(image); err == nil {
 		return image, "", nil
 	}
-	ctx := home.Ctx(cmd)
 	ensureCloudimgFirmware(cmd)
-	store, err := cloudimg.New(ctx, &config.Config{RootDir: home.Dir(cmd), DNS: "8.8.8.8,1.1.1.1"})
+	ctx, store, err := home.OpenStore(cmd)
 	if err != nil {
-		return "", "", fmt.Errorf("init cloudimg store: %w", err)
+		return "", "", err
 	}
 	vm := &types.VMConfig{Config: types.Config{Image: image}, Name: name}
 	sc, _, err := store.Config(ctx, []*types.VMConfig{vm})
@@ -141,7 +119,7 @@ func resolveBase(cmd *cobra.Command, image, name string) (string, string, error)
 // UEFI firmware exists (it targets cloud-hypervisor). cocoon-macos boots via OVMF + OpenCore and
 // DISCARDS that BootConfig, so the file is never read — it only unblocks Config's validation.
 func ensureCloudimgFirmware(cmd *cobra.Command) {
-	fw := filepath.Join(home.FirmwareDir(cmd), "CLOUDHV.fd")
+	fw := cloudimg.NewConfig(&config.Config{RootDir: home.Dir(cmd)}).FirmwarePath()
 	if utils.ValidFile(fw) {
 		return
 	}

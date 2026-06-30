@@ -1,6 +1,7 @@
 package qemu
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"time"
 
 	"howett.net/plist"
+
+	"github.com/cocoonstack/cocoon/utils"
 )
 
 // InjectConfig mounts the OpenCore qcow2 and patches its config.plist with a per-VM SMBIOS identity.
@@ -17,7 +20,7 @@ import (
 // qemu-nbd is the only way to edit a FAT partition inside a qcow2, so this needs root and the nbd
 // module. The shipped OpenCore runs Automatic=true + Vault=Optional, so Generic is the SMBIOS source
 // and no vault signature rejects the edit.
-func InjectConfig(ocPath string, sm *SMBIOS) error {
+func InjectConfig(ctx context.Context, ocPath string, sm *SMBIOS) error {
 	_ = exec.Command("modprobe", "nbd", "max_part=8").Run()
 	nbd, err := freeNBD()
 	if err != nil {
@@ -26,8 +29,8 @@ func InjectConfig(ocPath string, sm *SMBIOS) error {
 	if out, cerr := exec.Command("qemu-nbd", "--connect="+nbd, "-f", "qcow2", ocPath).CombinedOutput(); cerr != nil {
 		return fmt.Errorf("connect qemu-nbd %s (output: %s): %w", nbd, out, cerr)
 	}
-	defer disconnectNBD(nbd, ocPath)
-	waitForPart(nbd)
+	defer disconnectNBD(ctx, nbd, ocPath)
+	waitForPart(ctx, nbd)
 	mnt, err := os.MkdirTemp("", "oc-efi-")
 	if err != nil {
 		return fmt.Errorf("create mount dir: %w", err)
@@ -48,28 +51,25 @@ func InjectConfig(ocPath string, sm *SMBIOS) error {
 
 // waitForPart blocks until the kernel has scanned the qcow2's partition table (nbd partition
 // creation is asynchronous after --connect), so the mount below sees nbdXp1.
-func waitForPart(nbd string) {
-	for range 50 {
+func waitForPart(ctx context.Context, nbd string) {
+	_ = utils.WaitFor(ctx, 5*time.Second, 100*time.Millisecond, func() (bool, error) {
 		if _, err := os.Stat(nbd + "p1"); err == nil {
-			return
+			return true, nil
 		}
 		_ = exec.Command("partprobe", nbd).Run()
-		time.Sleep(100 * time.Millisecond)
-	}
+		return false, nil
+	})
 }
 
 // disconnectNBD tears down the qemu-nbd mapping and waits until the qcow2 is no longer held
 // open by any process. qemu-nbd --disconnect releases the device asynchronously and the server
 // pid is not /sys/block/nbdX/pid, so returning early would let the qemu launch race in and fail
 // with "Failed to get shared write lock".
-func disconnectNBD(nbd, ocPath string) {
+func disconnectNBD(ctx context.Context, nbd, ocPath string) {
 	_ = exec.Command("qemu-nbd", "--disconnect", nbd).Run()
-	for range 100 {
-		if !fileHeld(ocPath) {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	_ = utils.WaitFor(ctx, 10*time.Second, 100*time.Millisecond, func() (bool, error) {
+		return !fileHeld(ocPath), nil
+	})
 }
 
 func fileHeld(path string) bool {

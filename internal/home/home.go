@@ -3,10 +3,14 @@ package home
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+
+	"github.com/cocoonstack/cocoon/config"
+	"github.com/cocoonstack/cocoon/images/cloudimg"
 )
 
 // Default is the state root used when neither --state-dir nor $COCOON_MACOS_HOME is set
@@ -46,4 +50,15 @@ func Ctx(cmd *cobra.Command) context.Context {
 		return ctx
 	}
 	return context.Background()
+}
+
+// OpenStore opens the shared cloudimg store rooted at the resolved state dir, returning the
+// command context alongside it.
+func OpenStore(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) {
+	ctx := Ctx(cmd)
+	s, err := cloudimg.New(ctx, &config.Config{RootDir: Dir(cmd)})
+	if err != nil {
+		return ctx, nil, fmt.Errorf("init cloudimg store: %w", err)
+	}
+	return ctx, s, nil
 }

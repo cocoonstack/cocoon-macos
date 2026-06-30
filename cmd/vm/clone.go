@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cocoonstack/cocoon/utils"
+
 	"github.com/cocoonstack/cocoon-macos/internal/home"
 )
 
@@ -39,13 +41,13 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	ovmfVars := filepath.Join(dir, filepath.Base(srcRec.OVMFVars))
-	if err = copyFile(srcRec.OVMFVars, ovmfVars); err != nil {
+	if err = utils.ReflinkCopy(ovmfVars, srcRec.OVMFVars); err != nil {
 		return fmt.Errorf("copy OVMF_VARS: %w", err)
 	}
 	r := &record{
 		Name: name, Image: srcRec.Image, ImageDigest: digest, Disk: overlay,
 		OVMFCode: srcRec.OVMFCode, OVMFVars: ovmfVars, CPUs: srcRec.CPUs, Memory: srcRec.Memory,
-		VMID: newVMID(), Created: time.Now().Format(time.RFC3339),
+		VMID: utils.GenerateID(), Created: time.Now().Format(time.RFC3339),
 	}
 	if cmd.Flags().Changed("cpus") {
 		r.CPUs, _ = cmd.Flags().GetInt("cpus")

@@ -1,7 +1,6 @@
 package image
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,8 +12,6 @@ import (
 	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon/config"
-	"github.com/cocoonstack/cocoon/images/cloudimg"
 	"github.com/cocoonstack/cocoon/progress"
 
 	"github.com/cocoonstack/cocoon-macos/internal/cli"
@@ -34,7 +31,7 @@ func NewHandler() *Handler { return &Handler{} }
 // Pull fetches IMAGE into the store: an http(s) URL goes straight through cloudimg; an OCI/ghcr ref
 // is pulled as a qcow2 artifact and imported.
 func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
-	ctx, s, err := h.openStore(cmd)
+	ctx, s, err := home.OpenStore(cmd)
 	if err != nil {
 		return err
 	}
@@ -69,7 +66,7 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 
 // List renders stored images as a table (NAME TYPE SIZE DIGEST CREATED), or JSON with -o json.
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {
-	ctx, s, err := h.openStore(cmd)
+	ctx, s, err := home.OpenStore(cmd)
 	if err != nil {
 		return err
 	}
@@ -89,7 +86,7 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 
 // Inspect prints a single stored image's metadata as JSON.
 func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
-	ctx, s, err := h.openStore(cmd)
+	ctx, s, err := home.OpenStore(cmd)
 	if err != nil {
 		return err
 	}
@@ -105,7 +102,7 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 
 // RM deletes one or more images from the store, printing each removed ref.
 func (h *Handler) RM(cmd *cobra.Command, args []string) error {
-	ctx, s, err := h.openStore(cmd)
+	ctx, s, err := home.OpenStore(cmd)
 	if err != nil {
 		return err
 	}
@@ -117,16 +114,6 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 		fmt.Println(d)
 	}
 	return nil
-}
-
-// openStore opens the cloudimg store rooted at the resolved state dir, returning the command context.
-func (h *Handler) openStore(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) {
-	ctx := home.Ctx(cmd)
-	s, err := cloudimg.New(ctx, &config.Config{RootDir: home.Dir(cmd), DNS: "8.8.8.8,1.1.1.1"})
-	if err != nil {
-		return ctx, nil, fmt.Errorf("init cloudimg store: %w", err)
-	}
-	return ctx, s, nil
 }
 
 func isURL(s string) bool {

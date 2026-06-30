@@ -119,7 +119,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 		return nil, err
 	}
 	ovmfVars := filepath.Join(dir, "OVMF_VARS.fd")
-	if err = copyFile(varsTmpl, ovmfVars); err != nil {
+	if err = utils.ReflinkCopy(ovmfVars, varsTmpl); err != nil {
 		return nil, fmt.Errorf("copy OVMF_VARS: %w", err)
 	}
 	cpus, _ := cmd.Flags().GetInt("cpus")
@@ -133,7 +133,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	r := &record{
 		Name: name, Image: image, ImageDigest: digest, Disk: overlay, OVMFCode: code, OVMFVars: ovmfVars,
 		CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: ssh, VNCPass: vncPass, NetMode: netMode, Tap: tap, Hugepages: huge,
-		VMID: newVMID(), Created: time.Now().Format(time.RFC3339),
+		VMID: utils.GenerateID(), Created: time.Now().Format(time.RFC3339),
 	}
 	// OpenCore before networking: a random SMBIOS sets r.MAC = ROM, which prepareNet keeps as the guest MAC.
 	random, _ := cmd.Flags().GetBool("random-smbios")
@@ -205,7 +205,7 @@ func prepareOpenCore(ctx context.Context, dir, ocBase string, randomSMBIOS bool,
 		return err
 	}
 	log.WithFunc("cmd.vm.prepareOpenCore").Debugf(ctx, "patching OpenCore %s via qemu-nbd (smbios)", ocOverlay)
-	if err := qemu.InjectConfig(ocOverlay, &sm); err != nil {
+	if err := qemu.InjectConfig(ctx, ocOverlay, &sm); err != nil {
 		return fmt.Errorf("inject opencore config: %w", err)
 	}
 	r.OpenCore, r.OpenCoreBase = ocOverlay, ocBase

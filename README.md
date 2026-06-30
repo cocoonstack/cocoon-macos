@@ -42,13 +42,13 @@ go build -o cocoon-macos .
 cocoon-macos image pull ghcr.io/cocoonstack/cocoon-macos/tahoe:26
 cocoon-macos image list        # also: inspect, rm
 
-# install the shared OpenCore loader + OVMF firmware ONCE into <state-dir>/firmware (reused by
-# every VM); afterwards vm create/run default to these, so --opencore/--ovmf-* become optional
-cocoon-macos firmware install --opencore OpenCore.qcow2 --ovmf-code OVMF_CODE_4M.fd --ovmf-vars OVMF_VARS.fd
-cocoon-macos firmware list
+# one-time: make the host ready — checks /dev/kvm + qemu + nbd, installs missing deps, and
+# provisions the shared OpenCore + OVMF firmware into <state-dir>/firmware (reused by every VM).
+# Works the same on Intel and AMD; you never pick "OpenCore vs LongQT".
+sudo scripts/doctor.sh
 
 # clone the golden image into a per-VM overlay and boot it (x86 Linux + /dev/kvm).
-# IMAGE is a store ref (above) or a direct qcow2 path; firmware defaults to the install above.
+# IMAGE is a store ref (above) or a direct qcow2 path; firmware defaults to the doctor's install.
 cocoon-macos vm run ghcr.io/cocoonstack/cocoon-macos/tahoe:26 \
   --name m1 --cpus 4 --memory 8192 --ssh-port 2222 --vnc 1 --random-smbios
 

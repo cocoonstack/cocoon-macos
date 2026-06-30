@@ -122,7 +122,7 @@ func addVMFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("hugepages", false, "back guest RAM with 2 MiB hugepages (needs host hugepages reserved; lower TLB/EPT overhead)")
 	cmd.Flags().Int("vnc", -1, "VNC display number (n => host 127.0.0.1:590n); <0 disables")
 	cmd.Flags().Int("ssh-port", 0, "host port forwarded to guest :22; 0 disables")
-	cmd.Flags().String("opencore", "", "OpenCore.qcow2 boot loader (default: <state-dir>/firmware/OpenCore.qcow2; see `firmware install`)")
+	cmd.Flags().String("opencore", "", "OpenCore.qcow2 boot loader (default: <state-dir>/firmware/OpenCore.qcow2; provisioned by scripts/doctor.sh)")
 	cmd.Flags().String("ovmf-code", "", "OVMF_CODE firmware (default: <state-dir>/firmware/OVMF_CODE.fd)")
 	cmd.Flags().String("ovmf-vars", "", "OVMF_VARS template, copied per-VM (default: <state-dir>/firmware/OVMF_VARS.fd)")
 	cmd.Flags().Bool("random-smbios", false, "inject a unique Apple SMBIOS identity per VM (serial/MLB/UUID/ROM)")

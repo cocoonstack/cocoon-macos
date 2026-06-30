@@ -10,7 +10,6 @@ import (
 	"github.com/projecteru2/core/types"
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon-macos/cmd/firmware"
 	"github.com/cocoonstack/cocoon-macos/cmd/image"
 	"github.com/cocoonstack/cocoon-macos/cmd/vm"
 	"github.com/cocoonstack/cocoon-macos/version"
@@ -46,7 +45,6 @@ func run(ctx context.Context) error {
 	root.SetVersionTemplate("{{.Version}}")
 	root.AddCommand(vm.Command(vm.NewHandler()))
 	root.AddCommand(image.Command(image.NewHandler()))
-	root.AddCommand(firmware.Command(firmware.NewHandler()))
 	return root.ExecuteContext(ctx)
 }
 

@@ -160,7 +160,7 @@ func resolveFirmware(cmd *cobra.Command) (opencore, code, vars string, err error
 	vars = flagOr(cmd, "ovmf-vars", filepath.Join(fw, "OVMF_VARS.fd"))
 	for _, p := range []string{opencore, code, vars} {
 		if !utils.ValidFile(p) {
-			return "", "", "", fmt.Errorf("firmware not found: %s — pass --opencore/--ovmf-code/--ovmf-vars or run `cocoon-macos firmware install`", p)
+			return "", "", "", fmt.Errorf("firmware not found: %s — run scripts/doctor.sh to provision it (or pass --opencore/--ovmf-code/--ovmf-vars)", p)
 		}
 	}
 	return opencore, code, vars, nil

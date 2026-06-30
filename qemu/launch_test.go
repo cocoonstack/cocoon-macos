@@ -78,7 +78,6 @@ func TestArgsOVMFVarsFormat(t *testing.T) {
 func TestArgsDiskTuning(t *testing.T) {
 	s := Spec{Disk: "/v/d.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/v.fd", CPUs: 2, Memory: "4096", VNCDisp: -1}
 	drives := argVals(s.Args(), "-drive")
-	// MacHDD must carry the perf knobs
 	if !slices.ContainsFunc(drives, func(d string) bool {
 		return strings.Contains(d, "id=MacHDD") && strings.Contains(d, "cache=writeback") &&
 			strings.Contains(d, "aio=io_uring") && strings.Contains(d, "discard=unmap") &&
@@ -90,7 +89,7 @@ func TestArgsDiskTuning(t *testing.T) {
 
 func TestArgsHugepages(t *testing.T) {
 	base := Spec{Disk: "/v/d.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/v.fd", CPUs: 2, Memory: "4096", VNCDisp: -1}
-	// off by default: no memory-backend object, plain -machine q35
+	// off by default
 	if slices.ContainsFunc(base.Args(), func(a string) bool { return strings.Contains(a, "memory-backend") }) {
 		t.Fatalf("hugepages off must not add a memory-backend: %v", base.Args())
 	}

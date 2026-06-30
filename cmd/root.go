@@ -52,7 +52,7 @@ func run(ctx context.Context) error {
 
 // setupLog initializes core/log. SetupLog binds to os.Stdout, so swap in stderr
 // for the call to keep command output (e.g. vm list JSON) on stdout while logs
-// go to stderr. Level comes from COCOON_MACOS_LOG_LEVEL.
+// go to stderr.
 func setupLog(ctx context.Context) error {
 	level := os.Getenv("COCOON_MACOS_LOG_LEVEL")
 	if level == "" {

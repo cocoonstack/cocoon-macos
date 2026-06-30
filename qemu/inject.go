@@ -12,10 +12,11 @@ import (
 	"howett.net/plist"
 )
 
-// InjectConfig mounts the OpenCore qcow2 (via qemu-nbd — the only way to edit a FAT partition inside
-// a qcow2; requires root + the nbd module) and patches its config.plist with a per-VM SMBIOS identity
-// (PlatformInfo/Generic; the shipped OpenCore has Automatic=true + Vault=Optional so Generic is the
-// source and no vault signature rejects the edit).
+// InjectConfig mounts the OpenCore qcow2 and patches its config.plist with a per-VM SMBIOS identity.
+//
+// qemu-nbd is the only way to edit a FAT partition inside a qcow2, so this needs root and the nbd
+// module. The shipped OpenCore runs Automatic=true + Vault=Optional, so Generic is the SMBIOS source
+// and no vault signature rejects the edit.
 func InjectConfig(ocPath string, sm *SMBIOS) error {
 	_ = exec.Command("modprobe", "nbd", "max_part=8").Run()
 	nbd, err := freeNBD()

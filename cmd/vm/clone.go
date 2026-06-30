@@ -72,7 +72,7 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if !freshIdentity {
-		r.MAC = srcRec.MAC // no fresh identity: inherit SRC's MAC
+		r.MAC = srcRec.MAC // prepareOpenCore only sets a fresh MAC for fresh identities
 	}
 	r.NetMode, _ = cmd.Flags().GetString("net")
 	tapFlag, _ := cmd.Flags().GetString("tap")

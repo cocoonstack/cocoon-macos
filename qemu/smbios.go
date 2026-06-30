@@ -55,7 +55,7 @@ func (s SMBIOS) MAC() string {
 func randString(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		return "", err
+		return "", fmt.Errorf("read random bytes: %w", err)
 	}
 	for i, c := range b {
 		b[i] = serialAlphabet[int(c)%len(serialAlphabet)]
@@ -66,7 +66,7 @@ func randString(n int) (string, error) {
 func randUUID() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		return "", err
+		return "", fmt.Errorf("read random bytes: %w", err)
 	}
 	b[6] = (b[6] & 0x0f) | 0x40 // version 4
 	b[8] = (b[8] & 0x3f) | 0x80 // variant
@@ -76,7 +76,7 @@ func randUUID() (string, error) {
 func randROM() (string, error) {
 	b := make([]byte, 6)
 	if _, err := rand.Read(b); err != nil {
-		return "", err
+		return "", fmt.Errorf("read random bytes: %w", err)
 	}
 	b[0] = (b[0] & 0xfe) | 0x02 // locally administered, unicast
 	return hex.EncodeToString(b), nil

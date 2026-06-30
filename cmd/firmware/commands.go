@@ -2,8 +2,7 @@ package firmware
 
 import "github.com/spf13/cobra"
 
-// Actions manages the shared OpenCore/OVMF assets under <state-dir>/firmware that vm create/run
-// default to (so the loader/firmware live once and are reused across every VM).
+// Actions manages the shared OpenCore/OVMF firmware under <state-dir>/firmware that vm create/run default to.
 type Actions interface {
 	Install(cmd *cobra.Command, args []string) error
 	List(cmd *cobra.Command, args []string) error

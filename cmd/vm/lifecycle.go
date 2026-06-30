@@ -188,10 +188,9 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	return saveRec(dir, r)
 }
 
-// prepareOpenCore points r.OpenCore at the loader to boot. Without a random identity the shared base
-// is used directly (no per-VM copy). Otherwise a per-VM CoW overlay is baked on ocBase (only the
-// injected delta is stored, so the base is reused, not copied N times) and its config.plist patched
-// in one qemu-nbd mount with a unique SMBIOS identity.
+// prepareOpenCore points r.OpenCore at the loader to boot. Without a random identity the shared
+// base is used directly (no per-VM copy); otherwise a per-VM CoW overlay is baked on ocBase and its
+// config.plist patched with a unique SMBIOS identity.
 func prepareOpenCore(ctx context.Context, dir, ocBase string, randomSMBIOS bool, r *record) error {
 	if !randomSMBIOS {
 		r.OpenCore, r.OpenCoreBase = ocBase, ""

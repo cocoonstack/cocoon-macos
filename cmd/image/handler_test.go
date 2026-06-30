@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TestListEmptyStore: List on a fresh state dir must succeed with no network or qemu-img; pull/import are tested on Linux.
+// TestListEmptyStore verifies List succeeds on a fresh state dir without network or qemu-img; pull/import are covered on Linux.
 func TestListEmptyStore(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().String("state-dir", t.TempDir(), "")

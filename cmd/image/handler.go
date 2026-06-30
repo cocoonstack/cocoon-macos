@@ -41,10 +41,9 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	if isURL(ref) {
 		return s.Pull(ctx, ref, force, progress.Nop)
 	}
-	// OCI/ghcr ref: pull the qcow2 artifact, then import the disk into the store. We shell out to the
-	// `oras` CLI rather than oras-go because the CLI is the authoritative ghcr transport — it reuses
-	// the user's docker credentials and the registry token dance transparently, and oras-go is not in
-	// the dependency tree. Migrating to the oras-go SDK is tracked as tech debt.
+	// Shell out to the `oras` CLI rather than oras-go: the CLI is the authoritative ghcr transport,
+	// reusing the user's docker credentials and the registry token dance transparently, and oras-go is
+	// not in the dependency tree. Migrating to the oras-go SDK is tracked as tech debt.
 	log.WithFunc("cmd.image.Pull").Debugf(ctx, "pulling OCI artifact %s via the oras CLI", ref)
 	tmp, err := os.MkdirTemp("", "img-pull-")
 	if err != nil {

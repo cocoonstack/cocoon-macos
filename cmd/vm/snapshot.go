@@ -48,12 +48,13 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	ctx := home.Ctx(cmd)
 	wasRunning := isRunning(r)
 	if wasRunning {
 		if force, _ := cmd.Flags().GetBool("force"); !force {
 			return fmt.Errorf("vm %q is running; stop it first or pass --force to stop+restore", r.Name)
 		}
-		terminate(home.Ctx(cmd), r, stopGracePeriod)
+		terminate(ctx, r, stopGracePeriod)
 		r.PID = 0
 	}
 	tag, _ := cmd.Flags().GetString("tag")
@@ -63,7 +64,6 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 		}
 		tag = r.Snapshots[len(r.Snapshots)-1]
 	}
-	ctx := home.Ctx(cmd)
 	for _, img := range imagesToSnapshot(r) {
 		if err := qemu.SnapApply(ctx, img, tag); err != nil {
 			return err

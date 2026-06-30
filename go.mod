@@ -4,6 +4,7 @@ go 1.25.6
 
 require (
 	github.com/cocoonstack/cocoon v0.4.2
+	github.com/docker/go-units v0.5.0
 	github.com/projecteru2/core v0.0.0-20241016125006-ff909eefe04c
 	github.com/spf13/cobra v1.10.2
 	howett.net/plist v1.0.1

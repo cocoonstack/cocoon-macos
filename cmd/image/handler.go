@@ -2,12 +2,13 @@ package image
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"text/tabwriter"
+	"time"
 
 	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
@@ -16,6 +17,7 @@ import (
 	"github.com/cocoonstack/cocoon/images/cloudimg"
 	"github.com/cocoonstack/cocoon/progress"
 
+	"github.com/cocoonstack/cocoon-macos/internal/cli"
 	"github.com/cocoonstack/cocoon-macos/internal/home"
 )
 
@@ -65,7 +67,7 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	return s.ImportFromReader(ctx, ref, progress.Nop, f)
 }
 
-// List prints every stored image as a JSON array ([] when empty, never null).
+// List renders stored images as a table (NAME TYPE SIZE DIGEST CREATED), or JSON with -o json.
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	ctx, s, err := h.openStore(cmd)
 	if err != nil {
@@ -75,12 +77,14 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	if len(imgs) == 0 {
-		fmt.Println("[]")
-		return nil
-	}
-	printJSON(imgs)
-	return nil
+	return cli.OutputFormatted(cmd, imgs, func(w *tabwriter.Writer) {
+		fmt.Fprintln(w, "NAME\tTYPE\tSIZE\tDIGEST\tCREATED") //nolint:errcheck
+		for _, img := range imgs {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck
+				img.Name, img.Type, cli.FormatSize(img.Size),
+				shortDigest(img.ID), img.CreatedAt.Local().Format(time.DateTime))
+		}
+	})
 }
 
 // Inspect prints a single stored image's metadata as JSON.
@@ -96,8 +100,7 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 	if img == nil {
 		return fmt.Errorf("image not found: %s", args[0])
 	}
-	printJSON(img)
-	return nil
+	return cli.OutputJSON(img)
 }
 
 // RM deletes one or more images from the store, printing each removed ref.
@@ -130,9 +133,13 @@ func isURL(s string) bool {
 	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
-func printJSON(v any) {
-	b, _ := json.MarshalIndent(v, "", "  ")
-	fmt.Println(string(b))
+// shortDigest truncates a content digest for table display.
+func shortDigest(id string) string {
+	const maxLen = 19
+	if len(id) > maxLen {
+		return id[:maxLen]
+	}
+	return id
 }
 
 func findQcow2(dir string) (string, error) {

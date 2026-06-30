@@ -91,6 +91,26 @@ mouse move repaints it, and the full Tahoe desktop renders fine (Finder/Dock/men
 image's first-boot daemon now runs `pmset -a displaysleep 0 disablesleep 1` system-wide (covers the
 pre-login loginwindow) so the framebuffer stays painted; older images need a `setup`-stage rebuild.
 
+## Known issues
+
+- **No GPU → hardware-accelerated video renders black.** The display is `-device vmware-svga`
+  (macOS's only supported virtual adapter): a **2D software framebuffer with no Metal / GPU /
+  VideoToolbox / IOSurface**. CPU-drawn content renders fine — desktop, widgets, window chrome, and
+  *static* images (e.g. a YouTube **thumbnail**) — but **live video playback** uses a GPU-composited
+  hardware overlay (AVPlayerLayer + IOSurface + VideoToolbox decode) that has no backing on a
+  GPU-less VM, so the moving picture stays **black even though audio plays and the scrubber
+  advances**. Safari has no software-rendering fallback (its video layer stays black).
+  - *Workaround:* **Chrome with hardware acceleration off** (Settings → System → uncheck "Use
+    hardware acceleration when available", relaunch) — it composites video in software into a normal
+    layer the framebuffer can draw.
+  - *No display-device fix:* `qxl`/`virtio-gpu`/`std` have no macOS driver, so swapping `-vga` /
+    `-device` cannot add acceleration.
+  - *Real fix:* GPU passthrough (VFIO `-device vfio-pci`) — see Roadmap.
+- **VNC blanks on display sleep** — mitigated at the image level by a `pmset` no-sleep first-boot
+  daemon; see the display-sleep note above.
+- **GUI lands at the macOS Setup Assistant** — `:26` is SSH/VNC-login usable, but a fully unattended
+  boot-to-desktop still needs the SA click-through; see *Boot-to-desktop* below.
+
 ## CI image pipeline (`.github/workflows/build-macos-image.yml`, `scripts/build-qemu-macos.sh`)
 
 `workflow_dispatch` with a `macos` version + a `stage`. **`macos`** selects which OS to build and

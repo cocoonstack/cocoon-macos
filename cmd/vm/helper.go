@@ -2,7 +2,6 @@ package vm
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/cocoonstack/cocoon/config"
 	"github.com/cocoonstack/cocoon/images/cloudimg"
+	"github.com/cocoonstack/cocoon/lock/flock"
 	"github.com/cocoonstack/cocoon/types"
 	"github.com/cocoonstack/cocoon/utils"
 
@@ -29,12 +29,24 @@ func loadRec(dir string) (*record, error) {
 	return &r, nil
 }
 
+// saveRec atomically writes the VM record (temp + fsync + rename), so a crash mid-write can't
+// leave a truncated vm.json that orphans a qemu or leaks a TAP.
 func saveRec(dir string, r *record) error {
-	b, _ := json.MarshalIndent(r, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, "vm.json"), b, 0o600); err != nil {
+	if err := utils.AtomicWriteJSON(filepath.Join(dir, "vm.json"), r); err != nil {
 		return fmt.Errorf("write vm record: %w", err)
 	}
 	return nil
+}
+
+// withVMLock runs fn while holding the per-VM flock, so concurrent lifecycle ops (stop/start/
+// snapshot/restore) on the same VM serialize instead of racing on vm.json's read-modify-write.
+func withVMLock(ctx context.Context, dir string, fn func() error) error {
+	l := flock.New(filepath.Join(dir, "vm.json.lock"))
+	if err := l.Lock(ctx); err != nil {
+		return fmt.Errorf("lock vm: %w", err)
+	}
+	defer func() { _ = l.Unlock(ctx) }()
+	return fn()
 }
 
 // bakeOverlay creates a per-VM CoW qcow2 overlay on the immutable base (which stays read-only).

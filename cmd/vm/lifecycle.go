@@ -43,16 +43,22 @@ func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 // Start boots one or more previously-created VMs, reusing each persisted TAP/netns
 // across stop/start (only rm tears those down).
 func (h *Handler) Start(cmd *cobra.Command, args []string) error {
+	ctx := home.Ctx(cmd)
 	for _, n := range args {
 		dir := home.VMDir(cmd, n)
-		r, err := loadRec(dir)
-		if err != nil {
+		if err := withVMLock(ctx, dir, func() error {
+			r, err := loadRec(dir)
+			if err != nil {
+				return err
+			}
+			if err := h.launch(cmd, dir, r); err != nil {
+				return err
+			}
+			fmt.Printf("%s (pid %d)\n", n, r.PID)
+			return nil
+		}); err != nil {
 			return err
 		}
-		if err := h.launch(cmd, dir, r); err != nil {
-			return err
-		}
-		fmt.Printf("%s (pid %d)\n", n, r.PID)
 	}
 	return nil
 }
@@ -63,13 +69,17 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 	ctx := home.Ctx(cmd)
 	for _, n := range args {
 		dir := home.VMDir(cmd, n)
-		r, err := loadRec(dir)
-		if err != nil {
+		if err := withVMLock(ctx, dir, func() error {
+			r, err := loadRec(dir)
+			if err != nil {
+				return err
+			}
+			terminate(ctx, r, grace)
+			r.PID = 0
+			return saveRec(dir, r)
+		}); err != nil {
 			return err
 		}
-		terminate(ctx, r, grace)
-		r.PID = 0
-		_ = saveRec(dir, r)
 		fmt.Println(n)
 	}
 	return nil

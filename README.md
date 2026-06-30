@@ -40,7 +40,7 @@ go build -o cocoon-macos .
 
 # pull the golden qcow2 from ghcr into the local store (cocoon cloudimg; /var/lib/cocoon-macos)
 cocoon-macos image pull ghcr.io/cocoonstack/cocoon-macos/tahoe:26
-cocoon-macos image list        # also: inspect, rm
+cocoon-macos image list        # table (NAME TYPE SIZE DIGEST CREATED); -o json for JSON. also: inspect, rm
 
 # one-time: make the host ready — checks /dev/kvm + qemu + nbd, installs missing deps, and
 # provisions the shared OpenCore + OVMF firmware into <state-dir>/firmware (reused by every VM).
@@ -52,8 +52,8 @@ sudo scripts/doctor.sh
 cocoon-macos vm run ghcr.io/cocoonstack/cocoon-macos/tahoe:26 \
   --name m1 --cpus 4 --memory 8192 --ssh-port 2222 --vnc 1 --random-smbios
 
-cocoon-macos vm list           # JSON of all VMs
-cocoon-macos vm inspect m1
+cocoon-macos vm list           # table (NAME STATE CPU MEM NET VNC SSH IMAGE CREATED); -o json for JSON
+cocoon-macos vm inspect m1     # full record as JSON
 cocoon-macos vm stop m1
 cocoon-macos vm rm m1
 # also: create (no boot), start, console

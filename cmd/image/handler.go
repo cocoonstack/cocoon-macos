@@ -120,9 +120,8 @@ func isURL(s string) bool {
 	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
-// shortDigest truncates a content digest for table display.
 func shortDigest(id string) string {
-	const maxLen = 19
+	const maxLen = 19 // "sha256:" + 12 hex chars, the conventional short-digest length
 	if len(id) > maxLen {
 		return id[:maxLen]
 	}
@@ -130,11 +129,8 @@ func shortDigest(id string) string {
 }
 
 func findQcow2(dir string) (string, error) {
-	ents, _ := os.ReadDir(dir)
-	for _, e := range ents {
-		if strings.HasSuffix(e.Name(), ".qcow2") {
-			return filepath.Join(dir, e.Name()), nil
-		}
+	if matches, _ := filepath.Glob(filepath.Join(dir, "*.qcow2")); len(matches) > 0 {
+		return matches[0], nil
 	}
 	return "", fmt.Errorf("no .qcow2 in pulled artifact at %s", dir)
 }

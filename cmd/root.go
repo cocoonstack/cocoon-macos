@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"os/signal"
@@ -52,10 +53,7 @@ func run(ctx context.Context) error {
 // for the call to keep command output (e.g. the vm list table) on stdout while
 // logs go to stderr.
 func setupLog(ctx context.Context) error {
-	level := os.Getenv("COCOON_MACOS_LOG_LEVEL")
-	if level == "" {
-		level = "info"
-	}
+	level := cmp.Or(os.Getenv("COCOON_MACOS_LOG_LEVEL"), "info")
 	origStdout := os.Stdout
 	os.Stdout = os.Stderr
 	defer func() { os.Stdout = origStdout }()

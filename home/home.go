@@ -2,6 +2,7 @@
 package home
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -19,13 +20,8 @@ const Default = "/var/lib/cocoon-macos"
 
 // Dir resolves the state root: --state-dir wins, else $COCOON_MACOS_HOME, else Default.
 func Dir(cmd *cobra.Command) string {
-	if d, _ := cmd.Flags().GetString("state-dir"); d != "" {
-		return d
-	}
-	if d := os.Getenv("COCOON_MACOS_HOME"); d != "" {
-		return d
-	}
-	return Default
+	d, _ := cmd.Flags().GetString("state-dir")
+	return cmp.Or(d, os.Getenv("COCOON_MACOS_HOME"), Default)
 }
 
 // FirmwareDir is the shared loader/firmware directory under the state root.

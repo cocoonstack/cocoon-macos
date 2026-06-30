@@ -146,8 +146,8 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 		VMID: utils.GenerateID(), Created: time.Now().Format(time.RFC3339),
 	}
 	// OpenCore before networking: a random SMBIOS sets r.MAC = ROM, which prepareNet keeps as the guest MAC.
-	random, _ := cmd.Flags().GetBool("random-smbios")
-	if err = prepareOpenCore(ctx, dir, oc, random, r); err != nil {
+	randomSMBIOS, _ := cmd.Flags().GetBool("random-smbios")
+	if err = prepareOpenCore(ctx, dir, oc, randomSMBIOS, r); err != nil {
 		return nil, err
 	}
 	if err = applyNet(cmd, r, tap); err != nil {

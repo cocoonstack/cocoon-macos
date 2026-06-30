@@ -63,12 +63,12 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	r.SSHPort, _ = cmd.Flags().GetInt("ssh-port")
 	r.VNCPass, _ = cmd.Flags().GetString("vnc-password")
 	// fresh identity when SRC has one or --random-smbios (cold boot re-reads PlatformInfo from the overlay)
-	random, _ := cmd.Flags().GetBool("random-smbios")
-	freshIdentity := random || srcRec.SMBIOS != nil
+	randomSMBIOS, _ := cmd.Flags().GetBool("random-smbios")
+	freshIdentity := randomSMBIOS || srcRec.SMBIOS != nil
 	// overlay the recorded base, never SRC's per-VM overlay (would break on `vm rm SRC`)
-	ocBase, baseErr := cloneOpenCoreBase(cmd, srcRec)
-	if baseErr != nil {
-		return baseErr
+	ocBase, err := cloneOpenCoreBase(cmd, srcRec)
+	if err != nil {
+		return err
 	}
 	if err = prepareOpenCore(ctx, dir, ocBase, freshIdentity, r); err != nil {
 		return err

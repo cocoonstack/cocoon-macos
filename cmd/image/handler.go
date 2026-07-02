@@ -40,6 +40,13 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	if isURL(ref) {
 		return s.Pull(ctx, ref, force, progress.Nop)
 	}
+	// mirror the URL path's idempotency: skip the multi-GiB oras download when already present
+	if !force {
+		if img, ierr := s.Inspect(ctx, ref); ierr == nil && img != nil {
+			log.WithFunc("cmd.image.Pull").Infof(ctx, "image %s already present (use --force to re-pull)", ref)
+			return nil
+		}
+	}
 	// Shell out to the `oras` CLI rather than oras-go: the CLI is the authoritative ghcr transport,
 	// reusing the user's docker credentials and the registry token dance transparently, and oras-go is
 	// not in the dependency tree. Migrating to the oras-go SDK is tracked as tech debt.

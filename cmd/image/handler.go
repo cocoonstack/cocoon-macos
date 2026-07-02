@@ -47,12 +47,30 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	// Credentials come from the user's docker config (public images pull
 	// anonymously), so no external oras binary is needed.
 	logger.Debugf(ctx, "pulling OCI artifact %s via oras-go", ref)
-	rc, err := pullOCILayer(ctx, ref)
-	if err != nil {
-		return err
+	// retry transient registry stream drops: ghcr resets the HTTP/2 stream on multi-GB blobs with
+	// PROTOCOL_ERROR mid-copy. A fresh fetch (from the start — mid-stream can't resume) usually wins.
+	var perr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		rc, ferr := pullOCILayer(ctx, ref)
+		if ferr != nil {
+			perr = ferr
+		} else {
+			perr = s.ImportFromReader(ctx, ref, progress.Nop, rc)
+			_ = rc.Close()
+		}
+		if perr == nil {
+			return nil
+		}
+		logger.Warnf(ctx, "oras pull attempt %d/3 failed: %v", attempt, perr)
+		if attempt < 3 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(attempt) * 10 * time.Second):
+			}
+		}
 	}
-	defer func() { _ = rc.Close() }()
-	return s.ImportFromReader(ctx, ref, progress.Nop, rc)
+	return fmt.Errorf("pull %s after 3 attempts: %w", ref, perr)
 }
 
 // List renders stored images as a table (NAME TYPE SIZE DIGEST CREATED), or JSON with -o json.

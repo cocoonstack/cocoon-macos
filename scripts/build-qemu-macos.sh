@@ -99,11 +99,13 @@ agreebtn() {  # click the active SLA "Agree" button (Disagree-paired, topmost) �
   python3 "$QMP_PY" "$QMP_SOCK" agreebtn 2>&1 | sed 's/^/[agree] /' || true
 }
 
-modalagree() {  # the SLA confirm-sheet "Agree" is grey-on-grey and OCR-unreadable. The sheet is screen-centered,
-  # so click the Agree column (right of center, never Disagree) across the y where the button lands across
-  # versions (Tahoe ~399, Sequoia ~452 — body wraps push it down). One hits; the rest miss harmlessly.
-  local y
-  for y in 400 426 452; do click 688 "$y"; sleep 1; done
+modalagree() {  # the SLA confirm-sheet "Agree" is grey-on-grey and OCR-unreadable, so click by position.
+  # Measured at the forced 1920x1080 GOP: Tahoe's Agree center is (1018,526). The install window is
+  # horizontally screen-centered (x=GOP_W/2+58) but sits high, so y can't derive from GOP_H — bracket
+  # it downward to also catch Sequoia, whose longer body text wraps the button lower. Clicks stay in
+  # the Agree column (never Disagree at ~899) and the modal sheet absorbs any miss.
+  local x=$((GOP_W / 2 + 58)) y
+  for y in 520 546 572 598; do click "$x" "$y"; sleep 1; done
 }
 
 screendump() {  # screendump <label> — via QMP, not HMP: the monitor `screendump` emits empty (6-byte)
@@ -242,12 +244,6 @@ boot_to_recovery() {  # OpenCore picker -> macOS Base System -> Recovery window
   screendump "inst-01-recovery"
 }
 
-open_disk_utility() {  # Recovery chooser -> Disk Utility -> Continue
-  log "opening Disk Utility (click row + Continue)"
-  click 600 465; sleep 1; click 815 525
-  sleep 35
-  screendump "du-00-open"
-}
 
 erase_target() {  # open Terminal (Shift-Cmd-T), erase disk0 as APFS "Macintosh"
   log "erasing disk0 via Terminal"

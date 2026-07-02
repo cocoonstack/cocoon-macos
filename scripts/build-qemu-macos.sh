@@ -3,7 +3,8 @@
 # MACOS_SHORTNAME (+ GHCR_REPO/GHCR_TAG/QCOW2_NAME) — the workflow derives them from its `macos`
 # input: tahoe=26 (the last Intel macOS) or sequoia=15. Boots the exact firmware stack production
 # uses: the LongQT OpenCore baked by scripts/lib-firmware.sh + apt ovmf (OVMF_*_4M.fd) + a
-# GenuineIntel Skylake-Client-v4 CPU. kholia/OSX-KVM is cloned only for fetch-macOS-v2.py (the
+# GenuineIntel Skylake-Client CPU (TSX off + invariant-TSC via CPUID; see qemu/launch.go for why every
+# flag is load-bearing). kholia/OSX-KVM is cloned only for fetch-macOS-v2.py (the
 # Apple recovery download).
 #
 # STAGE controls how far we go (the macOS install has no autounattend, so it is
@@ -194,7 +195,7 @@ launch_qemu() {
   log "launching QEMU headless (VNC 127.0.0.1:590$VNC_DISP, ssh :$SSH_PORT, monitor $MON_SOCK)"
   local args=(
     -enable-kvm -m "$MEMORY"
-    -cpu Skylake-Client-v4,vendor=GenuineIntel,kvm=on
+    -cpu Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt,+pcid,+invpcid,+tsc-deadline,+rdtscp,+xsavec,check
     -machine q35
     -smp "$CPUS",cores=2,sockets=1
     -device qemu-xhci,id=xhci -device usb-kbd,bus=xhci.0 -device usb-tablet,bus=xhci.0

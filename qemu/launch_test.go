@@ -136,10 +136,18 @@ func TestArgsCPU(t *testing.T) {
 	if len(cpu) != 1 {
 		t.Fatalf("-cpu count: %v", cpu)
 	}
-	// the unified LongQT recipe: a GenuineIntel-spoofed Skylake-Client-v4 with the hypervisor leaf on
-	for _, f := range []string{"Skylake-Client-v4", "vendor=GenuineIntel", "kvm=on"} {
+	if !strings.HasPrefix(cpu[0], "Skylake-Client,") {
+		t.Fatalf("-cpu base must be Skylake-Client (v4 enables TSX -> macOS first-boot spins): %s", cpu[0])
+	}
+	// Guard every load-bearing token so a base-model bump or "simplification" can't silently drop the
+	// ones a fresh image's first boot needs (TSX off + TSC-freq via CPUID); this is the regression
+	// dacf35c introduced by stripping the string down to Skylake-Client-v4.
+	for _, f := range []string{
+		"vendor=GenuineIntel", "kvm=on", "-hle", "-rtm", "+invtsc", "vmware-cpuid-freq=on",
+		"+pcid", "+invpcid", "+tsc-deadline", "+rdtscp",
+	} {
 		if !strings.Contains(cpu[0], f) {
-			t.Fatalf("-cpu missing %s: %s", f, cpu[0])
+			t.Fatalf("-cpu missing load-bearing %s: %s", f, cpu[0])
 		}
 	}
 }

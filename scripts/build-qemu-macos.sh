@@ -408,6 +408,11 @@ stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the ins
   mon "quit"; sleep 10
   [[ -f "$WORKDIR/qemu.pid" ]] && kill "$(cat "$WORKDIR/qemu.pid")" 2>/dev/null || true
   sleep 3
+  # Detach the Recovery/InstallMedia disk BEFORE rebooting: launch_qemu attaches BaseSystem.img as a
+  # boot entry whenever it exists, and OpenCore then boots RECOVERY (not the installed OS) on the next
+  # start — which parked absorb in the Recovery GUI, so finalization never ran and a broken image got
+  # captured. With BaseSystem.img gone, the installed macOS is the only bootable entry.
+  mv "$OSX_KVM_DIR/BaseSystem.img" "$OSX_KVM_DIR/BaseSystem.img.installonly" 2>/dev/null || true
   # provisioning ran offline from Recovery, so the installed OS never did its one-time first-full-boot
   # finalization (kernelcache/dyld rebuild, LaunchServices registration — a ~40min CPU/disk storm).
   # Boot it here, once, at build time and bake a SETTLED image, so consumers never pay that tax.
@@ -428,7 +433,9 @@ absorb_finalization_and_capture() {
   # go idle (finalization done), flush, then hard-stop. qemu-nbd check confirms the qcow2 stays
   # consistent across the hard stop, and the settled overlay boots straight to the SA (no re-run).
   log "settling first-boot finalization (waiting on CPU idle; SA blocks SSH+ACPI on macOS 26/15)"
-  wait_cpu_idle 200 || log "WARN: CPU never idled in budget; capturing current state anyway"
+  # Fatal, not a warning: a VM that never ran finalization (e.g. booted Recovery, or stuck at the
+  # picker) must NOT be captured and pushed as a golden image — that shipped a broken 35G tag before.
+  wait_cpu_idle 200 || { log "FATAL: first-boot finalization did not run/settle — refusing to capture"; return 1; }
   sleep 60   # let macOS flush its last writes to the qcow2 before the hard stop
   log "hard-stopping the VM (no clean-shutdown path at the SA; qcow2 stays consistent)"
   mon "quit"; sleep 8
@@ -443,13 +450,16 @@ wait_cpu_idle() {  # wait out the first-boot finalization. arg = max 20s ticks f
   # Two phases, because right after reboot the VM sits at the OpenCore picker / early boot with LOW
   # CPU — a naive "idle" check fires there in ~60s and captures a NOT-finalized image. So first wait
   # for finalization to RAMP UP (CPU goes high), only then wait for it to settle back down.
-  local w c idle=0
+  local w c idle=0 ramped=0
   log "phase 1: waiting for finalization to ramp up (CPU high)"
   for w in $(seq 1 30); do   # ~10min for boot -> finalization to start
     c=$(qemu_cpu)
-    [ "${c:-0}" -gt 150 ] && { log "finalization ramped (CPU ${c}%) after ~$((w * 20))s"; break; }
+    [ "${c:-0}" -gt 150 ] && { log "finalization ramped (CPU ${c}%) after ~$((w * 20))s"; ramped=1; break; }
     sleep 20
   done
+  # never ramping means the installed OS never started its first-boot work (wrong boot target / stuck
+  # picker) — fail rather than fall through to phase 2, which would instantly "settle" on the idle VM.
+  [ "$ramped" -eq 1 ] || { log "finalization never ramped in 10min (VM didn't boot the installed OS)"; return 1; }
   log "phase 2: waiting for finalization to settle (CPU idle)"
   for w in $(seq 1 "${1:-200}"); do
     c=$(qemu_cpu)

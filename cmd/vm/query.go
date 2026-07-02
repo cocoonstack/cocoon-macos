@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon-macos/cli"
+	"github.com/cocoonstack/cocoon/cmd/cliutil"
+
 	"github.com/cocoonstack/cocoon-macos/home"
 )
 
@@ -24,12 +26,12 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 			recs = append(recs, r)
 		}
 	}
-	return cli.OutputFormatted(cmd, recs, func(w *tabwriter.Writer) {
+	return cliutil.OutputFormatted(cmd, recs, func(w *tabwriter.Writer) {
 		fmt.Fprintln(w, "NAME\tSTATE\tCPU\tMEM\tNET\tVNC\tSSH\tIMAGE\tCREATED") //nolint:errcheck
 		for _, r := range recs {
 			fmt.Fprintf(w, "%s\t%s\t%d\t%sM\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck
 				r.Name, vmState(r), r.CPUs, r.Memory, cmp.Or(r.NetMode, netUser),
-				vncCol(r), sshCol(r), r.Image, cli.FormatTime(r.Created))
+				vncCol(r), sshCol(r), r.Image, formatTime(r.Created))
 		}
 	})
 }
@@ -40,7 +42,7 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return cli.OutputJSON(r)
+	return cliutil.OutputJSON(r)
 }
 
 // Console prints the VNC endpoint and SSH command for reaching a VM ("-" when disabled),
@@ -81,4 +83,12 @@ func sshCol(r *record) string {
 		return "-"
 	}
 	return strconv.Itoa(r.SSHPort)
+}
+
+// formatTime renders the record's RFC3339 Created stamp as local time.DateTime; raw on parse failure.
+func formatTime(s string) string {
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.Local().Format(time.DateTime)
+	}
+	return s
 }

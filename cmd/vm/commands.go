@@ -3,7 +3,7 @@ package vm
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon-macos/cli"
+	"github.com/cocoonstack/cocoon/cmd/cliutil"
 )
 
 // Actions mirrors cocoon's cmd/vm Actions interface, trimmed to the v0.1 macOS
@@ -64,7 +64,7 @@ func Command(h Actions) *cobra.Command {
 		Short:   "List VMs with status",
 		RunE:    h.List,
 	}
-	cli.AddFormatFlag(listCmd)
+	cliutil.AddFormatFlag(listCmd)
 
 	inspectCmd := &cobra.Command{
 		Use:   "inspect VM",

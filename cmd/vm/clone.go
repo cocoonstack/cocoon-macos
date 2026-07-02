@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/utils"
 
 	"github.com/cocoonstack/cocoon-macos/home"
@@ -41,7 +42,7 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	ctx := home.Ctx(cmd)
+	ctx := cliutil.CommandContext(cmd)
 	copied, err := copyDataDisks(dir, srcRec.DataDisks)
 	if err != nil {
 		return err

@@ -10,7 +10,7 @@ Usage:
   qmp-input.py SOCK move    PX PY      # move pointer only
   qmp-input.py SOCK key     K [K...]   # send qcode key(s), e.g. ret down spc
   qmp-input.py SOCK screendump FILE    # write framebuffer ppm
-Screen size defaults to 1280x800; override with QMP_W / QMP_H env vars.
+Screen size defaults to 1920x1080; override with QMP_W / QMP_H env vars.
 """
 import json
 import os
@@ -19,8 +19,8 @@ import subprocess
 import sys
 import time
 
-W = int(os.environ.get("QMP_W", "1280"))
-H = int(os.environ.get("QMP_H", "800"))
+W = int(os.environ.get("QMP_W", "1920"))
+H = int(os.environ.get("QMP_H", "1080"))
 
 CHARMAP = {
     " ": "spc", "\n": "ret", "\t": "tab", "-": "minus", "=": "equal",

@@ -6,6 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cocoonstack/cocoon/cmd/cliutil"
+
 	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon-macos/qemu"
 )
@@ -14,7 +16,7 @@ import (
 // the image, and +invtsc blocks the live-migration codepath savevm relies on).
 func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {
 	dir := home.VMDir(cmd, args[0])
-	ctx := home.Ctx(cmd)
+	ctx := cliutil.CommandContext(cmd)
 	tag, _ := cmd.Flags().GetString("tag")
 	if tag == "" {
 		tag = "snap-" + time.Now().Format("20060102-150405")
@@ -45,7 +47,7 @@ func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {
 // which stops it, reverts, and relaunches.
 func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 	dir := home.VMDir(cmd, args[0])
-	ctx := home.Ctx(cmd)
+	ctx := cliutil.CommandContext(cmd)
 	var tag string
 	if err := withVMLock(ctx, dir, func() error {
 		r, err := loadRec(dir)

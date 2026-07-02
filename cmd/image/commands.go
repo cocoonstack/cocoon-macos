@@ -3,7 +3,7 @@ package image
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon-macos/cli"
+	"github.com/cocoonstack/cocoon/cmd/cliutil"
 )
 
 // Actions is the image-subcommand surface, backed by cocoon's cloudimg store.
@@ -27,7 +27,7 @@ func Command(h Actions) *cobra.Command {
 	pull.Flags().Bool("force", false, "re-pull even if already present")
 
 	list := &cobra.Command{Use: "list", Aliases: []string{"ls"}, Short: "List images", RunE: h.List}
-	cli.AddFormatFlag(list)
+	cliutil.AddFormatFlag(list)
 	inspect := &cobra.Command{Use: "inspect REF", Short: "Show one image (JSON)", Args: cobra.ExactArgs(1), RunE: h.Inspect}
 	rm := &cobra.Command{Use: "rm REF [REF...]", Short: "Remove image(s)", Args: cobra.MinimumNArgs(1), RunE: h.RM}
 

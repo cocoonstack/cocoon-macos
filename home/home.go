@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon/config"
+	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/images/cloudimg"
 )
 
@@ -39,20 +39,11 @@ func VMDir(cmd *cobra.Command, name string) string {
 	return filepath.Join(VMsDir(cmd), name)
 }
 
-// Ctx returns the command's context, falling back to context.Background() if cobra never set one
-// (e.g. a unit test invoking a handler directly).
-func Ctx(cmd *cobra.Command) context.Context {
-	if ctx := cmd.Context(); ctx != nil {
-		return ctx
-	}
-	return context.Background()
-}
-
 // OpenStore opens the shared cloudimg store rooted at the resolved state dir, returning the
 // command context alongside it.
 func OpenStore(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) {
-	ctx := Ctx(cmd)
-	s, err := cloudimg.New(ctx, &config.Config{RootDir: Dir(cmd)})
+	ctx := cliutil.CommandContext(cmd)
+	s, err := cloudimg.New(ctx, Dir(cmd))
 	if err != nil {
 		return ctx, nil, fmt.Errorf("init cloudimg store: %w", err)
 	}

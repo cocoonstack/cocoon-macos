@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -57,9 +58,51 @@ func bakeOverlay(ctx context.Context, base, dst string) error {
 	return nil
 }
 
-// applyNet provisions networking for r and records the result. userTap is the user's --tap value:
-// an auto-created TAP is "owned" (torn down on rm) only when the user did not pass --tap.
-func applyNet(cmd *cobra.Command, r *record, userTap string) error {
+// scaffoldVM lays down a new VM's directory: refuses an existing record (a second create/clone
+// under the same name would truncate the live overlay and orphan its qemu), then bakes the disk
+// overlay on the resolved base and copies the OVMF_VARS template.
+func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir, overlay, ovmfVars, digest string, err error) {
+	dir = home.VMDir(cmd, name)
+	if _, statErr := os.Stat(filepath.Join(dir, "vm.json")); statErr == nil {
+		return "", "", "", "", fmt.Errorf("vm %q already exists; rm it first or pick another --name", name)
+	}
+	if err = utils.EnsureDirs(dir); err != nil {
+		return "", "", "", "", err
+	}
+	base, digest, err := resolveBase(cmd, image, name)
+	if err != nil {
+		return "", "", "", "", err
+	}
+	overlay = filepath.Join(dir, "disk.qcow2")
+	if err = bakeOverlay(home.Ctx(cmd), base, overlay); err != nil {
+		return "", "", "", "", err
+	}
+	ovmfVars = filepath.Join(dir, varsName)
+	if err = utils.ReflinkCopy(ovmfVars, varsSrc); err != nil {
+		return "", "", "", "", fmt.Errorf("copy OVMF_VARS: %w", err)
+	}
+	return dir, overlay, ovmfVars, digest, nil
+}
+
+// prepareNet provisions host-side networking and returns the TAP ifname, the netns path (CNI;
+// "" otherwise) and the guest MAC. user-mode and a pre-created --tap need no provisioning; every
+// other mode goes through the per-OS provisionNet.
+func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err error) {
+	switch r.NetMode {
+	case "", netUser:
+		return "", "", r.MAC, nil
+	case netTAP:
+		if r.Tap != "" { // user pre-created the TAP (already on a bridge / cocoon CNI) — use verbatim
+			return r.Tap, "", r.MAC, nil
+		}
+	}
+	return provisionNet(cmd, r)
+}
+
+// applyNet provisions networking for r and records the result. r.Tap at entry is the user's
+// --tap value: an auto-created TAP is "owned" (torn down on rm) only when the user did not pass one.
+func applyNet(cmd *cobra.Command, r *record) error {
+	userTap := r.Tap
 	netTap, netns, mac, err := prepareNet(cmd, r)
 	if err != nil {
 		return err
@@ -158,17 +201,15 @@ func resolveFirmware(cmd *cobra.Command) (opencore, code, vars string, err error
 
 // setVNCPassword applies the VNC password over the HMP monitor (QEMU was started with
 // password=on); macOS Screen Sharing needs password auth, not QEMU's default "None".
-func setVNCPassword(monSock, pw string) error {
+func setVNCPassword(ctx context.Context, monSock, pw string) error {
 	var conn net.Conn
-	var err error
-	for range 50 {
-		if conn, err = net.Dial("unix", monSock); err == nil {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if err != nil {
-		return fmt.Errorf("dial monitor: %w", err)
+	var dialErr error
+	// the monitor socket appears asynchronously after -daemonize
+	if err := utils.WaitFor(ctx, 5*time.Second, 100*time.Millisecond, func() (bool, error) {
+		conn, dialErr = net.Dial("unix", monSock)
+		return dialErr == nil, nil
+	}); err != nil {
+		return fmt.Errorf("dial monitor: %w", cmp.Or(dialErr, err))
 	}
 	defer func() { _ = conn.Close() }()
 	// Wait for the HMP prompt before sending: right after -daemonize the monitor accepts the

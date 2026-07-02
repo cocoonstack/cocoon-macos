@@ -41,12 +41,18 @@ type Spec struct {
 	QMPSock string
 }
 
+// IsQcow2NVRAM reports whether the NVRAM file is qcow2 (by suffix). Single source of the rule
+// that decides both the pflash -drive format below and whether NVRAM participates in
+// qcow2-internal snapshots (a raw .fd can't hold them) — the two must stay in lockstep.
+func IsQcow2NVRAM(path string) bool {
+	return strings.HasSuffix(path, ".qcow2")
+}
+
 // Args returns the qemu-system-x86_64 argument vector for the macOS guest.
 func (s Spec) Args() []string {
 	cores := max(s.CPUs/2, 1)
-	// NVRAM rolls back under qemu-img snapshot only if it's qcow2; a raw .fd is loaded as raw.
 	varsFmt := "raw"
-	if strings.HasSuffix(s.OVMFVars, ".qcow2") {
+	if IsQcow2NVRAM(s.OVMFVars) {
 		varsFmt = "qcow2"
 	}
 	// 2 MiB hugetlb pages cut TLB/EPT pressure on a memory-heavy GUI guest, but the host must have

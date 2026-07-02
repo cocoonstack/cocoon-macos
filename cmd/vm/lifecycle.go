@@ -93,12 +93,23 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 	ctx := home.Ctx(cmd)
 	for _, n := range args {
 		dir := home.VMDir(cmd, n)
-		if r, err := loadRec(dir); err == nil {
-			terminate(ctx, r, grace)
-			teardownNet(cmd, r)
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			fmt.Println(n) // nothing to remove (and no dir to hold the flock in)
+			continue
 		}
-		if err := os.RemoveAll(dir); err != nil {
-			return fmt.Errorf("remove vm dir: %w", err)
+		// same per-VM flock as stop/start/snapshot, so a concurrent start can't relaunch qemu
+		// between terminate and RemoveAll; the held lock fd stays valid across the unlink
+		if err := withVMLock(ctx, dir, func() error {
+			if r, err := loadRec(dir); err == nil {
+				terminate(ctx, r, grace)
+				teardownNet(cmd, r)
+			}
+			if err := os.RemoveAll(dir); err != nil {
+				return fmt.Errorf("remove vm dir: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
 		fmt.Println(n)
 	}
@@ -115,23 +126,11 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir := home.VMDir(cmd, name)
-	if err = os.MkdirAll(dir, 0o750); err != nil {
-		return nil, fmt.Errorf("mkdir vm dir: %w", err)
-	}
-	ctx := home.Ctx(cmd)
-	base, digest, err := resolveBase(cmd, image, name)
+	dir, overlay, ovmfVars, digest, err := scaffoldVM(cmd, name, image, varsTmpl, "OVMF_VARS.fd")
 	if err != nil {
 		return nil, err
 	}
-	overlay := filepath.Join(dir, "disk.qcow2")
-	if err = bakeOverlay(ctx, base, overlay); err != nil {
-		return nil, err
-	}
-	ovmfVars := filepath.Join(dir, "OVMF_VARS.fd")
-	if err = utils.ReflinkCopy(ovmfVars, varsTmpl); err != nil {
-		return nil, fmt.Errorf("copy OVMF_VARS: %w", err)
-	}
+	ctx := home.Ctx(cmd)
 	cpus, _ := cmd.Flags().GetInt("cpus")
 	mem, _ := cmd.Flags().GetString("memory")
 	vnc, _ := cmd.Flags().GetInt("vnc")
@@ -150,7 +149,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	if err = prepareOpenCore(ctx, dir, oc, randomSMBIOS, r); err != nil {
 		return nil, err
 	}
-	if err = applyNet(cmd, r, tap); err != nil {
+	if err = applyNet(cmd, r); err != nil {
 		return nil, err
 	}
 	return r, saveRec(dir, r)
@@ -191,7 +190,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		r.PID = pid
 	}
 	if r.VNCPass != "" {
-		if err := setVNCPassword(spec.MonSock, r.VNCPass); err != nil {
+		if err := setVNCPassword(ctx, spec.MonSock, r.VNCPass); err != nil {
 			logger.Warnf(ctx, "set vnc password: %v", err)
 		}
 	}

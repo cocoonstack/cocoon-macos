@@ -437,12 +437,24 @@ absorb_finalization_and_capture() {
   capture_and_push "$tag"   # convert -c compresses the settled image
 }
 
-wait_cpu_idle() {  # block until QEMU's CPU stays low (first-boot finalization finished). arg = max 20s ticks
-  local idle=0 c w
+qemu_cpu() { top -b -n1 -p "$QEMU_PID" 2>/dev/null | awk -v p="$QEMU_PID" '$1==p{print int($9)}'; }
+
+wait_cpu_idle() {  # wait out the first-boot finalization. arg = max 20s ticks for phase 2.
+  # Two phases, because right after reboot the VM sits at the OpenCore picker / early boot with LOW
+  # CPU — a naive "idle" check fires there in ~60s and captures a NOT-finalized image. So first wait
+  # for finalization to RAMP UP (CPU goes high), only then wait for it to settle back down.
+  local w c idle=0
+  log "phase 1: waiting for finalization to ramp up (CPU high)"
+  for w in $(seq 1 30); do   # ~10min for boot -> finalization to start
+    c=$(qemu_cpu)
+    [ "${c:-0}" -gt 150 ] && { log "finalization ramped (CPU ${c}%) after ~$((w * 20))s"; break; }
+    sleep 20
+  done
+  log "phase 2: waiting for finalization to settle (CPU idle)"
   for w in $(seq 1 "${1:-200}"); do
-    c=$(top -b -n1 -p "$QEMU_PID" 2>/dev/null | awk -v p="$QEMU_PID" '$1==p{print int($9)}')
+    c=$(qemu_cpu)
     if [ "${c:-999}" -lt 40 ]; then idle=$((idle + 1)); else idle=0; fi
-    [ "$idle" -ge 3 ] && { log "CPU idle 3x (~$((w * 20))s) — finalization settled"; return 0; }
+    [ "$idle" -ge 3 ] && { log "CPU idle 3x (~$((w * 20))s into phase 2) — finalization settled"; return 0; }
     [ $((w % 6)) -eq 0 ] && screendump "settle-$(printf '%03d' "$w")"
     sleep 20
   done

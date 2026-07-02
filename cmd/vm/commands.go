@@ -123,6 +123,7 @@ func addVMFlags(cmd *cobra.Command) {
 	cmd.Flags().Int("cpus", 4, "vCPU count")
 	cmd.Flags().String("memory", "8192", "guest memory in MiB")
 	cmd.Flags().Bool("hugepages", false, "back guest RAM with 2 MiB hugepages (needs host hugepages reserved; lower TLB/EPT overhead)")
+	cmd.Flags().StringArray("data-disk", nil, "attach an extra qcow2 data disk: comma-separated key=value (size= required e.g. size=20G; name= optional, default dataN). Repeatable, max 4. macOS has no in-guest agent, so fstype=/mount= are unsupported — format it in the guest (Disk Utility/diskutil)")
 	cmd.Flags().Int("vnc", -1, "VNC display number (n => host 127.0.0.1:590n); <0 disables")
 	cmd.Flags().Int("ssh-port", 0, "host port forwarded to guest :22; 0 disables")
 	cmd.Flags().String("opencore", "", "OpenCore.qcow2 boot loader (default: <state-dir>/firmware/OpenCore.qcow2; provisioned by scripts/doctor.sh)")

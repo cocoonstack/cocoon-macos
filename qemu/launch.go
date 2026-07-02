@@ -24,11 +24,12 @@ type Spec struct {
 	Name string
 
 	CPUs      int
-	Memory    string // MiB, e.g. "8192"
-	VNCDisp   int    // n => host 127.0.0.1:590n; <0 disables
-	VNCPass   string // set via the monitor post-launch (macOS Screen Sharing needs password auth)
-	SSHPort   int    // host port forwarded to guest :22; 0 disables
-	Hugepages bool   // needs host hugepages reserved; off => default RAM
+	Memory    string   // MiB, e.g. "8192"
+	VNCDisp   int      // n => host 127.0.0.1:590n; <0 disables
+	VNCPass   string   // set via the monitor post-launch (macOS Screen Sharing needs password auth)
+	SSHPort   int      // host port forwarded to guest :22; 0 disables
+	Hugepages bool     // needs host hugepages reserved; off => default RAM
+	DataDisks []string // extra qcow2 data disks; attached on the AHCI ports MacHDD/OpenCore leave free
 
 	Disk     string
 	OpenCore string
@@ -87,6 +88,19 @@ func (s Spec) Args() []string {
 		"-device", "vmware-svga",
 	}
 	a = append(memBackend, a...) // -object must precede the -machine memory-backend reference
+	// data disks: same AHCI/IDE path and perf tuning as MacHDD (macOS has no virtio-blk). They ride
+	// the SATA ports OpenCoreBoot (sata.2) and MacHDD (sata.4) leave free; the count is capped at 4
+	// upstream so the index never runs past dataDiskPorts.
+	dataDiskPorts := []int{0, 1, 3, 5}
+	for i, path := range s.DataDisks {
+		if i >= len(dataDiskPorts) {
+			break
+		}
+		id := fmt.Sprintf("DataDisk%d", i)
+		a = append(a,
+			"-drive", fmt.Sprintf("id=%s,if=none,format=qcow2,cache=writeback,aio=io_uring,discard=unmap,detect-zeroes=unmap,file=%s", id, path),
+			"-device", fmt.Sprintf("ide-hd,bus=sata.%d,drive=%s", dataDiskPorts[i], id))
+	}
 	switch {
 	case s.Tap != "":
 		// attach to a pre-created host TAP (cocoon's network plane / a bridge owns IP+forwarding);

@@ -276,7 +276,10 @@ drive_installer() {  # adaptive: OCR the current installer pane each round, clic
     elif printf '%s' "$txt" | grep -qiE "Loading Installation"; then
       log "round $round: still loading installation information, waiting"; sleep 12
     elif printf '%s' "$txt" | grep -qiE "set up the installation|click Continue"; then
-      log "round $round: intro -> Continue"; ocrclick Continue; sleep 6
+      # keys ret backs up the OCR click: the intro Continue is the sole blue/default button, and its
+      # label OCRs at borderline confidence (~16 on Sequoia, ~45 on Tahoe) that can fall under the
+      # conf>=30 cutoff. A stray ret after the pane advances is a no-op (the SLA pane has no default).
+      log "round $round: intro -> Continue (blue default, keys ret backup)"; ocrclick Continue; sleep 2; keys ret; sleep 4
     else
       log "round $round: unrecognized pane, waiting"; sleep 10
     fi

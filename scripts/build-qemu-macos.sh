@@ -43,6 +43,13 @@ QMP_SOCK="$WORKDIR/qmp.sock"
 QMP_PY="$ROOT_DIR/scripts/qmp-input.py"
 BOOT_SCREENSHOT_MINS=${BOOT_SCREENSHOT_MINS:-6}
 
+# Framebuffer geometry — single source: configure_opencore forces this GOP mode and qmp-input.py's
+# click mapping reads it via QMP_W/QMP_H. The two MUST match or every OCR-driven click scales
+# off-target by the ratio. 1920x1080 is a standard OVMF GOP mode.
+GOP_W=${GOP_W:-1920}
+GOP_H=${GOP_H:-1080}
+export QMP_W="$GOP_W" QMP_H="$GOP_H"
+
 GHCR_REPO=${GHCR_REPO:-"ghcr.io/cocoonstack/cocoon-macos/tahoe"}
 GHCR_TAG=${GHCR_TAG:-"26"}
 
@@ -138,7 +145,7 @@ configure_opencore() {  # patch OpenCore config.plist; arg "hide" => HideAuxilia
   local hide="${1:-}"
   local oc="$OPENCORE_QCOW2"
   [[ -f "$oc" ]] || { log "OpenCore.qcow2 missing; skip OC patch"; return 0; }
-  log "patching OpenCore config.plist: RequestBootVarRouting + 1920x1080 + Timeout (qemu-nbd)"
+  log "patching OpenCore config.plist: RequestBootVarRouting + ${GOP_W}x${GOP_H} + Timeout (qemu-nbd)"
   sudo modprobe nbd max_part=8 2>/dev/null || { log "no nbd module; skip OC patch"; return 0; }
   sudo qemu-nbd --connect=/dev/nbd0 -f qcow2 "$oc" 2>/dev/null || { log "qemu-nbd connect failed; skip"; return 0; }
   sleep 3
@@ -152,16 +159,15 @@ configure_opencore() {  # patch OpenCore config.plist; arg "hide" => HideAuxilia
     local cfg
     cfg=$(sudo find /mnt/oc -iname config.plist 2>/dev/null | head -1)
     if [[ -n "$cfg" ]]; then
-      # Force UEFI>Output>Resolution=1920x1080. Production reuses OSX-KVM's OVMF_VARS-1920x1080.fd,
-      # which pre-bakes that GOP mode; apt's stock OVMF_VARS_4M.fd boots at the default resolution, so
-      # the OCR click-through coordinates (fixed pixel positions) would land on the wrong controls.
-      # Setting it in config.plist reproduces the 1920x1080 framebuffer the OCR machinery expects.
-      sudo HIDE="$hide" python3 - "$cfg" <<'PY' || true
+      # Force the GOP mode that qmp-input.py's click mapping (QMP_W/QMP_H) assumes. Stock apt
+      # OVMF_VARS_4M.fd otherwise boots at OVMF's default resolution, and every OCR-driven click
+      # would then scale off-target against the real framebuffer.
+      sudo HIDE="$hide" RES="${GOP_W}x${GOP_H}" python3 - "$cfg" <<'PY' || true
 import plistlib, os, sys
 p = sys.argv[1]
 d = plistlib.load(open(p, "rb"))
 d.setdefault("Booter", {}).setdefault("Quirks", {})["RequestBootVarRouting"] = True
-d.setdefault("UEFI", {}).setdefault("Output", {})["Resolution"] = "1920x1080"
+d.setdefault("UEFI", {}).setdefault("Output", {})["Resolution"] = os.environ["RES"]
 b = d.setdefault("Misc", {}).setdefault("Boot", {})
 if os.environ.get("HIDE") == "hide":
     b["HideAuxiliary"] = True   # hide EFI/recovery -> only the installed macOS remains

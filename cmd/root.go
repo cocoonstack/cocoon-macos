@@ -22,7 +22,7 @@ func Execute() {
 	ctx := context.Background()
 	logger := log.WithFunc("cmd.Execute")
 	if err := setupLog(ctx); err != nil {
-		logger.Fatalf(ctx, err, "setup log: %v", err)
+		logger.Fatalf(ctx, err, "setup log")
 	}
 	// run() owns the signal context + its deferred cleanup, so os.Exit below
 	// never strands a pending defer (gocritic exitAfterDefer).

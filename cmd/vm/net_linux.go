@@ -85,11 +85,12 @@ func teardownNet(cmd *cobra.Command, r *record) {
 		return
 	}
 	ctx := cliutil.CommandContext(cmd)
+	logger := log.WithFunc("cmd.vm.teardownNet")
 	// warn instead of failing: rm must proceed, but a leaked TAP/netns should leave a trail
 	if provider, err := newProvider(cmd, r); err != nil {
-		log.WithFunc("cmd.vm.teardownNet").Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
+		logger.Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
 	} else if _, err := provider.Delete(ctx, []string{r.VMID}); err != nil {
-		log.WithFunc("cmd.vm.teardownNet").Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
+		logger.Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
 	}
 	// CleanupTAPs runs unconditionally: it removes bt<vmid>-* by name and must not be gated on
 	// newProvider succeeding (rm has no --bridge flag), or an auto-created TAP would leak.

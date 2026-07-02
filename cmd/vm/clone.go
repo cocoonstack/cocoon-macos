@@ -2,7 +2,6 @@ package vm
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -27,23 +26,11 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	if name == "" {
 		name = src + "-clone-" + time.Now().Format("150405")
 	}
-	dir := home.VMDir(cmd, name)
-	if err = os.MkdirAll(dir, 0o750); err != nil {
-		return fmt.Errorf("mkdir vm dir: %w", err)
-	}
-	ctx := home.Ctx(cmd)
-	base, digest, err := resolveBase(cmd, srcRec.Image, name)
+	dir, overlay, ovmfVars, digest, err := scaffoldVM(cmd, name, srcRec.Image, srcRec.OVMFVars, filepath.Base(srcRec.OVMFVars))
 	if err != nil {
 		return err
 	}
-	overlay := filepath.Join(dir, "disk.qcow2")
-	if err = bakeOverlay(ctx, base, overlay); err != nil {
-		return err
-	}
-	ovmfVars := filepath.Join(dir, filepath.Base(srcRec.OVMFVars))
-	if err = utils.ReflinkCopy(ovmfVars, srcRec.OVMFVars); err != nil {
-		return fmt.Errorf("copy OVMF_VARS: %w", err)
-	}
+	ctx := home.Ctx(cmd)
 	r := &record{
 		Name: name, Image: srcRec.Image, ImageDigest: digest, Disk: overlay,
 		OVMFCode: srcRec.OVMFCode, OVMFVars: ovmfVars, CPUs: srcRec.CPUs, Memory: srcRec.Memory,
@@ -79,7 +66,7 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	r.NetMode, _ = cmd.Flags().GetString("net")
 	tapFlag, _ := cmd.Flags().GetString("tap")
 	r.Tap = tapFlag
-	if err = applyNet(cmd, r, tapFlag); err != nil {
+	if err = applyNet(cmd, r); err != nil {
 		return err
 	}
 	if err := saveRec(dir, r); err != nil {

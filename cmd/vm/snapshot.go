@@ -2,7 +2,6 @@ package vm
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -89,7 +88,7 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 // the firmware vars do NOT roll back — only guest disk state does).
 func imagesToSnapshot(r *record) []string {
 	imgs := []string{r.Disk}
-	if strings.HasSuffix(r.OVMFVars, ".qcow2") {
+	if qemu.IsQcow2NVRAM(r.OVMFVars) {
 		imgs = append(imgs, r.OVMFVars)
 	}
 	return imgs

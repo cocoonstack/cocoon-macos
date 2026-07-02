@@ -53,18 +53,8 @@ func newProvider(cmd *cobra.Command, r *record) (network.Network, error) {
 	return nil, fmt.Errorf("unknown --net mode %q (want user|tap|cni|bridge)", r.NetMode)
 }
 
-// prepareNet provisions host-side networking and returns the TAP ifname, the netns path (CNI;
-// "" otherwise) and the guest MAC. user-mode and a pre-created --tap need no provisioning; every
-// other mode auto-creates a TAP via cocoon (the SAME forwarding plane as cocoon's CH/FC VMs).
-func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err error) {
-	switch r.NetMode {
-	case "", netUser:
-		return "", "", r.MAC, nil
-	case netTAP:
-		if r.Tap != "" { // user pre-created the TAP (already on a bridge / cocoon CNI) — use verbatim
-			return r.Tap, "", r.MAC, nil
-		}
-	}
+// provisionNet auto-creates a TAP via cocoon — the SAME forwarding plane as cocoon's CH/FC VMs.
+func provisionNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err error) {
 	provider, err := newProvider(cmd, r)
 	if err != nil {
 		return "", "", "", err
@@ -93,8 +83,12 @@ func teardownNet(cmd *cobra.Command, r *record) {
 	if !r.TapOwned {
 		return
 	}
-	if provider, err := newProvider(cmd, r); err == nil {
-		_, _ = provider.Delete(home.Ctx(cmd), []string{r.VMID})
+	ctx := home.Ctx(cmd)
+	// warn instead of failing: rm must proceed, but a leaked TAP/netns should leave a trail
+	if provider, err := newProvider(cmd, r); err != nil {
+		log.WithFunc("cmd.vm.teardownNet").Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
+	} else if _, err := provider.Delete(ctx, []string{r.VMID}); err != nil {
+		log.WithFunc("cmd.vm.teardownNet").Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
 	}
 	// CleanupTAPs runs unconditionally: it removes bt<vmid>-* by name and must not be gated on
 	// newProvider succeeding (rm has no --bridge flag), or an auto-created TAP would leak.

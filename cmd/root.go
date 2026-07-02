@@ -13,6 +13,7 @@ import (
 
 	"github.com/cocoonstack/cocoon-macos/cmd/image"
 	"github.com/cocoonstack/cocoon-macos/cmd/vm"
+	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon-macos/version"
 )
 
@@ -44,6 +45,8 @@ func run(ctx context.Context) error {
 		SilenceErrors: true, // we log the error ourselves in Execute; don't let cobra double-print it
 	}
 	root.SetVersionTemplate("{{.Version}}")
+	// app-global like cocoon's root-dir: registered once here, inherited by every subcommand
+	root.PersistentFlags().String("state-dir", "", "state root (default $COCOON_MACOS_HOME or "+home.Default+")")
 	root.AddCommand(vm.Command(vm.NewHandler()))
 	root.AddCommand(image.Command(image.NewHandler()))
 	return root.ExecuteContext(ctx)

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/projecteru2/core/log"
 	"howett.net/plist"
 
 	"github.com/cocoonstack/cocoon/utils"
@@ -21,14 +22,15 @@ import (
 // module. The shipped OpenCore runs Automatic=true + Vault=Optional, so Generic is the SMBIOS source
 // and no vault signature rejects the edit.
 func InjectConfig(ctx context.Context, ocPath string, sm *SMBIOS) error {
-	_ = exec.Command("modprobe", "nbd", "max_part=8").Run()
-	nbd, err := freeNBD()
+	_ = exec.CommandContext(ctx, "modprobe", "nbd", "max_part=8").Run()
+	nbd, err := findFreeNBD()
 	if err != nil {
 		return err
 	}
-	if out, cerr := exec.Command("qemu-nbd", "--connect="+nbd, "-f", "qcow2", ocPath).CombinedOutput(); cerr != nil {
+	if out, cerr := exec.CommandContext(ctx, "qemu-nbd", "--connect="+nbd, "-f", "qcow2", ocPath).CombinedOutput(); cerr != nil {
 		return fmt.Errorf("connect qemu-nbd %s (output: %s): %w", nbd, out, cerr)
 	}
+	// cleanup stays on plain exec.Command: it must still run after ctx cancellation
 	defer disconnectNBD(ctx, nbd, ocPath)
 	waitForPart(ctx, nbd)
 	mnt, err := os.MkdirTemp("", "oc-efi-")
@@ -38,7 +40,7 @@ func InjectConfig(ctx context.Context, ocPath string, sm *SMBIOS) error {
 	defer func() { _ = os.RemoveAll(mnt) }()
 	var mountErr error
 	for _, p := range []string{nbd + "p1", nbd + "p2", nbd} {
-		if mountErr = exec.Command("mount", p, mnt).Run(); mountErr == nil {
+		if mountErr = exec.CommandContext(ctx, "mount", p, mnt).Run(); mountErr == nil {
 			break
 		}
 	}
@@ -56,37 +58,34 @@ func waitForPart(ctx context.Context, nbd string) {
 		if _, err := os.Stat(nbd + "p1"); err == nil {
 			return true, nil
 		}
-		_ = exec.Command("partprobe", nbd).Run()
+		_ = exec.CommandContext(ctx, "partprobe", nbd).Run()
 		return false, nil
 	})
 }
 
-// disconnectNBD tears down the qemu-nbd mapping and waits until the qcow2 is no longer held
-// open by any process. qemu-nbd --disconnect releases the device asynchronously and the server
-// pid is not /sys/block/nbdX/pid, so returning early would let the qemu launch race in and fail
-// with "Failed to get shared write lock".
+// disconnectNBD tears down the qemu-nbd mapping and waits until the qcow2 is no longer held.
+// qemu-nbd --disconnect releases the device asynchronously and the server pid is not
+// /sys/block/nbdX/pid, so returning early would let the qemu launch race in and fail with
+// "Failed to get shared write lock".
 func disconnectNBD(ctx context.Context, nbd, ocPath string) {
 	_ = exec.Command("qemu-nbd", "--disconnect", nbd).Run()
-	_ = utils.WaitFor(ctx, 10*time.Second, 100*time.Millisecond, func() (bool, error) {
-		return !fileHeld(ocPath), nil
-	})
+	if err := utils.WaitFor(ctx, 10*time.Second, 100*time.Millisecond, func() (bool, error) {
+		return !isFileHeld(ocPath), nil
+	}); err != nil {
+		// surfaces the failure the godoc warns about instead of leaving no diagnostic trail
+		log.WithFunc("qemu.disconnectNBD").Warnf(ctx, "qcow2 %s still held after nbd disconnect: %v", ocPath, err)
+	}
 }
 
-func fileHeld(path string) bool {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		abs = path
-	}
-	fds, _ := filepath.Glob("/proc/[0-9]*/fd/*")
-	for _, fd := range fds {
-		if tgt, err := os.Readlink(fd); err == nil && tgt == abs {
-			return true
-		}
-	}
-	return false
+// isFileHeld reports whether a qemu-nbd server still has ocPath open, by matching its cmdline
+// (one /proc walk) — cheaper than scanning every process's fd table, and the daemonized server
+// is the only holder to wait out.
+func isFileHeld(ocPath string) bool {
+	pids, err := utils.FindVMMByCmdline("qemu-nbd", ocPath)
+	return err == nil && len(pids) > 0
 }
 
-func freeNBD() (string, error) {
+func findFreeNBD() (string, error) {
 	for i := range 16 {
 		if _, err := os.Stat(fmt.Sprintf("/dev/nbd%d", i)); err != nil {
 			continue

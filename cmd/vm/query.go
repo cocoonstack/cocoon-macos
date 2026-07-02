@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,7 +28,7 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintln(w, "NAME\tSTATE\tCPU\tMEM\tNET\tVNC\tSSH\tIMAGE\tCREATED") //nolint:errcheck
 		for _, r := range recs {
 			fmt.Fprintf(w, "%s\t%s\t%d\t%sM\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck
-				r.Name, vmState(r), r.CPUs, r.Memory, netCol(r),
+				r.Name, vmState(r), r.CPUs, r.Memory, cmp.Or(r.NetMode, netUser),
 				vncCol(r), sshCol(r), r.Image, cli.FormatTime(r.Created))
 		}
 	})
@@ -42,13 +43,22 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 	return cli.OutputJSON(r)
 }
 
-// Console prints the VNC display and SSH command for reaching a VM.
+// Console prints the VNC endpoint and SSH command for reaching a VM ("-" when disabled),
+// deriving both from the same helpers vm list uses so the 5900+display rule lives in one place.
 func (h *Handler) Console(cmd *cobra.Command, args []string) error {
 	r, err := loadRec(home.VMDir(cmd, args[0]))
 	if err != nil {
 		return err
 	}
-	fmt.Printf("VNC 127.0.0.1:590%d   SSH: ssh -p %d cocoon@localhost\n", r.VNCDisp, r.SSHPort)
+	vnc := vncCol(r)
+	if vnc != "-" {
+		vnc = "127.0.0.1:" + vnc
+	}
+	ssh := "-"
+	if r.SSHPort > 0 {
+		ssh = fmt.Sprintf("ssh -p %d cocoon@localhost", r.SSHPort)
+	}
+	fmt.Printf("VNC %s   SSH: %s\n", vnc, ssh)
 	return nil
 }
 
@@ -57,13 +67,6 @@ func vmState(r *record) string {
 		return "running"
 	}
 	return "stopped"
-}
-
-func netCol(r *record) string {
-	if r.NetMode == "" {
-		return "user"
-	}
-	return r.NetMode
 }
 
 func vncCol(r *record) string {

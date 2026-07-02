@@ -31,7 +31,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # setup now bakes a settled image in one job (base pull + offline provision + a full
+    # boot through the ~40min-on-metal first-boot finalization + slim + capture + push),
+    # which on the nested-KVM runner can approach the old 180 ceiling — give it headroom.
+    timeout-minutes: 300
     env:
       STAGE: ${{ github.event.inputs.stage }}
       DISK_SIZE: ${{ github.event.inputs.disk_size }}

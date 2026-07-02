@@ -26,6 +26,26 @@ for d in "$VOL/private/var/db" "$VOL/var/db"; do
 done
 ls -la "$VOL/private/var/db/.AppleSetupDone" 2>/dev/null && echo "OK .AppleSetupDone" || echo "WARN .AppleSetupDone missing"
 
+# 1b) Exclude the Data volume from Spotlight OFFLINE. mds/diskarbitrationd honor a root-level
+# .metadata_never_index at volume-mount time — before any indexing is scheduled — so this closes the
+# race the RunAtLoad `mdutil -a -i off` (step 3) loses: on the heavy first full boot, Spotlight's
+# whole-disk crawl is the single biggest avoidable CPU/disk hog, and mdutil only fires after the
+# storm has already started. The live mdutil calls stay as a harmless fallback.
+touch "$VOL/.metadata_never_index" && echo "OK .metadata_never_index (Spotlight off at mount)"
+
+# 1c) Disable automatic software-update checks OFFLINE so the first boot doesn't spend it phoning home.
+mkdir -p "$VOL/Library/Preferences"
+cat > "$VOL/Library/Preferences/com.apple.SoftwareUpdate.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>AutomaticCheckEnabled</key><false/>
+  <key>AutomaticDownload</key><false/>
+</dict></plist>
+PLIST
+chown 0:0 "$VOL/Library/Preferences/com.apple.SoftwareUpdate.plist"; chmod 644 "$VOL/Library/Preferences/com.apple.SoftwareUpdate.plist"
+echo "OK SoftwareUpdate auto-check disabled"
+
 # 2) create the admin user directly in the volume's dslocal
 U="/Local/Default/Users/$USER_NAME"
 dscl -f "$DS" localhost -create "$U"
@@ -46,6 +66,7 @@ SYS="${VOL% - Data}"   # the installed System volume is the Data volume's siblin
   [ -d "$v/System/Library/User Template" ] && SYS="$v" && break
 done
 echo "=== SYSTEM VOLUME = [$SYS] ==="
+[ -n "$SYS" ] && touch "$SYS/.metadata_never_index" 2>/dev/null || true  # Spotlight off on System vol too
 mkdir -p "$VOL/Users/$USER_NAME"
 if [ -n "$SYS" ]; then
   TPL="$SYS/System/Library/User Template"

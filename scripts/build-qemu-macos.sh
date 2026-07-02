@@ -376,8 +376,34 @@ stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the ins
     sleep 12; screendump "su-03-provision-$(printf '%02d' "$i")"
     kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited"; return 1; }
   done
-  log "provision done; capturing turnkey image -> $GHCR_REPO:$GHCR_TAG"
-  capture_and_push "$GHCR_TAG"   # tahoe:26 = SA-skipped, user 'cocoon', SSH on first boot
+  log "provision done; rebooting into the installed OS to settle its first-boot finalization"
+  mon "quit"; sleep 10
+  [[ -f "$WORKDIR/qemu.pid" ]] && kill "$(cat "$WORKDIR/qemu.pid")" 2>/dev/null || true
+  sleep 3
+  # provisioning ran offline from Recovery, so the installed OS never did its one-time first-full-boot
+  # finalization (kernelcache/dyld rebuild, LaunchServices registration — a ~40min CPU/disk storm).
+  # Boot it here, once, at build time and bake a SETTLED image, so consumers never pay that tax.
+  configure_opencore hide   # installed macOS becomes the sole/default picker entry
+  launch_qemu
+  absorb_finalization_and_capture "$GHCR_TAG"   # tahoe:26 = SA-skipped, user 'cocoon', SSH-ready, settled
+}
+
+# absorb_finalization_and_capture boots the attached MacHDD, waits through the one-time first-full-boot
+# finalization over SSH, bakes the perf recipe, slims free space, cleanly shuts down, and captures+pushes
+# the settled image as $1. Shared by stage_setup (initial bake) and stage_slim (re-slim a published tag).
+absorb_finalization_and_capture() {
+  local tag="$1"
+  boot_macintosh
+  log "waiting for SSH (first full boot runs the one-time 'completing installation' finalization)"
+  # ~40min CPU-pegged even on bare-metal Zen5 (Spotlight now excluded offline, but kernelcache/dyld
+  # rebuild is irreducible); the nested-KVM GHA runner is slower, so budget ~100min.
+  wait_ssh 300 || { log "FATAL: SSH never came up"; return 1; }
+  apply_perf_recipe   # bake the macOS-side perf tweaks into the image before reclaiming/repushing
+  slim_disk
+  log "clean shutdown"
+  gssh 'echo cocoon | sudo -S shutdown -h now' >/dev/null 2>&1 || true
+  sleep 20
+  capture_and_push "$tag"   # convert -c drops the now-zeroed/unmapped stale clusters
 }
 
 picker_size() { stat -f%z "$ARTIFACT_DIR/$1.png" 2>/dev/null || stat -c%s "$ARTIFACT_DIR/$1.png" 2>/dev/null || echo 0; }
@@ -533,20 +559,10 @@ stage_desktop() {  # turn the SSH-ready :26 into a boot-straight-to-desktop + sl
   capture_and_push "$GHCR_TAG"   # tahoe:26 = boots straight to cocoon's desktop, slimmed
 }
 
-stage_slim() {  # SA-INDEPENDENT slim: boot, reclaim stale clusters over SSH, re-push the same tag.
-  # Works on SSH-ready images (:26) regardless of the GUI being stuck at Setup Assistant — slimming
-  # only needs SSH (sudo+dd work at the SA stage) + the MacHDD discard=unmap,detect-zeroes=unmap.
-  boot_macintosh
-  log "waiting for SSH (slim is SA-independent; SSH comes up even with the GUI at Setup Assistant)"
-  # Sequoia's cold first-boot to SSH is slow on the nested-KVM GHA runner (Tahoe verify came up in
-  # ~minutes, but a 12-min budget flaked); give it a generous ~22 min before declaring failure.
-  wait_ssh 66 || { log "FATAL: SSH never came up"; return 1; }
-  apply_perf_recipe   # bake the macOS-side perf tweaks into the image before reclaiming/repushing
-  slim_disk
-  log "clean shutdown"
-  gssh 'echo cocoon | sudo -S shutdown -h now' >/dev/null 2>&1 || true
-  sleep 20
-  capture_and_push "$GHCR_TAG"   # convert -c drops the now-zeroed/unmapped stale clusters
+stage_slim() {  # re-slim an already-published tag: boot, reclaim stale clusters over SSH, re-push.
+  # Now that stage_setup bakes a settled image, this is a re-run knob (e.g. to re-slim after changes);
+  # it shares the same boot-through-finalization + slim + clean-shutdown + capture path.
+  absorb_finalization_and_capture "$GHCR_TAG"
 }
 
 main() {

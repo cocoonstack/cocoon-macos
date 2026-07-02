@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Build a golden macOS qcow2 on an x86 Linux/KVM host and push it to ghcr. Which macOS is set by
 # MACOS_SHORTNAME (+ GHCR_REPO/GHCR_TAG/QCOW2_NAME) — the workflow derives them from its `macos`
-# input: tahoe=26 (the last Intel macOS) or sequoia=15. Leans on kholia/OSX-KVM (multi-version
-# OpenCore): it provides fetch-macOS-v2.py, OVMF, OpenCore.qcow2 and the OSK.
+# input: tahoe=26 (the last Intel macOS) or sequoia=15. Boots the exact firmware stack production
+# uses: the LongQT OpenCore baked by scripts/lib-firmware.sh + apt ovmf (OVMF_*_4M.fd) + a
+# GenuineIntel Skylake-Client-v4 CPU. kholia/OSX-KVM is cloned only for fetch-macOS-v2.py (the
+# Apple recovery download).
 #
 # STAGE controls how far we go (the macOS install has no autounattend, so it is
 # the iterated R&D spike — driven via the Action with retries):
@@ -25,6 +27,11 @@ OSX_KVM_REPO=${OSX_KVM_REPO:-"https://github.com/kholia/OSX-KVM.git"}
 MACOS_SHORTNAME=${MACOS_SHORTNAME:-"tahoe"}   # fetch-macOS-v2.py --shortname (non-interactive; tahoe = macOS 26)
 OSK="ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
 
+OPENCORE_QCOW2="$WORKDIR/OpenCore.qcow2"          # LongQT OpenCore, baked by lib-firmware.sh
+OVMF_CODE=${OVMF_CODE:-/usr/share/OVMF/OVMF_CODE_4M.fd}
+OVMF_VARS_SRC=${OVMF_VARS_SRC:-/usr/share/OVMF/OVMF_VARS_4M.fd}
+OVMF_VARS="$WORKDIR/OVMF_VARS.fd"                 # per-build writable copy of the apt VARS template
+
 QCOW2_NAME=${QCOW2_NAME:-"macos-tahoe-26.qcow2"}
 DISK_SIZE=${DISK_SIZE:-80G}
 CPUS=${CPUS:-4}
@@ -43,6 +50,10 @@ QEMU_PID=""
 mkdir -p "$WORKDIR" "$ARTIFACT_DIR"
 
 log() { printf '[build-macos] %s\n' "$*"; }
+
+# shellcheck source=scripts/lib-firmware.sh
+source "$ROOT_DIR/scripts/lib-firmware.sh"
+
 cleanup() {
   set +e
   [[ -n "$QEMU_PID" ]] && kill "$QEMU_PID" 2>/dev/null
@@ -102,9 +113,14 @@ screendump() {  # screendump <label> — via QMP, not HMP: the monitor `screendu
   fi
 }
 
-setup_osx_kvm() {
+setup_osx_kvm() {  # clone kholia/OSX-KVM — used ONLY for fetch-macOS-v2.py (Apple recovery download)
   [[ -d "$OSX_KVM_DIR" ]] || git clone --depth 1 "$OSX_KVM_REPO" "$OSX_KVM_DIR"
   python3 -m pip install --quiet --user requests click 2>/dev/null || true
+}
+
+prepare_firmware() {  # bake the production LongQT OpenCore + stage a writable OVMF_VARS from apt ovmf
+  [[ -f "$OPENCORE_QCOW2" ]] || bake_opencore_qcow2 "$OPENCORE_QCOW2"
+  [[ -f "$OVMF_VARS" ]] || cp "$OVMF_VARS_SRC" "$OVMF_VARS"
 }
 
 fetch_recovery() {
@@ -116,14 +132,13 @@ fetch_recovery() {
     dmg2img -i BaseSystem.dmg BaseSystem.img
   fi
   [[ -f "$QCOW2_NAME" ]] || qemu-img create -f qcow2 "$QCOW2_NAME" "$DISK_SIZE"
-  [[ -f OVMF_VARS.fd ]] || cp OVMF_VARS-1920x1080.fd OVMF_VARS.fd
 }
 
 configure_opencore() {  # patch OpenCore config.plist; arg "hide" => HideAuxiliary+short Timeout so it auto-boots the installed macOS
   local hide="${1:-}"
-  local oc="$OSX_KVM_DIR/OpenCore/OpenCore.qcow2"
+  local oc="$OPENCORE_QCOW2"
   [[ -f "$oc" ]] || { log "OpenCore.qcow2 missing; skip OC patch"; return 0; }
-  log "patching OpenCore config.plist: RequestBootVarRouting=true + Timeout (qemu-nbd)"
+  log "patching OpenCore config.plist: RequestBootVarRouting + 1920x1080 + Timeout (qemu-nbd)"
   sudo modprobe nbd max_part=8 2>/dev/null || { log "no nbd module; skip OC patch"; return 0; }
   sudo qemu-nbd --connect=/dev/nbd0 -f qcow2 "$oc" 2>/dev/null || { log "qemu-nbd connect failed; skip"; return 0; }
   sleep 3
@@ -137,11 +152,16 @@ configure_opencore() {  # patch OpenCore config.plist; arg "hide" => HideAuxilia
     local cfg
     cfg=$(sudo find /mnt/oc -iname config.plist 2>/dev/null | head -1)
     if [[ -n "$cfg" ]]; then
+      # Force UEFI>Output>Resolution=1920x1080. Production reuses OSX-KVM's OVMF_VARS-1920x1080.fd,
+      # which pre-bakes that GOP mode; apt's stock OVMF_VARS_4M.fd boots at the default resolution, so
+      # the OCR click-through coordinates (fixed pixel positions) would land on the wrong controls.
+      # Setting it in config.plist reproduces the 1920x1080 framebuffer the OCR machinery expects.
       sudo HIDE="$hide" python3 - "$cfg" <<'PY' || true
 import plistlib, os, sys
 p = sys.argv[1]
 d = plistlib.load(open(p, "rb"))
 d.setdefault("Booter", {}).setdefault("Quirks", {})["RequestBootVarRouting"] = True
+d.setdefault("UEFI", {}).setdefault("Output", {})["Resolution"] = "1920x1080"
 b = d.setdefault("Misc", {}).setdefault("Boot", {})
 if os.environ.get("HIDE") == "hide":
     b["HideAuxiliary"] = True   # hide EFI/recovery -> only the installed macOS remains
@@ -166,16 +186,16 @@ launch_qemu() {
   log "launching QEMU headless (VNC 127.0.0.1:590$VNC_DISP, ssh :$SSH_PORT, monitor $MON_SOCK)"
   local args=(
     -enable-kvm -m "$MEMORY"
-    -cpu Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt,check
+    -cpu Skylake-Client-v4,vendor=GenuineIntel,kvm=on
     -machine q35
     -smp "$CPUS",cores=2,sockets=1
     -device qemu-xhci,id=xhci -device usb-kbd,bus=xhci.0 -device usb-tablet,bus=xhci.0
     -device isa-applesmc,osk="$OSK"
-    -drive if=pflash,format=raw,readonly=on,file=OVMF_CODE_4M.fd
-    -drive if=pflash,format=raw,file=OVMF_VARS.fd
+    -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE"
+    -drive if=pflash,format=raw,file="$OVMF_VARS"
     -smbios type=2
     -device ich9-ahci,id=sata
-    -drive id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,file=OpenCore/OpenCore.qcow2
+    -drive id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,file="$OPENCORE_QCOW2"
     -device ide-hd,bus=sata.2,drive=OpenCoreBoot
     -drive id=MacHDD,if=none,file="$QCOW2_NAME",format=qcow2,discard=unmap,detect-zeroes=unmap
     -device ide-hd,bus=sata.4,drive=MacHDD
@@ -312,7 +332,6 @@ pull_image() {  # oras pull $GHCR_REPO:$1 -> $QCOW2_NAME (the boot disk; skips t
   oras pull "$GHCR_REPO:$1" -o .
   [[ -f "$QCOW2_NAME" ]] || { log "FATAL: image $QCOW2_NAME not pulled from :$1"; exit 1; }
   log "image present: $(du -h "$QCOW2_NAME" | cut -f1)"
-  [[ -f OVMF_VARS.fd ]] || cp OVMF_VARS-1920x1080.fd OVMF_VARS.fd
 }
 
 boot_installed() {  # OpenCore picker -> installed macOS (2nd entry, right of EFI) -> Setup Assistant
@@ -521,6 +540,7 @@ stage_slim() {  # SA-INDEPENDENT slim: boot, reclaim stale clusters over SSH, re
 main() {
   require_kvm
   setup_osx_kvm
+  prepare_firmware   # bake LongQT OpenCore + stage OVMF_VARS before any launch/configure_opencore
   case "$STAGE" in
     boot)
       fetch_recovery; launch_qemu; stage_boot ;;

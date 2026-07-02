@@ -131,9 +131,14 @@ where it lands on ghcr (the build script derives `MACOS_SHORTNAME`/`GHCR_REPO`/`
 | `slim` | pull `<repo>:<tag>` → boot → reclaim stale clusters → re-push `<repo>:<tag>` (smaller) |
 | `verify` | pull `<repo>:<tag>` → boot → confirm login + SSH (`cocoon@localhost`) |
 
-Same OSX-KVM (multi-version OpenCore) + the same provision recipe build either OS — only the
-recovery shortname + tag differ. This pipeline is **image-only** (no Go); the CLI end-to-end
-(`vm run` + `--random-smbios`) is exercised on a KVM testbed, keeping image and Go CI separate.
+CI now boots the **exact same firmware stack production uses**: the LongQT OpenCore baked by
+`scripts/lib-firmware.sh` (the same bake `doctor.sh` runs), apt `ovmf` 4M firmware
+(`OVMF_CODE_4M.fd` + `OVMF_VARS_4M.fd`), and the unified `Skylake-Client-v4,vendor=GenuineIntel,kvm=on`
+CPU. One stack everywhere means an image validated in CI boots identically on the Intel/AMD hosts the
+CLI runs on. kholia/OSX-KVM is cloned **only** for `fetch-macOS-v2.py` (the Apple recovery download).
+The same provision recipe builds either OS — only the recovery shortname + tag differ. This pipeline
+is **image-only** (no Go); the CLI end-to-end (`vm run` + `--random-smbios`) is exercised on a KVM
+testbed, keeping image and Go CI separate.
 
 Automation primitives (`scripts/qmp-input.py`): QMP absolute mouse click/move, keyboard
 type/chord, **tesseract+PIL OCR-click and title routing** (drives the macOS GUI installer where

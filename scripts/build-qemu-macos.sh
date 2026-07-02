@@ -395,16 +395,31 @@ stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the ins
 absorb_finalization_and_capture() {
   local tag="$1"
   boot_macintosh
-  log "waiting for SSH (first full boot runs the one-time 'completing installation' finalization)"
-  # ~40min CPU-pegged even on bare-metal Zen5 (Spotlight now excluded offline, but kernelcache/dyld
-  # rebuild is irreducible); the nested-KVM GHA runner is slower, so budget ~100min.
-  wait_ssh 300 || { log "FATAL: SSH never came up"; return 1; }
-  apply_perf_recipe   # bake the macOS-side perf tweaks into the image before reclaiming/repushing
-  slim_disk
-  log "clean shutdown"
-  gssh 'echo cocoon | sudo -S shutdown -h now' >/dev/null 2>&1 || true
-  sleep 20
-  capture_and_push "$tag"   # convert -c drops the now-zeroed/unmapped stale clusters
+  # Settle the one-time first-boot finalization (kernelcache/dyld rebuild) at build time so consumers
+  # don't. macOS 26/15 stops at the Setup Assistant, which blocks BOTH SSH (sshd resets the kex) and
+  # ACPI powerdown — so we can't wait on SSH or shut down cleanly. Instead wait for the guest CPU to
+  # go idle (finalization done), flush, then hard-stop. qemu-nbd check confirms the qcow2 stays
+  # consistent across the hard stop, and the settled overlay boots straight to the SA (no re-run).
+  log "settling first-boot finalization (waiting on CPU idle; SA blocks SSH+ACPI on macOS 26/15)"
+  wait_cpu_idle 200 || log "WARN: CPU never idled in budget; capturing current state anyway"
+  sleep 60   # let macOS flush its last writes to the qcow2 before the hard stop
+  log "hard-stopping the VM (no clean-shutdown path at the SA; qcow2 stays consistent)"
+  mon "quit"; sleep 8
+  [[ -f "$WORKDIR/qemu.pid" ]] && kill "$(cat "$WORKDIR/qemu.pid")" 2>/dev/null || true
+  sleep 3
+  capture_and_push "$tag"   # convert -c compresses the settled image
+}
+
+wait_cpu_idle() {  # block until QEMU's CPU stays low (first-boot finalization finished). arg = max 20s ticks
+  local idle=0 c w
+  for w in $(seq 1 "${1:-200}"); do
+    c=$(top -b -n1 -p "$QEMU_PID" 2>/dev/null | awk -v p="$QEMU_PID" '$1==p{print int($9)}')
+    if [ "${c:-999}" -lt 40 ]; then idle=$((idle + 1)); else idle=0; fi
+    [ "$idle" -ge 3 ] && { log "CPU idle 3x (~$((w * 20))s) — finalization settled"; return 0; }
+    [ $((w % 6)) -eq 0 ] && screendump "settle-$(printf '%03d' "$w")"
+    sleep 20
+  done
+  return 1
 }
 
 picker_size() { stat -f%z "$ARTIFACT_DIR/$1.png" 2>/dev/null || stat -c%s "$ARTIFACT_DIR/$1.png" 2>/dev/null || echo 0; }

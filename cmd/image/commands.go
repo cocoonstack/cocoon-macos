@@ -20,7 +20,7 @@ func Command(h Actions) *cobra.Command {
 
 	pull := &cobra.Command{
 		Use:   "pull REF",
-		Short: "Pull a macOS qcow2 into the store (http(s) URL via cloudimg, or an OCI/ghcr ref via oras)",
+		Short: "Pull a macOS qcow2 into the store (http(s) URL via cloudimg, or an OCI/ghcr ref via oras-go)",
 		Args:  cobra.ExactArgs(1),
 		RunE:  h.Pull,
 	}

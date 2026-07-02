@@ -2,9 +2,6 @@ package image
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -29,7 +26,7 @@ type Handler struct{}
 func NewHandler() *Handler { return &Handler{} }
 
 // Pull fetches IMAGE into the store: an http(s) URL goes straight through cloudimg; an OCI/ghcr ref
-// is pulled as a qcow2 artifact and imported.
+// has its qcow2 layer streamed off the registry (native oras-go) and imported.
 func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	ctx, s, err := home.OpenStore(cmd)
 	if err != nil {
@@ -40,35 +37,23 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	if isURL(ref) {
 		return s.Pull(ctx, ref, force, progress.Nop)
 	}
-	// mirror the URL path's idempotency: skip the multi-GiB oras download when already present
+	// mirror the URL path's idempotency: skip the multi-GiB registry download when already present
 	if !force {
 		if img, ierr := s.Inspect(ctx, ref); ierr == nil && img != nil {
 			log.WithFunc("cmd.image.Pull").Infof(ctx, "image %s already present (use --force to re-pull)", ref)
 			return nil
 		}
 	}
-	// Shell out to the `oras` CLI rather than oras-go: the CLI is the authoritative ghcr transport,
-	// reusing the user's docker credentials and the registry token dance transparently, and oras-go is
-	// not in the dependency tree. Migrating to the oras-go SDK is tracked as tech debt.
-	log.WithFunc("cmd.image.Pull").Debugf(ctx, "pulling OCI artifact %s via the oras CLI", ref)
-	tmp, err := os.MkdirTemp("", "img-pull-")
-	if err != nil {
-		return fmt.Errorf("create temp dir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmp) }()
-	if out, e := exec.CommandContext(ctx, "oras", "pull", ref, "-o", tmp).CombinedOutput(); e != nil {
-		return fmt.Errorf("oras pull %s (output: %s): %w", ref, out, e)
-	}
-	q, err := findQcow2(tmp)
+	// Native OCI transport via oras-go: resolve the manifest, pick the qcow2 layer, and stream the
+	// blob straight into the store. Credentials still come from the user's docker config (public
+	// images pull anonymously), so no external oras binary is needed.
+	log.WithFunc("cmd.image.Pull").Debugf(ctx, "pulling OCI artifact %s via oras-go", ref)
+	rc, err := pullOCILayer(ctx, ref)
 	if err != nil {
 		return err
 	}
-	f, err := os.Open(q)
-	if err != nil {
-		return fmt.Errorf("open pulled qcow2: %w", err)
-	}
-	defer func() { _ = f.Close() }()
-	return s.ImportFromReader(ctx, ref, progress.Nop, f)
+	defer func() { _ = rc.Close() }()
+	return s.ImportFromReader(ctx, ref, progress.Nop, rc)
 }
 
 // List renders stored images as a table (NAME TYPE SIZE DIGEST CREATED), or JSON with -o json.
@@ -133,11 +118,4 @@ func shortDigest(id string) string {
 		return id[:maxLen]
 	}
 	return id
-}
-
-func findQcow2(dir string) (string, error) {
-	if matches, _ := filepath.Glob(filepath.Join(dir, "*.qcow2")); len(matches) > 0 {
-		return matches[0], nil
-	}
-	return "", fmt.Errorf("no .qcow2 in pulled artifact at %s", dir)
 }

@@ -23,7 +23,8 @@ disk image to ghcr; a thin Go CLI clones that image and boots VMs from it.
 - **Image management** (`cocoon-macos image pull|list|inspect|rm`): pulls the golden qcow2 from
   ghcr into a content-addressed local store — cocoon's `cloudimg` backend imported directly — so
   `vm run <ref>` bakes a CoW overlay on the immutable shared base. **qcow2-only** (no OCI image
-  layers; `oras` is just the ghcr transport for the qcow2 blob).
+  layers; the qcow2 blob streams straight off ghcr via the `oras-go` SDK — no external `oras`
+  binary needed anywhere).
 - **Networking** (`--net user|tap|cni|bridge`): user-mode SLIRP + `--ssh-port` hostfwd by default;
   `tap`/`bridge`/`cni` auto-create a host TAP via cocoon's network plane (imported `network/bridge`
   + `network/cni`), so macOS VMs join the **same** bridge/CNI forwarding plane as cocoon's CH/FC

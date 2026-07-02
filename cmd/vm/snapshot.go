@@ -84,12 +84,13 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 }
 
 // imagesToSnapshot lists the qcow2 images that make up a VM snapshot: the disk overlay always,
-// plus OVMF_VARS only if it is qcow2 (raw .fd can't hold internal snapshots, so with a raw NVRAM
-// the firmware vars do NOT roll back — only guest disk state does).
+// the data disks (all qcow2, so they roll back with the OS disk), plus OVMF_VARS only if it is
+// qcow2 (raw .fd can't hold internal snapshots, so with a raw NVRAM the firmware vars do NOT roll
+// back — only guest disk state does).
 func imagesToSnapshot(r *record) []string {
 	imgs := []string{r.Disk}
 	if qemu.IsQcow2NVRAM(r.OVMFVars) {
 		imgs = append(imgs, r.OVMFVars)
 	}
-	return imgs
+	return append(imgs, r.DataDisks...)
 }

@@ -1,6 +1,7 @@
 package qemu
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -84,6 +85,37 @@ func TestArgsDiskTuning(t *testing.T) {
 			strings.Contains(d, "detect-zeroes=unmap")
 	}) {
 		t.Fatalf("MacHDD missing perf tuning: %v", drives)
+	}
+}
+
+func TestArgsDataDisks(t *testing.T) {
+	// four disks exercise the full free-port set; ports skip sata.2 (OpenCoreBoot) and sata.4 (MacHDD)
+	files := []string{"/v/data-a.qcow2", "/v/data-b.qcow2", "/v/data-c.qcow2", "/v/data-d.qcow2"}
+	wantPorts := []int{0, 1, 3, 5}
+	s := Spec{Disk: "/v/d.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/v.fd", CPUs: 2, Memory: "4096", VNCDisp: -1, DataDisks: files}
+	drives := argVals(s.Args(), "-drive")
+	devices := argVals(s.Args(), "-device")
+	for i, f := range files {
+		id := fmt.Sprintf("DataDisk%d", i)
+		// -drive: id/if=none pairing, the file, and the same perf tuning as MacHDD
+		if !slices.ContainsFunc(drives, func(d string) bool {
+			return strings.Contains(d, "id="+id) && strings.Contains(d, "if=none") &&
+				strings.Contains(d, "format=qcow2") && strings.Contains(d, "cache=writeback") &&
+				strings.Contains(d, "aio=io_uring") && strings.Contains(d, "discard=unmap") &&
+				strings.Contains(d, "detect-zeroes=unmap") && strings.Contains(d, "file="+f)
+		}) {
+			t.Errorf("data disk %d drive missing/mistuned: %v", i, drives)
+		}
+		// -device: ide-hd on the expected free SATA port, bound to the matching drive id
+		want := fmt.Sprintf("ide-hd,bus=sata.%d,drive=%s", wantPorts[i], id)
+		if !slices.Contains(devices, want) {
+			t.Errorf("data disk %d device: want %q in %v", i, want, devices)
+		}
+	}
+	// no data disks => no DataDisk drives at all
+	s.DataDisks = nil
+	if slices.ContainsFunc(argVals(s.Args(), "-drive"), func(d string) bool { return strings.Contains(d, "DataDisk") }) {
+		t.Errorf("no data disks must not emit DataDisk drives")
 	}
 }
 

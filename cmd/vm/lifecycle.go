@@ -122,6 +122,11 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	if name == "" {
 		name = "macos-" + time.Now().Format("20060102-150405")
 	}
+	rawDisks, _ := cmd.Flags().GetStringArray("data-disk")
+	diskSpecs, err := parseDataDisks(rawDisks, nil) // fail fast before any scaffolding
+	if err != nil {
+		return nil, err
+	}
 	oc, code, varsTmpl, err := resolveFirmware(cmd)
 	if err != nil {
 		return nil, err
@@ -143,6 +148,9 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 		Name: name, Image: image, ImageDigest: digest, Disk: overlay, OVMFCode: code, OVMFVars: ovmfVars,
 		CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: ssh, VNCPass: vncPass, NetMode: netMode, Tap: tap, Hugepages: huge,
 		VMID: utils.GenerateID(), Created: time.Now().Format(time.RFC3339),
+	}
+	if r.DataDisks, err = createDataDisks(ctx, dir, diskSpecs); err != nil {
+		return nil, err
 	}
 	// OpenCore before networking: a random SMBIOS sets r.MAC = ROM, which prepareNet keeps as the guest MAC.
 	randomSMBIOS, _ := cmd.Flags().GetBool("random-smbios")
@@ -171,6 +179,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, SSHPort: r.SSHPort, MAC: r.MAC, VNCPass: r.VNCPass,
 		Tap:       r.Tap, // set for tap/bridge/cni (a real host TAP); empty => user-mode SLIRP
 		Hugepages: r.Hugepages,
+		DataDisks: r.DataDisks,
 		MonSock:   filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
 	}
 	pidfile := filepath.Join(dir, "qemu.pid")

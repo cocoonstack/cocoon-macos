@@ -26,15 +26,35 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	if name == "" {
 		name = src + "-clone-" + time.Now().Format("150405")
 	}
+	// the clone inherits SRC's data disks by name; extra --data-disk specs must not collide with them
+	// and the combined count still honors the AHCI cap. Parse before scaffolding to fail fast.
+	reserved := make([]string, len(srcRec.DataDisks))
+	for i, p := range srcRec.DataDisks {
+		reserved[i] = dataDiskName(p)
+	}
+	rawDisks, _ := cmd.Flags().GetStringArray("data-disk")
+	diskSpecs, err := parseDataDisks(rawDisks, reserved)
+	if err != nil {
+		return err
+	}
 	dir, overlay, ovmfVars, digest, err := scaffoldVM(cmd, name, srcRec.Image, srcRec.OVMFVars, filepath.Base(srcRec.OVMFVars))
 	if err != nil {
 		return err
 	}
 	ctx := home.Ctx(cmd)
+	copied, err := copyDataDisks(dir, srcRec.DataDisks)
+	if err != nil {
+		return err
+	}
+	newDisks, err := createDataDisks(ctx, dir, diskSpecs)
+	if err != nil {
+		return err
+	}
 	r := &record{
 		Name: name, Image: srcRec.Image, ImageDigest: digest, Disk: overlay,
 		OVMFCode: srcRec.OVMFCode, OVMFVars: ovmfVars, CPUs: srcRec.CPUs, Memory: srcRec.Memory,
-		VMID: utils.GenerateID(), Created: time.Now().Format(time.RFC3339),
+		DataDisks: append(copied, newDisks...),
+		VMID:      utils.GenerateID(), Created: time.Now().Format(time.RFC3339),
 	}
 	if cmd.Flags().Changed("cpus") {
 		r.CPUs, _ = cmd.Flags().GetInt("cpus")

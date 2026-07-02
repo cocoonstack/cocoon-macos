@@ -1,7 +1,7 @@
 // Package qemu builds and launches the qemu-system-x86_64 command for booting
 // macOS (Sequoia 15 / Tahoe 26) via OpenCore on an x86 Linux/KVM host. The argument vector spoofs a
-// GenuineIntel Skylake-Client-v4 + isa-applesmc OSK + OVMF + an OpenCore boot disk; with the LongQT
-// OpenCore EFI it boots identically on Intel and AMD hosts.
+// GenuineIntel Skylake-Client (TSX off, invariant-TSC frequency fed via CPUID) + isa-applesmc OSK +
+// OVMF + an OpenCore boot disk; with the LongQT OpenCore EFI it boots identically on Intel and AMD.
 package qemu
 
 import (
@@ -13,10 +13,19 @@ const (
 	// OSK is the Apple SMC key required for macOS guests (public, from OSX-KVM).
 	OSK = "ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
 
-	// macOSCPU spoofs a GenuineIntel Skylake-Client-v4 — the model the LongQT OpenCore expects, which
-	// boots macOS identically on Intel and AMD hosts (AMD support lives in the OpenCore EFI, not the
-	// -cpu). kvm=on exposes the hypervisor CPUID leaf macOS reads for the invtsc frequency.
-	macOSCPU = "Skylake-Client-v4,vendor=GenuineIntel,kvm=on"
+	// macOSCPU is the -cpu for macOS Sequoia/Tahoe. Every token is load-bearing and MUST NOT be
+	// simplified away — a testbed proved a stripped "Skylake-Client-v4,vendor=GenuineIntel,kvm=on"
+	// makes a fresh image's first boot SPIN FOREVER (the "completing installation" storm never ends):
+	//   -hle,-rtm            disable TSX; the v4 model enables it and macOS spins on TSX under nested KVM
+	//   +invtsc,vmware-cpuid-freq=on  hand macOS the invariant-TSC frequency via CPUID so it skips the
+	//                        self-calibration that spins under an unstable nested-KVM TSC
+	//   vendor=GenuineIntel  macOS refuses to boot on a non-Intel vendor string
+	//   the +flags are perf (pcid/invpcid TLB, tsc-deadline timer, …); most are in the base but are
+	//   affirmed here with check= so a base-model bump can't silently drop them again.
+	// AMD support comes from the LongQT OpenCore EFI, not the -cpu, so this boots on Intel and AMD.
+	macOSCPU = "Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on," +
+		"+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt," +
+		"+pcid,+invpcid,+tsc-deadline,+rdtscp,+xsavec,check"
 
 	// ahciDriveOpts is the shared -drive tuning for every writable macOS AHCI/IDE disk (OS disk +
 	// data disks; macOS has no virtio-blk). io_uring beats the default threads aio backend, and

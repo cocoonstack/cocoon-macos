@@ -44,9 +44,8 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 	}
-	// Native OCI transport via oras-go: resolve the manifest, pick the qcow2 layer, and stream the
-	// blob straight into the store. Credentials still come from the user's docker config (public
-	// images pull anonymously), so no external oras binary is needed.
+	// Credentials come from the user's docker config (public images pull
+	// anonymously), so no external oras binary is needed.
 	logger.Debugf(ctx, "pulling OCI artifact %s via oras-go", ref)
 	rc, err := pullOCILayer(ctx, ref)
 	if err != nil {

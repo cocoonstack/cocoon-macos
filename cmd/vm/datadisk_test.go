@@ -15,12 +15,12 @@ func TestParseDataDisks(t *testing.T) {
 		wantNames []string
 		wantSizes []int64
 	}{
-		{name: "single default name", raw: []string{"size=1G"}, wantNames: []string{"data0"}, wantSizes: []int64{gib}},
+		{name: "single default name", raw: []string{"size=1G"}, wantNames: []string{"data1"}, wantSizes: []int64{gib}},
 		{name: "explicit name", raw: []string{"name=logs,size=512M"}, wantNames: []string{"logs"}, wantSizes: []int64{512 << 20}},
-		{name: "multiple default names count up", raw: []string{"size=1G", "size=2G"}, wantNames: []string{"data0", "data1"}, wantSizes: []int64{gib, 2 * gib}},
-		{name: "auto name skips an explicit one", raw: []string{"name=data0,size=1G", "size=1G"}, wantNames: []string{"data0", "data1"}, wantSizes: []int64{gib, gib}},
-		{name: "size at 16MiB minimum", raw: []string{"size=16M"}, wantNames: []string{"data0"}, wantSizes: []int64{16 << 20}},
-		{name: "four disks is the cap", raw: []string{"size=1G", "size=1G", "size=1G", "size=1G"}, wantNames: []string{"data0", "data1", "data2", "data3"}, wantSizes: []int64{gib, gib, gib, gib}},
+		{name: "multiple default names count up", raw: []string{"size=1G", "size=2G"}, wantNames: []string{"data1", "data2"}, wantSizes: []int64{gib, 2 * gib}},
+		{name: "auto name skips an explicit one", raw: []string{"name=data1,size=1G", "size=1G"}, wantNames: []string{"data1", "data2"}, wantSizes: []int64{gib, gib}},
+		{name: "size at 16MiB minimum", raw: []string{"size=16M"}, wantNames: []string{"data1"}, wantSizes: []int64{16 << 20}},
+		{name: "four disks is the cap", raw: []string{"size=1G", "size=1G", "size=1G", "size=1G"}, wantNames: []string{"data1", "data2", "data3", "data4"}, wantSizes: []int64{gib, gib, gib, gib}},
 
 		{name: "empty spec", raw: []string{""}, wantErr: true},
 		{name: "missing size", raw: []string{"name=foo"}, wantErr: true},
@@ -37,9 +37,9 @@ func TestParseDataDisks(t *testing.T) {
 		{name: "over the four-disk cap", raw: []string{"size=1G", "size=1G", "size=1G", "size=1G", "size=1G"}, wantErr: true},
 
 		// clone reserves the copied disks' names: collisions error and reserved count against the cap
-		{name: "collides with a reserved name", raw: []string{"name=data0,size=1G"}, reserved: []string{"data0"}, wantErr: true},
-		{name: "auto name skips reserved", raw: []string{"size=1G"}, reserved: []string{"data0"}, wantNames: []string{"data1"}, wantSizes: []int64{gib}},
-		{name: "reserved fills the cap", raw: []string{"size=1G", "size=1G"}, reserved: []string{"data0", "data1", "data2"}, wantErr: true},
+		{name: "collides with a reserved name", raw: []string{"name=data1,size=1G"}, reserved: []string{"data1"}, wantErr: true},
+		{name: "auto name skips reserved", raw: []string{"size=1G"}, reserved: []string{"data1"}, wantNames: []string{"data2"}, wantSizes: []int64{gib}},
+		{name: "reserved fills the cap", raw: []string{"size=1G", "size=1G"}, reserved: []string{"data1", "data2", "data3"}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -70,7 +70,7 @@ func TestParseDataDisks(t *testing.T) {
 
 func TestDataDiskNameRoundTrip(t *testing.T) {
 	// clone recovers reserved names from the copied disks' paths, so this must invert dataDiskPath
-	for _, name := range []string{"data0", "logs", "a-b_c"} {
+	for _, name := range []string{"data1", "logs", "a-b_c"} {
 		if got := dataDiskName(dataDiskPath("/vm/dir", name)); got != name {
 			t.Errorf("dataDiskName(dataDiskPath(%q)) = %q", name, got)
 		}

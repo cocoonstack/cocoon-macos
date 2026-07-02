@@ -75,7 +75,7 @@ cocoon-macos vm run <IMAGE> --data-disk size=20G --data-disk name=scratch,size=5
 
 `--data-disk` (on `run`/`create`/`clone`) attaches empty qcow2 data disks. Keys: `size=` (required,
 `units.RAMInBytes` syntax e.g. `20G`, min 16MiB) and `name=` (optional, `[a-z][a-z0-9_-]{0,19}`,
-default `data0`, `data1`, …; duplicates error). **At most 4 disks:** macOS has no virtio-blk driver
+default `data1`, `data2`, … (cocoon's auto-naming); duplicates error). **At most 4 disks:** macOS has no virtio-blk driver
 (the OS disk itself rides AHCI), so data disks take the `ich9-ahci` controller's remaining SATA
 ports — `OpenCoreBoot` (sata.2) and `MacHDD` (sata.4) leave exactly ports 0, 1, 3, 5 free. They
 snapshot/restore and clone with the VM (clone copies SRC's disks and can add more). **Unlike cocoon,

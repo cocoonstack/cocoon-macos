@@ -25,7 +25,7 @@ const (
 )
 
 // parseDataDisks parses every --data-disk arg into a DataDiskSpec, fills default names
-// (data0, data1, …), rejects duplicate names, and caps the total at maxDataDisks. reserved names
+// (data1, data2, … — same 1-based auto-naming as cocoon), rejects duplicate names, and caps the total at maxDataDisks. reserved names
 // (a clone's copied disks) count against both the duplicate check and the AHCI cap.
 func parseDataDisks(raw, reserved []string) ([]types.DataDiskSpec, error) {
 	used := make(map[string]bool, len(reserved))
@@ -50,7 +50,7 @@ func parseDataDisks(raw, reserved []string) ([]types.DataDiskSpec, error) {
 		}
 		used[s.Name] = true
 	}
-	autoIdx := 0
+	autoIdx := 1
 	for i := range specs {
 		if specs[i].Name != "" {
 			continue

@@ -7,17 +7,6 @@ import (
 	"testing"
 )
 
-// argVals returns each token immediately following flag in args.
-func argVals(args []string, flag string) []string {
-	var out []string
-	for i, a := range args {
-		if a == flag && i+1 < len(args) {
-			out = append(out, args[i+1])
-		}
-	}
-	return out
-}
-
 func TestArgsNetModes(t *testing.T) {
 	base := Spec{Name: "m", Disk: "/v/disk.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/code.fd", OVMFVars: "/v/vars.fd", CPUs: 4, Memory: "8192"}
 	tests := []struct {
@@ -153,4 +142,15 @@ func TestArgsCPU(t *testing.T) {
 			t.Fatalf("-cpu missing %s: %s", f, cpu[0])
 		}
 	}
+}
+
+// argVals returns each token immediately following flag in args.
+func argVals(args []string, flag string) []string {
+	var out []string
+	for i, a := range args {
+		if a == flag && i+1 < len(args) {
+			out = append(out, args[i+1])
+		}
+	}
+	return out
 }

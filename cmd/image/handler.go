@@ -36,17 +36,18 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	if cliutil.IsURL(ref) {
 		return s.Pull(ctx, ref, force, progress.Nop)
 	}
+	logger := log.WithFunc("cmd.image.Pull")
 	// mirror the URL path's idempotency: skip the multi-GiB registry download when already present
 	if !force {
 		if img, ierr := s.Inspect(ctx, ref); ierr == nil && img != nil {
-			log.WithFunc("cmd.image.Pull").Infof(ctx, "image %s already present (use --force to re-pull)", ref)
+			logger.Infof(ctx, "image %s already present (use --force to re-pull)", ref)
 			return nil
 		}
 	}
 	// Native OCI transport via oras-go: resolve the manifest, pick the qcow2 layer, and stream the
 	// blob straight into the store. Credentials still come from the user's docker config (public
 	// images pull anonymously), so no external oras binary is needed.
-	log.WithFunc("cmd.image.Pull").Debugf(ctx, "pulling OCI artifact %s via oras-go", ref)
+	logger.Debugf(ctx, "pulling OCI artifact %s via oras-go", ref)
 	rc, err := pullOCILayer(ctx, ref)
 	if err != nil {
 		return err

@@ -17,6 +17,13 @@ const (
 	// boots macOS identically on Intel and AMD hosts (AMD support lives in the OpenCore EFI, not the
 	// -cpu). kvm=on exposes the hypervisor CPUID leaf macOS reads for the invtsc frequency.
 	macOSCPU = "Skylake-Client-v4,vendor=GenuineIntel,kvm=on"
+
+	// ahciDriveOpts is the shared -drive tuning for every writable macOS AHCI/IDE disk (OS disk +
+	// data disks; macOS has no virtio-blk). io_uring beats the default threads aio backend, and
+	// cache=writeback uses host RAM to mask qcow2-overlay + cloud-disk (GCP PD) latency — do NOT use
+	// cache=none, O_DIRECT would hit the network disk on every I/O; discard/detect-zeroes reclaim
+	// freed clusters (the slim stage depends on it).
+	ahciDriveOpts = "if=none,format=qcow2,cache=writeback,aio=io_uring,discard=unmap,detect-zeroes=unmap"
 )
 
 // Spec is the per-VM input for launching a macOS guest from a golden qcow2.
@@ -79,18 +86,13 @@ func (s Spec) Args() []string {
 		"-device", "ich9-ahci,id=sata",
 		"-drive", "id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,aio=io_uring,file=" + s.OpenCore,
 		"-device", "ide-hd,bus=sata.2,drive=OpenCoreBoot",
-		// MacHDD perf: io_uring beats the default threads aio backend; cache=writeback uses host RAM to
-		// mask qcow2-overlay + cloud-disk (GCP PD) latency — do NOT use cache=none here, O_DIRECT would
-		// hit the network disk on every I/O; discard/detect-zeroes reclaim freed clusters (also what the
-		// slim stage depends on). macOS has no virtio-blk driver, so the OS disk stays on AHCI/IDE.
-		"-drive", "id=MacHDD,if=none,format=qcow2,cache=writeback,aio=io_uring,discard=unmap,detect-zeroes=unmap,file=" + s.Disk,
+		"-drive", "id=MacHDD," + ahciDriveOpts + ",file=" + s.Disk,
 		"-device", "ide-hd,bus=sata.4,drive=MacHDD",
 		"-device", "vmware-svga",
 	}
 	a = append(memBackend, a...) // -object must precede the -machine memory-backend reference
-	// data disks: same AHCI/IDE path and perf tuning as MacHDD (macOS has no virtio-blk). They ride
-	// the SATA ports OpenCoreBoot (sata.2) and MacHDD (sata.4) leave free; the count is capped at 4
-	// upstream so the index never runs past dataDiskPorts.
+	// data disks ride the SATA ports OpenCoreBoot (sata.2) and MacHDD (sata.4) leave free; the count
+	// is capped at 4 upstream so the index never runs past dataDiskPorts.
 	dataDiskPorts := []int{0, 1, 3, 5}
 	for i, path := range s.DataDisks {
 		if i >= len(dataDiskPorts) {
@@ -98,7 +100,7 @@ func (s Spec) Args() []string {
 		}
 		id := fmt.Sprintf("DataDisk%d", i)
 		a = append(a,
-			"-drive", fmt.Sprintf("id=%s,if=none,format=qcow2,cache=writeback,aio=io_uring,discard=unmap,detect-zeroes=unmap,file=%s", id, path),
+			"-drive", fmt.Sprintf("id=%s,%s,file=%s", id, ahciDriveOpts, path),
 			"-device", fmt.Sprintf("ide-hd,bus=sata.%d,drive=%s", dataDiskPorts[i], id))
 	}
 	switch {

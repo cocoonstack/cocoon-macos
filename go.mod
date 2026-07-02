@@ -5,9 +5,11 @@ go 1.25.6
 require (
 	github.com/cocoonstack/cocoon v0.4.2
 	github.com/docker/go-units v0.5.0
+	github.com/opencontainers/image-spec v1.1.1
 	github.com/projecteru2/core v0.0.0-20241016125006-ff909eefe04c
 	github.com/spf13/cobra v1.10.2
 	howett.net/plist v1.0.1
+	oras.land/oras-go/v2 v2.6.1
 )
 
 require (
@@ -36,7 +38,7 @@ require (
 	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
-	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	google.golang.org/grpc v1.69.0 // indirect

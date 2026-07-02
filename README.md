@@ -68,7 +68,20 @@ cocoon-macos vm run <IMAGE> --net tap    --tap tap0       …               # us
 cocoon-macos vm snapshot m1 --tag clean
 cocoon-macos vm restore  m1 --tag clean          # --force to stop+restore+relaunch a running VM
 cocoon-macos vm clone    m1 -n m2 --ssh-port 2223 --random-smbios
+
+# extra data disks — repeatable --data-disk with comma-separated key=value (mirrors cocoon's flag):
+cocoon-macos vm run <IMAGE> --data-disk size=20G --data-disk name=scratch,size=50G   # up to 4
 ```
+
+`--data-disk` (on `run`/`create`/`clone`) attaches empty qcow2 data disks. Keys: `size=` (required,
+`units.RAMInBytes` syntax e.g. `20G`, min 16MiB) and `name=` (optional, `[a-z][a-z0-9_-]{0,19}`,
+default `data0`, `data1`, …; duplicates error). **At most 4 disks:** macOS has no virtio-blk driver
+(the OS disk itself rides AHCI), so data disks take the `ich9-ahci` controller's remaining SATA
+ports — `OpenCoreBoot` (sata.2) and `MacHDD` (sata.4) leave exactly ports 0, 1, 3, 5 free. They
+snapshot/restore and clone with the VM (clone copies SRC's disks and can add more). **Unlike cocoon,
+`fstype=`/`mount=`/`directio=` are rejected**: a macOS guest has no cloud-init/agent to partition,
+format, or mount the disk — it is attached raw, so **format it in the guest** (Disk Utility or
+`diskutil`).
 
 `vm run` does: `qemu-img create -b <golden> overlay.qcow2` (instant CoW clone) → copy a
 per-VM `OVMF_VARS` → launch `qemu-system-x86_64` (recipe in `qemu/launch.go`: a `Skylake-Client-v4`

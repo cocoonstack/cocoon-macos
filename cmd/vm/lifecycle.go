@@ -10,6 +10,7 @@ import (
 	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
 
+	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/utils"
 
 	"github.com/cocoonstack/cocoon-macos/home"
@@ -43,7 +44,7 @@ func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 // Start boots one or more previously-created VMs, reusing each persisted TAP/netns
 // across stop/start (only rm tears those down).
 func (h *Handler) Start(cmd *cobra.Command, args []string) error {
-	ctx := home.Ctx(cmd)
+	ctx := cliutil.CommandContext(cmd)
 	for _, n := range args {
 		dir := home.VMDir(cmd, n)
 		if err := withVMLock(ctx, dir, func() error {
@@ -66,7 +67,7 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 // Stop terminates one or more running VMs. --force skips the ACPI grace window (immediate SIGKILL).
 func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 	grace := graceFromFlags(cmd)
-	ctx := home.Ctx(cmd)
+	ctx := cliutil.CommandContext(cmd)
 	for _, n := range args {
 		dir := home.VMDir(cmd, n)
 		if err := withVMLock(ctx, dir, func() error {
@@ -90,7 +91,7 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 // (immediate SIGKILL), which also reaps a wedged qemu.
 func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 	grace := graceFromFlags(cmd)
-	ctx := home.Ctx(cmd)
+	ctx := cliutil.CommandContext(cmd)
 	for _, n := range args {
 		dir := home.VMDir(cmd, n)
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
@@ -135,7 +136,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	if err != nil {
 		return nil, err
 	}
-	ctx := home.Ctx(cmd)
+	ctx := cliutil.CommandContext(cmd)
 	cpus, _ := cmd.Flags().GetInt("cpus")
 	mem, _ := cmd.Flags().GetString("memory")
 	vnc, _ := cmd.Flags().GetInt("vnc")
@@ -165,7 +166,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 
 // launch boots qemu for the record's spec, records the PID, and applies the VNC password (if any).
 func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
-	ctx := home.Ctx(cmd)
+	ctx := cliutil.CommandContext(cmd)
 	logger := log.WithFunc("cmd.vm.launch")
 	if hostIsAMD() {
 		// macOS reads MSRs an AMD host lacks; without kvm.ignore_msrs KVM injects #GP. Best-effort,

@@ -2,16 +2,15 @@ package image
 
 import (
 	"fmt"
-	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
 
+	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/progress"
 
-	"github.com/cocoonstack/cocoon-macos/cli"
 	"github.com/cocoonstack/cocoon-macos/home"
 )
 
@@ -34,7 +33,7 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	}
 	ref := args[0]
 	force, _ := cmd.Flags().GetBool("force")
-	if isURL(ref) {
+	if cliutil.IsURL(ref) {
 		return s.Pull(ctx, ref, force, progress.Nop)
 	}
 	// mirror the URL path's idempotency: skip the multi-GiB registry download when already present
@@ -66,11 +65,11 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	return cli.OutputFormatted(cmd, imgs, func(w *tabwriter.Writer) {
+	return cliutil.OutputFormatted(cmd, imgs, func(w *tabwriter.Writer) {
 		fmt.Fprintln(w, "NAME\tTYPE\tSIZE\tDIGEST\tCREATED") //nolint:errcheck
 		for _, img := range imgs {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck
-				img.Name, img.Type, cli.FormatSize(img.Size),
+				img.Name, img.Type, cliutil.FormatSize(img.Size),
 				shortDigest(img.ID), img.CreatedAt.Local().Format(time.DateTime))
 		}
 	})
@@ -89,7 +88,7 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 	if img == nil {
 		return fmt.Errorf("image not found: %s", args[0])
 	}
-	return cli.OutputJSON(img)
+	return cliutil.OutputJSON(img)
 }
 
 // RM deletes one or more images from the store, printing each removed ref.
@@ -106,10 +105,6 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 		fmt.Println(d)
 	}
 	return nil
-}
-
-func isURL(s string) bool {
-	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
 func shortDigest(id string) string {

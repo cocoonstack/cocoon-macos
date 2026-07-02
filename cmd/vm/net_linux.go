@@ -13,6 +13,7 @@ import (
 	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
 
+	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/config"
 	"github.com/cocoonstack/cocoon/network"
 	"github.com/cocoonstack/cocoon/network/bridge"
@@ -59,7 +60,7 @@ func provisionNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err er
 	if err != nil {
 		return "", "", "", err
 	}
-	ctx := home.Ctx(cmd)
+	ctx := cliutil.CommandContext(cmd)
 	// CPU=1 => NetNumQueues yields a single-queue TAP matching QEMU's single-queue -netdev tap,ifname=
 	vmCfg := &types.VMConfig{Config: types.Config{CPU: 1}, Name: r.Name}
 	nsPath, err := provider.Prepare(ctx, r.VMID, vmCfg)
@@ -83,7 +84,7 @@ func teardownNet(cmd *cobra.Command, r *record) {
 	if !r.TapOwned {
 		return
 	}
-	ctx := home.Ctx(cmd)
+	ctx := cliutil.CommandContext(cmd)
 	// warn instead of failing: rm must proceed, but a leaked TAP/netns should leave a trail
 	if provider, err := newProvider(cmd, r); err != nil {
 		log.WithFunc("cmd.vm.teardownNet").Warnf(ctx, "teardown network for %s: %v", r.VMID, err)

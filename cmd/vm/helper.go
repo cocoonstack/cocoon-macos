@@ -13,8 +13,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon/config"
-	"github.com/cocoonstack/cocoon/images/cloudimg"
+	"github.com/cocoonstack/cocoon/cmd/cliutil"
+	"github.com/cocoonstack/cocoon/images"
 	"github.com/cocoonstack/cocoon/lock/flock"
 	"github.com/cocoonstack/cocoon/types"
 	"github.com/cocoonstack/cocoon/utils"
@@ -74,7 +74,7 @@ func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir,
 		return "", "", "", "", err
 	}
 	overlay = filepath.Join(dir, "disk.qcow2")
-	if err = bakeOverlay(home.Ctx(cmd), base, overlay); err != nil {
+	if err = bakeOverlay(cliutil.CommandContext(cmd), base, overlay); err != nil {
 		return "", "", "", "", err
 	}
 	ovmfVars = filepath.Join(dir, varsName)
@@ -174,7 +174,7 @@ func resolveBase(cmd *cobra.Command, image, name string) (string, string, error)
 // UEFI firmware exists (it targets cloud-hypervisor). cocoon-macos boots via OVMF + OpenCore and
 // DISCARDS that BootConfig, so the file is never read — it only unblocks Config's validation.
 func ensureCloudimgFirmware(cmd *cobra.Command) {
-	fw := cloudimg.NewConfig(&config.Config{RootDir: home.Dir(cmd)}).FirmwarePath()
+	fw := images.FirmwarePath(home.Dir(cmd))
 	if utils.ValidFile(fw) {
 		return
 	}

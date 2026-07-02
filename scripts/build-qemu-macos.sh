@@ -332,19 +332,46 @@ capture_and_push() {  # stop QEMU, compress the installed macOS qcow2, push it t
   fi
 }
 
-pull_image() {  # oras pull $GHCR_REPO:$1 -> $QCOW2_NAME (the boot disk; skips the ~50min install)
+pull_image() {  # fetch $GHCR_REPO:$1 -> $QCOW2_NAME (the boot disk; skips the ~50min install)
   cd "$OSX_KVM_DIR"
-  log "pulling image $GHCR_REPO:$1"
-  # retry: ghcr streams multi-GB base blobs over HTTP/2 and intermittently drops them with
-  # PROTOCOL_ERROR/stream errors, which is transient — a fresh pull almost always succeeds.
-  local attempt
-  for attempt in 1 2 3; do
-    oras pull "$GHCR_REPO:$1" -o . && break
-    log "oras pull attempt $attempt failed; retrying in $((attempt * 10))s"
-    sleep $((attempt * 10))
+  local tag="$1" repo="${GHCR_REPO#ghcr.io/}"
+  log "pulling image $GHCR_REPO:$tag via resumable aria2"
+  # oras pull streams the whole multi-GB blob over one HTTP/2 connection, which ghcr drops with
+  # PROTOCOL_ERROR partway through (and oras leaves the partial file behind, which the old existence
+  # check happily accepted -> corrupt qcow2). Instead resolve the qcow2 layer, follow ghcr's 307 to
+  # the presigned blob URL, and aria2 it with 8 connections + resume; the presigned URL expires ~10min
+  # so re-resolve each round until the file reaches the manifest's declared size.
+  local tok dig size api loc i cur
+  tok=$(ghcr_token "$repo")
+  read -r dig size < <(curl -fsSL -H "Authorization: Bearer $tok" \
+    -H "Accept: application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json" \
+    "https://ghcr.io/v2/${repo}/manifests/${tag}" | python3 -c '
+import sys, json
+m = json.load(sys.stdin)
+ls = [l for l in m["layers"] if l.get("annotations", {}).get("org.opencontainers.image.title", "").endswith(".qcow2")] or m["layers"]
+l = max(ls, key=lambda x: x["size"])
+print(l["digest"], l["size"])')
+  [[ -n "$dig" && -n "$size" ]] || { log "FATAL: could not resolve qcow2 layer for :$tag"; exit 1; }
+  api="https://ghcr.io/v2/${repo}/blobs/${dig}"
+  rm -f "$QCOW2_NAME" "$QCOW2_NAME.aria2"
+  for i in $(seq 1 40); do
+    cur=$(stat -c%s "$QCOW2_NAME" 2>/dev/null || echo 0)
+    [[ "$cur" -ge "$size" && ! -f "$QCOW2_NAME.aria2" ]] && break
+    tok=$(ghcr_token "$repo")
+    loc=$(curl -sD - -o /dev/null -H "Authorization: Bearer $tok" "$api" | tr -d '\r' | awk -F': ' 'tolower($1)=="location"{print $2}')
+    [[ -z "$loc" ]] && { sleep 5; continue; }
+    aria2c -c -x8 -s8 --file-allocation=none --console-log-level=warn --summary-interval=0 -o "$QCOW2_NAME" "$loc" >/dev/null 2>&1 || true
+    log "pull $QCOW2_NAME: $(($(stat -c%s "$QCOW2_NAME" 2>/dev/null || echo 0) / 1024 / 1024))/$((size / 1024 / 1024))MB"
   done
-  [[ -f "$QCOW2_NAME" ]] || { log "FATAL: image $QCOW2_NAME not pulled from :$1 after 3 attempts"; exit 1; }
-  log "image present: $(du -h "$QCOW2_NAME" | cut -f1)"
+  cur=$(stat -c%s "$QCOW2_NAME" 2>/dev/null || echo 0)
+  [[ "$cur" -ge "$size" ]] || { log "FATAL: $QCOW2_NAME incomplete ($cur/$size) after aria2"; exit 1; }
+  qemu-img check "$QCOW2_NAME" >/dev/null 2>&1 || { log "FATAL: $QCOW2_NAME failed qemu-img check (corrupt)"; exit 1; }
+  log "image present + verified: $(du -h "$QCOW2_NAME" | cut -f1)"
+}
+
+ghcr_token() {  # anonymous pull token for a ghcr repo path (public images); CI's GITHUB_TOKEN also works
+  curl -fsSL "https://ghcr.io/token?service=ghcr.io&scope=repository:${1}:pull" |
+    python3 -c 'import sys, json; print(json.load(sys.stdin)["token"])'
 }
 
 boot_installed() {  # OpenCore picker -> installed macOS (2nd entry, right of EFI) -> Setup Assistant

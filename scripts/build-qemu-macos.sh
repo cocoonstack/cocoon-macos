@@ -331,8 +331,15 @@ capture_and_push() {  # stop QEMU, compress the installed macOS qcow2, push it t
 pull_image() {  # oras pull $GHCR_REPO:$1 -> $QCOW2_NAME (the boot disk; skips the ~50min install)
   cd "$OSX_KVM_DIR"
   log "pulling image $GHCR_REPO:$1"
-  oras pull "$GHCR_REPO:$1" -o .
-  [[ -f "$QCOW2_NAME" ]] || { log "FATAL: image $QCOW2_NAME not pulled from :$1"; exit 1; }
+  # retry: ghcr streams multi-GB base blobs over HTTP/2 and intermittently drops them with
+  # PROTOCOL_ERROR/stream errors, which is transient — a fresh pull almost always succeeds.
+  local attempt
+  for attempt in 1 2 3; do
+    oras pull "$GHCR_REPO:$1" -o . && break
+    log "oras pull attempt $attempt failed; retrying in $((attempt * 10))s"
+    sleep $((attempt * 10))
+  done
+  [[ -f "$QCOW2_NAME" ]] || { log "FATAL: image $QCOW2_NAME not pulled from :$1 after 3 attempts"; exit 1; }
   log "image present: $(du -h "$QCOW2_NAME" | cut -f1)"
 }
 

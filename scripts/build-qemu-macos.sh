@@ -450,7 +450,7 @@ wait_cpu_idle() {  # wait out the first-boot finalization. arg = max 20s ticks f
   # Two phases, because right after reboot the VM sits at the OpenCore picker / early boot with LOW
   # CPU — a naive "idle" check fires there in ~60s and captures a NOT-finalized image. So first wait
   # for finalization to RAMP UP (CPU goes high), only then wait for it to settle back down.
-  local w c ramped=0 stable=0 prev="" cur
+  local w c ramped=0
   log "phase 1: waiting for finalization to ramp up (CPU high)"
   for w in $(seq 1 30); do   # ~10min for boot -> finalization to start
     c=$(qemu_cpu)
@@ -460,17 +460,18 @@ wait_cpu_idle() {  # wait out the first-boot finalization. arg = max 20s ticks f
   # never ramping means the installed OS never started its first-boot work (wrong boot target / stuck
   # picker) — fail rather than fall through, which would instantly "settle" on the idle VM.
   [ "$ramped" -eq 1 ] || { log "finalization never ramped in 10min (VM didn't boot the installed OS)"; return 1; }
-  # Phase 2 gates on SCREEN STABILITY, not host CPU%. Under nested KVM the QEMU vCPU thread keeps
-  # spinning (TSC/timer livelock) long after the guest has finished and gone static at the SA, so
-  # qemu_cpu never drops below any threshold — but the framebuffer stops changing the moment
-  # finalization is done. Declare settled once consecutive screendumps are byte-identical.
-  log "phase 2: waiting for the screen to stabilize (finalization done)"
+  # Phase 2 waits until the guest REACHES the Setup Assistant (finalization done), detected by OCR.
+  # Neither host CPU% nor screen-stability is reliable: under nested KVM the QEMU vCPU thread spins
+  # (TSC/timer livelock) so CPU never idles, and the live menu-bar clock keeps the framebuffer
+  # changing so consecutive frames are rarely identical. But the SA's "Country or Region" pane is a
+  # definitive "finalization is complete" marker — OCR it directly.
+  log "phase 2: waiting to reach the Setup Assistant (finalization done)"
   for w in $(seq 1 "${1:-90}"); do   # ~30min ceiling
     screendump "settle-$(printf '%03d' "$w")"
-    cur=$(md5sum "$ARTIFACT_DIR/settle-$(printf '%03d' "$w").png" 2>/dev/null | awk '{print $1}')
-    if [ -n "$cur" ] && [ "$cur" = "$prev" ]; then stable=$((stable + 1)); else stable=0; fi
-    prev="$cur"
-    [ "$stable" -ge 3 ] && { log "screen stable 4x (~$((w * 20))s into phase 2) — finalization settled"; return 0; }
+    if ocrtext | grep -qiE "Country or Region|Select Your|Migration Assistant|Sign In with|Welcome to"; then
+      log "reached Setup Assistant (~$((w * 20))s into phase 2) — finalization settled"
+      return 0
+    fi
     sleep 20
   done
   return 1

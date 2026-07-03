@@ -10,9 +10,12 @@ const (
 	qemuBinary      = "qemu-system-x86_64"
 	stopGracePeriod = 10 * time.Second
 
-	// --net modes handled on every platform (bridge/cni are Linux-only, see net_linux.go).
-	netUser = "user"
-	netTAP  = "tap"
+	// --net modes; bridge/cni provisioning is Linux-only (see net_linux.go) but the names are
+	// needed cross-platform for flag validation.
+	netUser   = "user"
+	netTAP    = "tap"
+	netBridge = "bridge"
+	netCNI    = "cni"
 )
 
 var _ Actions = (*Handler)(nil)

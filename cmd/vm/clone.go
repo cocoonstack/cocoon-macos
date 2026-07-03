@@ -27,6 +27,12 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	if name == "" {
 		name = src + "-clone-" + time.Now().Format("150405")
 	}
+	netMode, _ := cmd.Flags().GetString("net")
+	vnc, _ := cmd.Flags().GetInt("vnc")
+	vncPass, _ := cmd.Flags().GetString("vnc-password")
+	if netMode == netCNI && vnc >= 0 && vncPass == "" { // same pre-scaffold check as create
+		return errCNIVNCPassRequired
+	}
 	// the clone inherits SRC's data disks by name; extra --data-disk specs must not collide with them
 	// and the combined count still honors the AHCI cap. Parse before scaffolding to fail fast.
 	reserved := make([]string, len(srcRec.DataDisks))
@@ -67,9 +73,9 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	if cmd.Flags().Changed("hugepages") {
 		r.Hugepages, _ = cmd.Flags().GetBool("hugepages")
 	}
-	r.VNCDisp, _ = cmd.Flags().GetInt("vnc")
+	r.VNCDisp = vnc
 	r.SSHPort, _ = cmd.Flags().GetInt("ssh-port")
-	r.VNCPass, _ = cmd.Flags().GetString("vnc-password")
+	r.VNCPass = vncPass
 	// fresh identity when SRC has one or --random-smbios (cold boot re-reads PlatformInfo from the overlay)
 	randomSMBIOS, _ := cmd.Flags().GetBool("random-smbios")
 	freshIdentity := randomSMBIOS || srcRec.SMBIOS != nil
@@ -84,7 +90,7 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	if !freshIdentity {
 		r.MAC = srcRec.MAC // prepareOpenCore only sets a fresh MAC for fresh identities
 	}
-	r.NetMode, _ = cmd.Flags().GetString("net")
+	r.NetMode = netMode
 	tapFlag, _ := cmd.Flags().GetString("tap")
 	r.Tap = tapFlag
 	if err = applyNet(cmd, r); err != nil {

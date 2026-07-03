@@ -2,6 +2,7 @@ package vm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -24,6 +25,10 @@ const (
 	vncProxyOp  = "_vnc-proxy"
 	vncBasePort = 5900
 )
+
+// Unlike the loopback bind of the other net modes, the CNI proxy listens on all host interfaces —
+// never expose that unauthenticated.
+var errCNIVNCPassRequired = errors.New("--vnc with --net cni serves VNC on a host port reachable off-box; --vnc-password is required")
 
 // vncProxyCommand is the hidden re-exec target that runs the forwarder for its lifetime, accepting
 // on the TCP listener inherited as fd 3 (bound by the parent so bind errors fail the launch).

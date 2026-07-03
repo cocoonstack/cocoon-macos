@@ -23,12 +23,6 @@ import (
 	"github.com/cocoonstack/cocoon-macos/home"
 )
 
-// --net modes available only on Linux (cocoon's bridge/CNI network plane).
-const (
-	netBridge = "bridge"
-	netCNI    = "cni"
-)
-
 // newProvider builds the cocoon host-side network provider for r.NetMode. "tap"/"bridge" both
 // use the bridge backend (QEMU -netdev tap,ifname= opens the device in the host netns, so the
 // TAP must be a host-side bridge port); "cni" uses the CNI backend (TAP lives inside a netns).

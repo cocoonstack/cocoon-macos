@@ -2,7 +2,6 @@ package vm
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,9 +35,11 @@ func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if err := h.launch(cmd, home.VMDir(cmd, r.Name), r); err != nil {
-		// only the create path cleans up its own fresh TAP/netns: a restart failure must never
-		// tear down the persisted network a stopped VM will reuse
+		// run is an atomic create+boot: on failure remove everything it just made — a leftover
+		// record would point at the torn-down netns/TAP and brick retries ("already exists",
+		// un-startable). Restart failures (vm start) must NOT do this: their network is persisted.
 		teardownNet(cmd, r)
+		_ = os.RemoveAll(home.VMDir(cmd, r.Name))
 		return err
 	}
 	fmt.Printf("%s (pid %d)\n", r.Name, r.PID)
@@ -138,6 +139,12 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	if err != nil {
 		return nil, err
 	}
+	vnc, _ := cmd.Flags().GetInt("vnc")
+	vncPass, _ := cmd.Flags().GetString("vnc-password")
+	netMode, _ := cmd.Flags().GetString("net")
+	if netMode == netCNI && vnc >= 0 && vncPass == "" { // fail before scaffolding leaves a half-made VM
+		return nil, errCNIVNCPassRequired
+	}
 	oc, code, varsTmpl, err := resolveFirmware(cmd)
 	if err != nil {
 		return nil, err
@@ -149,10 +156,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	ctx := cliutil.CommandContext(cmd)
 	cpus, _ := cmd.Flags().GetInt("cpus")
 	mem, _ := cmd.Flags().GetString("memory")
-	vnc, _ := cmd.Flags().GetInt("vnc")
 	ssh, _ := cmd.Flags().GetInt("ssh-port")
-	vncPass, _ := cmd.Flags().GetString("vnc-password")
-	netMode, _ := cmd.Flags().GetString("net")
 	tap, _ := cmd.Flags().GetString("tap")
 	huge, _ := cmd.Flags().GetBool("hugepages")
 	r := &record{
@@ -179,9 +183,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	ctx := cliutil.CommandContext(cmd)
 	logger := log.WithFunc("cmd.vm.launch")
 	if r.Netns != "" && r.VNCDisp >= 0 && r.VNCPass == "" {
-		// unlike the loopback bind of the other net modes, the CNI proxy listens on all host
-		// interfaces — never expose that unauthenticated
-		return errors.New("--vnc with --net cni serves VNC on a host port reachable off-box; --vnc-password is required")
+		return errCNIVNCPassRequired
 	}
 	if hostIsAMD() {
 		// macOS reads MSRs an AMD host lacks; without kvm.ignore_msrs KVM injects #GP. Best-effort,
@@ -221,7 +223,10 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	}
 	if r.VNCPass != "" {
 		if err := setVNCPassword(ctx, spec.MonSock, r.VNCPass); err != nil {
-			logger.Warnf(ctx, "set vnc password: %v", err)
+			// qemu keeps password=on with no password set, so every VNC auth would fail —
+			// reporting success here would hand out a dead entry point
+			terminate(ctx, r, 0)
+			return fmt.Errorf("set vnc password: %w", err)
 		}
 	}
 	if spec.VNCSock != "" {

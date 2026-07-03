@@ -143,9 +143,18 @@ p = sys.argv[1]
 d = plistlib.load(open(p, "rb"))
 d.setdefault("Booter", {}).setdefault("Quirks", {})["RequestBootVarRouting"] = True
 b = d.setdefault("Misc", {}).setdefault("Boot", {})
-if os.environ.get("HIDE") == "hide":
+mode = os.environ.get("HIDE")
+if mode == "hide":
     b["HideAuxiliary"] = True   # hide EFI/recovery -> only the installed macOS remains
     b["Timeout"] = 5            # auto-boot it (no keypress needed)
+elif mode == "recovery":
+    # setup must reach the Recovery entry to provision. The stock short Timeout auto-booted the
+    # installed macOS before any keypress landed; force a STABLE picker (Timeout=0) with all entries
+    # shown so stage_setup can select the Recovery (one 'right' from the default) — verified on a
+    # testbed that arrow keys work once the picker isn't racing an auto-boot.
+    b["HideAuxiliary"] = False
+    b["ShowPicker"] = True
+    b["Timeout"] = 0
 else:
     b["Timeout"] = 8
 plistlib.dump(d, open(p, "wb"))
@@ -378,36 +387,25 @@ boot_installed() {  # OpenCore picker -> installed macOS (2nd entry, right of EF
 PROVISION_URL="https://raw.githubusercontent.com/cocoonstack/cocoon-macos/master/scripts/provision-macos.sh"
 
 stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the installed volume (skip GUI Setup Assistant)
-  sleep 75
-  screendump "su-00-picker"
-  # Boot macOS Base System (Recovery) to provision. A bare "right + ret" broke once the completed
-  # install added a "Macintosh" entry to the picker (selection landed on the wrong entry, provision
-  # never ran). Re-home to the leftmost entry (EFI) with several "left", step right once to Base
-  # System — deterministic regardless of drift — then VERIFY via OCR that Recovery actually loaded,
-  # retrying a few times.
-  # Boot "macOS Base System" (Recovery) by MOUSE double-click, not arrow keys: OpenCanopy ignores the
-  # QEMU-monitor arrow scancodes (they left selection on the default installed "Macintosh", so ret
-  # booted the OS into its Setup Assistant instead of Recovery), but the picker takes mouse. OCR-locate
-  # the "Base System" entry and double-click it; double-click the label then the icon above it, then
-  # verify Recovery actually loaded, retrying.
-  log "booting macOS Base System (recovery) via mouse double-click; verifying + retrying"
-  local tries n reached="" txt
-  for tries in 1 2 3 4 5 6; do
-    python3 "$QMP_PY" "$QMP_SOCK" ocrdclick Base 0 2>&1 | sed 's/^/[pick] /' || true
-    sleep 3
-    python3 "$QMP_PY" "$QMP_SOCK" ocrdclick Base -70 2>&1 | sed 's/^/[pick] /' || true
-    for n in 1 2 3 4; do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + n * 25)) 400 2>/dev/null || true; sleep 20; done
+  # configure_opencore recovery made the picker STABLE (Timeout=0, all entries shown). The Recovery
+  # entry is immediately right of the default (kholia: EFI -> macOS Base System; testbed: Macintosh ->
+  # Recovery), so one 'right' selects it and ret boots it. If that mis-boots the installed OS (wrong
+  # count on some layout), system_reset and step one more 'right' before retrying.
+  local tries n txt reached="" steps=1
+  for tries in 1 2 3 4; do
+    sleep 75   # stable picker up (or re-up after a system_reset)
+    screendump "su-00-picker-$tries"
+    for n in $(seq 1 "$steps"); do mon "sendkey right"; sleep 1; done
+    mon "sendkey ret"
+    for n in 1 2 3 4 5; do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + n * 25)) 400 2>/dev/null || true; sleep 20; done
     screendump "su-01-recovery-$tries"
     txt="$(ocrtext 2>/dev/null)"
-    if printf '%s' "$txt" | grep -qiE "Reinstall|Disk Utility|Restore From|Time Machine|Recovery|Utilities"; then
-      log "reached Recovery on try $tries"; reached=1; break
-    fi
     if printf '%s' "$txt" | grep -qiE "Country or Region|Migration Assistant|Select Your|Welcome to Mac"; then
-      log "try $tries: mis-booted the installed OS (Setup Assistant) — resetting to the picker"
-      mon "system_reset"; sleep 75
-    else
-      log "try $tries: not in Recovery yet (still at picker?), retrying"
+      log "try $tries (right x$steps): mis-booted the installed OS — reset + one more 'right'"
+      steps=$((steps + 1)); mon "system_reset"; continue
     fi
+    # not the OS SA — assume Recovery (its window OCRs poorly); the PROVISION DONE gate below confirms.
+    log "try $tries (right x$steps): booted a non-OS entry, proceeding to provision"; reached=1; break
   done
   [ -n "$reached" ] || { log "FATAL: could not reach Recovery to provision the image"; return 1; }
   log "opening Terminal (Shift-Cmd-T) + running provision script via curl|bash"
@@ -610,7 +608,7 @@ main() {
     install)
       fetch_recovery; configure_opencore; launch_qemu; stage_install ;;
     setup)
-      pull_image "$GHCR_TAG-base"; fetch_recovery; launch_qemu; stage_setup ;;
+      pull_image "$GHCR_TAG-base"; fetch_recovery; configure_opencore recovery; launch_qemu; stage_setup ;;
     desktop)
       pull_image "$GHCR_TAG"; configure_opencore hide; launch_qemu; stage_desktop ;;
     verify)

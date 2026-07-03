@@ -275,15 +275,24 @@ stage_install() {  # M2: erase target, then adaptively drive the GUI installer t
   ocrclick Reinstall; sleep 1; ocrclick Continue; sleep 6
   drive_installer || { log "click-through hung before disk-select — skipping the 55-min monitor + capture"; return 1; }
   screendump "oc-installing"
-  log "monitoring install + jiggling mouse to defeat macOS display-sleep (black screen after ~34min was sleep)"
-  local i
-  for ((i = 1; i <= 55; i++)); do
+  # Capture the base only once the install ACTUALLY finishes — a completed install auto-reboots into
+  # the stock Setup Assistant. The old fixed 55-min window captured unconditionally, so when firmware
+  # ran slower the install was still going and a half-installed base shipped (Untitled volume,
+  # read-only /usr/local, a first boot that spends ~25min FINISHING the install). Two safeguards:
+  # OCR the SA to capture the moment it's done, and a ~2h ceiling so any slow install still completes
+  # before capture regardless of firmware/runner speed.
+  log "monitoring install until it reaches Setup Assistant (jiggling to defeat display-sleep)"
+  local i done=""
+  for ((i = 1; i <= 120; i++)); do
     python3 "$QMP_PY" "$QMP_SOCK" move $((420 + i % 180)) 420 2>/dev/null || true  # jiggle: keep display awake
     sleep 60
-    screendump "oc-mon-$(printf '%02d' "$i")"
+    screendump "oc-mon-$(printf '%03d' "$i")"
     kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited at install monitor $i"; return 1; }
+    if printf '%s' "$(ocrtext 2>/dev/null)" | grep -qiE "Country or Region|Migration Assistant|Select Your|Welcome to Mac|Sign In with Your"; then
+      log "install reached Setup Assistant at monitor $i — install complete"; done=1; break
+    fi
   done
-  log "install monitor done — inspect oc-mon-*.png for completion + Setup Assistant (display kept awake)"
+  [ -n "$done" ] || log "WARN: Setup Assistant not detected in ~2h; capturing current state anyway"
   capture_and_push "$GHCR_TAG-base"
 }
 

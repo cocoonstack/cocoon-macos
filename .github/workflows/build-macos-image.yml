@@ -31,7 +31,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
     env:
       STAGE: ${{ github.event.inputs.stage }}
       DISK_SIZE: ${{ github.event.inputs.disk_size }}

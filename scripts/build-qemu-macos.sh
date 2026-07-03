@@ -541,9 +541,12 @@ stage_slim() {  # SA-INDEPENDENT slim: boot, reclaim stale clusters over SSH, re
   # only needs SSH (sudo+dd work at the SA stage) + the MacHDD discard=unmap,detect-zeroes=unmap.
   boot_macintosh
   log "waiting for SSH (slim is SA-independent; SSH comes up even with the GUI at Setup Assistant)"
-  # Sequoia's cold first-boot to SSH is slow on the nested-KVM GHA runner (Tahoe verify came up in
-  # ~minutes, but a 12-min budget flaked); give it a generous ~22 min before declaring failure.
-  wait_ssh 66 || { log "FATAL: SSH never came up"; return 1; }
+  # The first boot runs macOS's install finalization before sshd answers, and this is version-skewed:
+  # a testbed measured Sequoia 15 answering in ~2.5min but Tahoe 26 still finalizing (progress bar
+  # crawling, "~25min remaining") at 25-30min on bare metal — the nested-KVM GHA runner is 2-3x
+  # slower again. wait_ssh is a ceiling that returns the moment SSH answers, so one budget covers
+  # both: Sequoia returns early, Tahoe gets the ~90min it needs.
+  wait_ssh 270 || { log "FATAL: SSH never came up"; return 1; }
   apply_perf_recipe   # bake the macOS-side perf tweaks into the image before reclaiming/repushing
   slim_disk
   log "clean shutdown"

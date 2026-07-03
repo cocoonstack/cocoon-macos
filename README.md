@@ -93,10 +93,14 @@ into its `config.plist` `PlatformInfo/Generic` (via `qemu-nbd` mount); the model
 (proven to boot Tahoe) and only serial/MLB/UUID/ROM are randomized. The assigned identity is
 recorded and shown by `vm inspect`.
 
-QEMU's VNC is loopback-only (`127.0.0.1:590<vnc>`) and offers `None` auth, which **macOS
-Screen Sharing hangs on**. Pass `--vnc-password <≤8 chars>` to start QEMU with `password=on`
-(set via the monitor post-launch) so Screen Sharing prompts and connects; tunnel first with
-`ssh -L 5901:127.0.0.1:5901 <host>`. Plain VNC clients (RealVNC/TigerVNC) work without a password.
+VNC exposure depends on the net mode. With `--net user|tap|bridge` QEMU binds loopback-only
+(`127.0.0.1:590<vnc>`) — tunnel with `ssh -L 5901:127.0.0.1:5901 <host>`. With `--net cni` QEMU
+runs in a netns, so its VNC rides a unix socket fronted by a proxy on **all host interfaces**
+(`0.0.0.0:590<vnc>`); because that is reachable off-box, `--vnc-password` is **required** there.
+VNC is launch-scoped: cleared on `vm stop`, re-enabled per start via `vm start --vnc N`.
+QEMU's default `None` auth also **hangs macOS Screen Sharing** — pass `--vnc-password <≤8 chars>`
+(applied via the monitor post-launch) so Screen Sharing prompts and connects. Plain VNC clients
+(RealVNC/TigerVNC) work without a password on the loopback modes.
 
 **Display sleep blanks VNC.** macOS only repaints the emulated framebuffer while the display is
 awake; once it sleeps (~idle), VNC shows a blank **white/black** screen with just the cursor even

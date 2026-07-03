@@ -25,11 +25,12 @@ const (
 	vncBasePort = 5900
 )
 
-// vncProxyCommand is the hidden re-exec target that runs the forwarder for its lifetime.
+// vncProxyCommand is the hidden re-exec target that runs the forwarder for its lifetime, accepting
+// on the TCP listener inherited as fd 3 (bound by the parent so bind errors fail the launch).
 func vncProxyCommand() *cobra.Command {
 	return &cobra.Command{
-		Use: vncProxyOp + " <listen> <unix-sock>", Hidden: true, Args: cobra.ExactArgs(2),
-		RunE: func(_ *cobra.Command, args []string) error { return runVNCProxy(args[0], args[1]) },
+		Use: vncProxyOp + " <unix-sock>", Hidden: true, Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error { return runVNCProxy(args[0]) },
 	}
 }
 
@@ -44,12 +45,24 @@ func startVNCProxy(ctx context.Context, dir string, disp int) error {
 	}); err != nil {
 		return fmt.Errorf("vnc socket %s not created by qemu: %w", sock, err)
 	}
+	// Bind here, not in the child: the child is detached, so its bind error (port taken) would be
+	// invisible and the launch would report a VNC entry point that doesn't exist.
+	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", vncBasePort+disp))
+	if err != nil {
+		return fmt.Errorf("bind vnc port: %w", err)
+	}
+	defer func() { _ = l.Close() }() // child holds its own dup
+	lf, err := l.(*net.TCPListener).File()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lf.Close() }()
 	self, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	listen := fmt.Sprintf("0.0.0.0:%d", vncBasePort+disp)
-	c := exec.Command(self, "vm", vncProxyOp, listen, sock)
+	c := exec.Command(self, "vm", vncProxyOp, sock)
+	c.ExtraFiles = []*os.File{lf}                      // inherited as fd 3
 	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // survive the parent CLI exit
 	if err := c.Start(); err != nil {
 		return err
@@ -68,10 +81,10 @@ func stopVNCProxy(ctx context.Context, dir string) {
 	_ = os.Remove(pidPath)
 }
 
-func runVNCProxy(listen, sock string) error {
-	l, err := net.Listen("tcp", listen)
+func runVNCProxy(sock string) error {
+	l, err := net.FileListener(os.NewFile(3, "vnc-listener"))
 	if err != nil {
-		return fmt.Errorf("listen %s: %w", listen, err)
+		return fmt.Errorf("inherit vnc listener: %w", err)
 	}
 	defer func() { _ = l.Close() }()
 	for {

@@ -2,6 +2,7 @@ package vm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,6 +36,9 @@ func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if err := h.launch(cmd, home.VMDir(cmd, r.Name), r); err != nil {
+		// only the create path cleans up its own fresh TAP/netns: a restart failure must never
+		// tear down the persisted network a stopped VM will reuse
+		teardownNet(cmd, r)
 		return err
 	}
 	fmt.Printf("%s (pid %d)\n", r.Name, r.PID)
@@ -174,6 +178,11 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	ctx := cliutil.CommandContext(cmd)
 	logger := log.WithFunc("cmd.vm.launch")
+	if r.Netns != "" && r.VNCDisp >= 0 && r.VNCPass == "" {
+		// unlike the loopback bind of the other net modes, the CNI proxy listens on all host
+		// interfaces — never expose that unauthenticated
+		return errors.New("--vnc with --net cni serves VNC on a host port reachable off-box; --vnc-password is required")
+	}
 	if hostIsAMD() {
 		// macOS reads MSRs an AMD host lacks; without kvm.ignore_msrs KVM injects #GP. Best-effort,
 		// host-global, and only set on AMD where macOS needs it.
@@ -205,7 +214,6 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
 	if err := c.Run(); err != nil {
 		stopVNCProxy(ctx, dir)
-		teardownNet(cmd, r) // don't leak an auto-created TAP/netns on a failed launch
 		return fmt.Errorf("launch qemu: %w", err)
 	}
 	if pid, err := utils.ReadPIDFile(pidfile); err == nil {
@@ -218,7 +226,9 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	}
 	if spec.VNCSock != "" {
 		if err := startVNCProxy(ctx, dir, r.VNCDisp); err != nil {
-			logger.Warnf(ctx, "start vnc proxy: %v", err)
+			// the requested VNC entry point doesn't exist — a "running with VNC" success would lie
+			terminate(ctx, r, 0)
+			return fmt.Errorf("start vnc proxy: %w", err)
 		}
 	}
 	return saveRec(dir, r)

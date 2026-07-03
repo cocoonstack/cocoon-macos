@@ -45,10 +45,12 @@ func Command(h Actions) *cobra.Command {
 
 	startCmd := &cobra.Command{
 		Use:   "start VM [VM...]",
-		Short: "Start created/stopped VM(s)",
+		Short: "Start created/stopped VM(s); VNC is off unless --vnc is given for this start",
 		Args:  cobra.MinimumNArgs(1),
 		RunE:  h.Start,
 	}
+	startCmd.Flags().Int("vnc", -1, "VNC display number for this start only (n => port 590n); omit to keep VNC off")
+	startCmd.Flags().String("vnc-password", "", "VNC password for this start (≤8 chars, QEMU password auth)")
 
 	stopCmd := &cobra.Command{
 		Use:   "stop VM [VM...]",

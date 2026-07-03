@@ -385,17 +385,29 @@ stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the ins
   # never ran). Re-home to the leftmost entry (EFI) with several "left", step right once to Base
   # System — deterministic regardless of drift — then VERIFY via OCR that Recovery actually loaded,
   # retrying a few times.
-  log "booting macOS Base System (recovery); verifying + retrying"
-  local tries n reached=""
-  for tries in 1 2 3 4 5; do
-    for n in 1 2 3 4 5; do mon "sendkey left"; sleep 1; done
-    mon "sendkey right"; sleep 1; mon "sendkey ret"; sleep 2; mon "sendkey ret"
+  # Boot "macOS Base System" (Recovery) by MOUSE double-click, not arrow keys: OpenCanopy ignores the
+  # QEMU-monitor arrow scancodes (they left selection on the default installed "Macintosh", so ret
+  # booted the OS into its Setup Assistant instead of Recovery), but the picker takes mouse. OCR-locate
+  # the "Base System" entry and double-click it; double-click the label then the icon above it, then
+  # verify Recovery actually loaded, retrying.
+  log "booting macOS Base System (recovery) via mouse double-click; verifying + retrying"
+  local tries n reached="" txt
+  for tries in 1 2 3 4 5 6; do
+    python3 "$QMP_PY" "$QMP_SOCK" ocrdclick Base 0 2>&1 | sed 's/^/[pick] /' || true
+    sleep 3
+    python3 "$QMP_PY" "$QMP_SOCK" ocrdclick Base -70 2>&1 | sed 's/^/[pick] /' || true
     for n in 1 2 3 4; do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + n * 25)) 400 2>/dev/null || true; sleep 20; done
     screendump "su-01-recovery-$tries"
-    if printf '%s' "$(ocrtext 2>/dev/null)" | grep -qiE "Reinstall|Disk Utility|Restore From|Time Machine|Recovery|Utilities"; then
+    txt="$(ocrtext 2>/dev/null)"
+    if printf '%s' "$txt" | grep -qiE "Reinstall|Disk Utility|Restore From|Time Machine|Recovery|Utilities"; then
       log "reached Recovery on try $tries"; reached=1; break
     fi
-    log "try $tries: not in Recovery yet (still at picker?), retrying"
+    if printf '%s' "$txt" | grep -qiE "Country or Region|Migration Assistant|Select Your|Welcome to Mac"; then
+      log "try $tries: mis-booted the installed OS (Setup Assistant) — resetting to the picker"
+      mon "system_reset"; sleep 75
+    else
+      log "try $tries: not in Recovery yet (still at picker?), retrying"
+    fi
   done
   [ -n "$reached" ] || { log "FATAL: could not reach Recovery to provision the image"; return 1; }
   log "opening Terminal (Shift-Cmd-T) + running provision script via curl|bash"

@@ -161,6 +161,19 @@ class QMP:
         print("CLICK %s (%d,%d) conf=%.0f" % (word, cx, cy, conf))
         return True
 
+    def ocrdclick(self, word, yoff=0):
+        # OCR-locate a word and double-click at its center (+yoff, to hit an icon above its label).
+        # Used to boot an OpenCore/OpenCanopy picker entry by name — its arrow keys are unreliable but
+        # the picker takes mouse.
+        hits = self.ocr_find(word)
+        if not hits:
+            print("NOTFOUND %s" % word)
+            return False
+        cx, cy, conf = hits[0]
+        self.click(cx, cy + yoff, n=2)
+        print("DCLICK %s (%d,%d) conf=%.0f" % (word, cx, cy + yoff, conf))
+        return True
+
     def agree_button(self):
         # The macOS SLA "Agree" button is the one immediately right of a same-row "Disagree".
         # This excludes the body-text "...read and agree to the terms...", and when a confirm sheet
@@ -203,6 +216,10 @@ def main():
         ymin = int(sys.argv[4]) if len(sys.argv) > 4 else 0
         ymax = int(sys.argv[5]) if len(sys.argv) > 5 else 10 ** 9
         sys.exit(0 if q.ocrclick(word, ymin, ymax) else 3)
+    elif op == "ocrdclick":
+        word = sys.argv[3]
+        yoff = int(sys.argv[4]) if len(sys.argv) > 4 else 0
+        sys.exit(0 if q.ocrdclick(word, yoff) else 3)
     elif op == "agreebtn":
         btn = q.agree_button()
         if btn:

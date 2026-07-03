@@ -159,6 +159,11 @@ PY
     log "could not mount OpenCore EFI partition"
   fi
   sudo qemu-nbd --disconnect /dev/nbd0 2>/dev/null || true
+  # --disconnect is async: the nbd kernel thread keeps the qcow2 write-locked for a moment after it
+  # returns, so a launch_qemu that opens OpenCore.qcow2 right away hits "Failed to get shared write
+  # lock". Wait for the nbd device to actually release before returning.
+  local t
+  for t in $(seq 1 50); do [[ -e /sys/block/nbd0/pid ]] || break; sleep 0.2; done
 }
 
 launch_qemu() {

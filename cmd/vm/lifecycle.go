@@ -42,9 +42,12 @@ func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 }
 
 // Start boots one or more previously-created VMs, reusing each persisted TAP/netns
-// across stop/start (only rm tears those down).
+// across stop/start (only rm tears those down). VNC is decided per start — off unless
+// --vnc is given — so the host port is only exposed while actually wanted.
 func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 	ctx := cliutil.CommandContext(cmd)
+	vnc, _ := cmd.Flags().GetInt("vnc")
+	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	for _, n := range args {
 		dir := home.VMDir(cmd, n)
 		if err := withVMLock(ctx, dir, func() error {
@@ -52,6 +55,7 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
+			r.VNCDisp, r.VNCPass = vnc, vncPass
 			if err := h.launch(cmd, dir, r); err != nil {
 				return err
 			}
@@ -77,7 +81,7 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 			}
 			terminate(ctx, r, grace)
 			stopVNCProxy(dir)
-			r.PID = 0
+			r.PID, r.VNCDisp, r.VNCPass = 0, -1, "" // VNC is launch-scoped: gone with the qemu it belonged to
 			return saveRec(dir, r)
 		}); err != nil {
 			return err

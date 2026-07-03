@@ -36,6 +36,7 @@ func vncProxyCommand() *cobra.Command {
 // startVNCProxy re-execs this binary as the hidden proxy, detached, in the HOST netns (so its TCP
 // listener is reachable off-box while qemu's VNC stays inside the CNI netns). Idempotent.
 func startVNCProxy(dir string, disp int) error {
+	stopVNCProxy(dir) // a stale proxy would hold the port and shadow the new one
 	sock := filepath.Join(dir, vncSockName)
 	if err := utils.WaitFor(context.Background(), 5*time.Second, 100*time.Millisecond, func() (bool, error) {
 		info, statErr := os.Stat(sock) // qemu -daemonize creates the socket slightly after fork
@@ -56,11 +57,13 @@ func startVNCProxy(dir string, disp int) error {
 	return utils.WritePIDFile(filepath.Join(dir, vncProxyPID), c.Process.Pid)
 }
 
-// stopVNCProxy kills a running proxy (best-effort) and removes its pidfile.
+// stopVNCProxy kills a running proxy (best-effort) and removes its pidfile. SIGKILL, not SIGTERM:
+// the CLI's root command traps SIGTERM via signal.NotifyContext, so a TERMed proxy would just keep
+// accepting; the proxy is a stateless pipe, so killing it hard loses nothing.
 func stopVNCProxy(dir string) {
 	pidPath := filepath.Join(dir, vncProxyPID)
 	if pid, err := utils.ReadPIDFile(pidPath); err == nil {
-		_ = syscall.Kill(pid, syscall.SIGTERM)
+		_ = syscall.Kill(pid, syscall.SIGKILL)
 	}
 	_ = os.Remove(pidPath)
 }

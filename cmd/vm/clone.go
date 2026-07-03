@@ -30,8 +30,8 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	netMode, _ := cmd.Flags().GetString("net")
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
-	if netMode == netCNI && vnc >= 0 && vncPass == "" { // same pre-scaffold check as create
-		return errCNIVNCPassRequired
+	if err = requireCNIVNCPassword(netMode == netCNI, vnc, vncPass); err != nil { // same pre-scaffold check as create
+		return err
 	}
 	// the clone inherits SRC's data disks by name; extra --data-disk specs must not collide with them
 	// and the combined count still honors the AHCI cap. Parse before scaffolding to fail fast.

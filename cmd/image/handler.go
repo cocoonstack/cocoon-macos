@@ -2,6 +2,7 @@ package image
 
 import (
 	"fmt"
+	"os"
 	"text/tabwriter"
 	"time"
 
@@ -25,7 +26,7 @@ type Handler struct{}
 func NewHandler() *Handler { return &Handler{} }
 
 // Pull fetches IMAGE into the store: an http(s) URL goes straight through cloudimg; an OCI/ghcr ref
-// has its qcow2 layer streamed off the registry (native oras-go) and imported.
+// has its qcow2 layer pulled (parallel Range download, digest-verified) and imported.
 func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	ctx, s, err := home.OpenStore(cmd)
 	if err != nil {
@@ -44,24 +45,25 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 	}
-	// Credentials come from the user's docker config (public images pull
-	// anonymously), so no external oras binary is needed.
-	logger.Debugf(ctx, "pulling OCI artifact %s via oras-go", ref)
-	// retry transient registry stream drops: ghcr resets the HTTP/2 stream on multi-GB blobs with
-	// PROTOCOL_ERROR mid-copy. A fresh fetch (from the start — mid-stream can't resume) usually wins.
+	// Download the qcow2 layer to a temp file via parallel Range connections (credentials from the
+	// user's docker config; public images pull anonymously), retrying transient registry drops, then
+	// import the verified file. ghcr throttles/resets a single HTTP/2 stream on multi-GB blobs, so
+	// the parallel pull is both faster and more robust than streaming straight into the store.
+	logger.Debugf(ctx, "pulling OCI artifact %s via parallel Range download", ref)
+	tmp, err := os.CreateTemp(home.Dir(cmd), "pull-*.qcow2")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	_ = tmp.Close()
+	defer func() { _ = os.Remove(tmpPath) }()
+
 	var perr error
 	for attempt := 1; attempt <= 3; attempt++ {
-		rc, ferr := pullOCILayer(ctx, ref)
-		if ferr != nil {
-			perr = ferr
-		} else {
-			perr = s.ImportFromReader(ctx, ref, progress.Nop, rc)
-			_ = rc.Close()
+		if perr = pullOCIBlob(ctx, ref, tmpPath); perr == nil {
+			return s.Import(ctx, ref, progress.Nop, tmpPath)
 		}
-		if perr == nil {
-			return nil
-		}
-		logger.Warnf(ctx, "oras pull attempt %d/3 failed: %v", attempt, perr)
+		logger.Warnf(ctx, "oci pull attempt %d/3 failed: %v", attempt, perr)
 		if attempt < 3 {
 			select {
 			case <-ctx.Done():

@@ -2,48 +2,166 @@ package image
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"os"
 	"strings"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"golang.org/x/sync/errgroup"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/credentials"
 )
 
-// pullOCILayer resolves an OCI/ghcr ref, picks its qcow2 layer, and returns an open blob reader for
-// that layer streamed from the registry. The caller owns closing the reader.
-func pullOCILayer(ctx context.Context, ref string) (io.ReadCloser, error) {
+// pullConns is the number of parallel HTTP Range connections used to fetch a blob; ghcr throttles a
+// single stream to a fraction of the link, so 8 chunks pull the multi-GB base images far faster.
+const pullConns = 8
+
+// pullOCIBlob resolves ref's qcow2 layer and downloads it to dest, using parallel HTTP Range
+// requests when the registry supports them (falling back to a single stream otherwise) and verifying
+// the content against the layer's sha256 digest.
+func pullOCIBlob(ctx context.Context, ref, dest string) error {
 	repo, err := remote.NewRepository(ref)
 	if err != nil {
-		return nil, fmt.Errorf("parse ref %s: %w", ref, err)
+		return fmt.Errorf("parse ref %s: %w", ref, err)
 	}
-	repo.Client = &auth.Client{Cache: auth.NewCache(), Credential: dockerCredential()}
+	client := &auth.Client{Cache: auth.NewCache(), Credential: dockerCredential()}
+	repo.Client = client
 
+	layer, err := resolveQcow2Layer(ctx, repo, ref)
+	if err != nil {
+		return err
+	}
+	blobURL := fmt.Sprintf("https://%s/v2/%s/blobs/%s", repo.Reference.Registry, repo.Reference.Repository, layer.Digest)
+
+	f, err := os.Create(dest) //nolint:gosec // dest is an internal temp path (os.CreateTemp), not user input
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	if layer.Size <= 0 || !rangeSupported(ctx, client, blobURL) {
+		if err = fetchSingle(ctx, repo, layer, f); err != nil {
+			return err
+		}
+	} else {
+		if err = f.Truncate(layer.Size); err != nil {
+			return err
+		}
+		if err = fetchParallel(ctx, client, blobURL, layer.Size, f); err != nil {
+			return err
+		}
+	}
+	return verifyDigest(dest, layer.Digest.String())
+}
+
+// resolveQcow2Layer fetches ref's manifest and returns its qcow2 layer descriptor.
+func resolveQcow2Layer(ctx context.Context, repo *remote.Repository, ref string) (ocispec.Descriptor, error) {
 	desc, err := repo.Resolve(ctx, ref)
 	if err != nil {
-		return nil, fmt.Errorf("resolve %s: %w", ref, err)
+		return ocispec.Descriptor{}, fmt.Errorf("resolve %s: %w", ref, err)
 	}
 	raw, err := content.FetchAll(ctx, repo.Manifests(), desc)
 	if err != nil {
-		return nil, fmt.Errorf("fetch manifest %s: %w", ref, err)
+		return ocispec.Descriptor{}, fmt.Errorf("fetch manifest %s: %w", ref, err)
 	}
 	var manifest ocispec.Manifest
 	if err = json.Unmarshal(raw, &manifest); err != nil {
-		return nil, fmt.Errorf("parse manifest %s: %w", ref, err)
+		return ocispec.Descriptor{}, fmt.Errorf("parse manifest %s: %w", ref, err)
 	}
 	layer, err := pickQcow2Layer(manifest.Layers)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", ref, err)
+		return ocispec.Descriptor{}, fmt.Errorf("%s: %w", ref, err)
 	}
+	return layer, nil
+}
+
+// rangeSupported probes whether the blob endpoint honors a Range request (ghcr redirects to a
+// presigned URL that does; a registry that returns 200 does not).
+func rangeSupported(ctx context.Context, client *auth.Client, url string) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Range", "bytes=0-0")
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode == http.StatusPartialContent
+}
+
+// fetchParallel downloads [0,size) in pullConns chunks concurrently, each writing at its offset.
+func fetchParallel(ctx context.Context, client *auth.Client, url string, size int64, f *os.File) error {
+	chunk := (size + pullConns - 1) / pullConns
+	g, gctx := errgroup.WithContext(ctx)
+	for i := range int64(pullConns) {
+		start := i * chunk
+		if start >= size {
+			break
+		}
+		end := start + chunk - 1
+		if end >= size {
+			end = size - 1
+		}
+		g.Go(func() error { return fetchRange(gctx, client, url, start, end, f) })
+	}
+	return g.Wait()
+}
+
+func fetchRange(ctx context.Context, client *auth.Client, url string, start, end int64, f *os.File) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusPartialContent {
+		return fmt.Errorf("range %d-%d: unexpected status %s", start, end, resp.Status)
+	}
+	// each chunk owns a disjoint region, so concurrent WriteAt via the offset writer never overlaps
+	_, err = io.Copy(io.NewOffsetWriter(f, start), resp.Body)
+	return err
+}
+
+// fetchSingle streams the blob in one connection (fallback when Range isn't supported).
+func fetchSingle(ctx context.Context, repo *remote.Repository, layer ocispec.Descriptor, f *os.File) error {
 	rc, err := repo.Blobs().Fetch(ctx, layer)
 	if err != nil {
-		return nil, fmt.Errorf("fetch layer %s: %w", layer.Digest, err)
+		return fmt.Errorf("fetch layer %s: %w", layer.Digest, err)
 	}
-	return rc, nil
+	defer func() { _ = rc.Close() }()
+	_, err = io.Copy(f, rc)
+	return err
+}
+
+// verifyDigest re-hashes the downloaded file and checks it against "sha256:<hex>".
+func verifyDigest(path, want string) error {
+	f, err := os.Open(path) //nolint:gosec // path is an internal temp path (os.CreateTemp), not user input
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err = io.Copy(h, f); err != nil {
+		return err
+	}
+	got := "sha256:" + hex.EncodeToString(h.Sum(nil))
+	if got != want {
+		return fmt.Errorf("digest mismatch: got %s want %s", got, want)
+	}
+	return nil
 }
 
 // dockerCredential resolves registry credentials from the user's docker config. NewStoreFromDocker

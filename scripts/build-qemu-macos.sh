@@ -258,8 +258,11 @@ drive_installer() {  # adaptive: OCR the current installer pane each round, clic
       agreebtn; sleep 3; modalagree; sleep 3
     elif printf '%s' "$txt" | grep -qiE "Loading Installation"; then
       log "round $round: still loading installation information, waiting"; sleep 12
-    elif printf '%s' "$txt" | grep -qiE "set up the installation|click Continue"; then
-      log "round $round: intro -> Continue"; ocrclick Continue; sleep 6
+    elif printf '%s' "$txt" | grep -qiE "set up the installation|click Continue|Install macOS Sequoia|Install macOS Tahoe"; then
+      # the welcome pane's body ("To set up the installation... click Continue") OCRs unreliably, but the
+      # title "Install macOS <name>" reads even when garbled. Checked after the SLA/disk branches so those
+      # win; a stray Continue on any other pane is a no-op. ("Installing macOS"/progress is caught above.)
+      log "round $round: intro/welcome -> Continue"; ocrclick Continue; sleep 2; keys ret; sleep 4
     else
       log "round $round: unrecognized pane, waiting"; sleep 10
     fi

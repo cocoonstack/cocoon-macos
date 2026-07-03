@@ -380,22 +380,39 @@ PROVISION_URL="https://raw.githubusercontent.com/cocoonstack/cocoon-macos/master
 stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the installed volume (skip GUI Setup Assistant)
   sleep 75
   screendump "su-00-picker"
-  log "booting macOS Base System (recovery) at the picker"
-  mon "sendkey right"; sleep 2
-  local t
-  for t in 1 2 3 4 5; do mon "sendkey ret"; sleep 8; done
-  log "waiting for Recovery (jiggle to keep display awake)"
-  local w
-  for w in 1 2 3 4 5; do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 25)) 400 2>/dev/null || true; sleep 25; done
-  screendump "su-01-recovery"
+  # Boot macOS Base System (Recovery) to provision. A bare "right + ret" broke once the completed
+  # install added a "Macintosh" entry to the picker (selection landed on the wrong entry, provision
+  # never ran). Re-home to the leftmost entry (EFI) with several "left", step right once to Base
+  # System — deterministic regardless of drift — then VERIFY via OCR that Recovery actually loaded,
+  # retrying a few times.
+  log "booting macOS Base System (recovery); verifying + retrying"
+  local tries n reached=""
+  for tries in 1 2 3 4 5; do
+    for n in 1 2 3 4 5; do mon "sendkey left"; sleep 1; done
+    mon "sendkey right"; sleep 1; mon "sendkey ret"; sleep 2; mon "sendkey ret"
+    for n in 1 2 3 4; do python3 "$QMP_PY" "$QMP_SOCK" move $((60 + n * 25)) 400 2>/dev/null || true; sleep 20; done
+    screendump "su-01-recovery-$tries"
+    if printf '%s' "$(ocrtext 2>/dev/null)" | grep -qiE "Reinstall|Disk Utility|Restore From|Time Machine|Recovery|Utilities"; then
+      log "reached Recovery on try $tries"; reached=1; break
+    fi
+    log "try $tries: not in Recovery yet (still at picker?), retrying"
+  done
+  [ -n "$reached" ] || { log "FATAL: could not reach Recovery to provision the image"; return 1; }
   log "opening Terminal (Shift-Cmd-T) + running provision script via curl|bash"
   chord shift meta_l t; sleep 5; screendump "su-02-terminal"
   typestr "curl -fsSL $PROVISION_URL -o /tmp/p.sh && bash /tmp/p.sh"; keys ret
-  local i
-  for ((i = 1; i <= 8; i++)); do
+  # Capture only once provision actually finishes — it ends by printing "PROVISION DONE". The old
+  # unconditional capture shipped an un-provisioned base (no cocoon user/SSH) whenever the recovery
+  # nav silently failed.
+  local i provisioned=""
+  for ((i = 1; i <= 15; i++)); do
     sleep 12; screendump "su-03-provision-$(printf '%02d' "$i")"
     kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited"; return 1; }
+    if printf '%s' "$(ocrtext 2>/dev/null)" | grep -qi "PROVISION DONE"; then
+      log "provision completed at frame $i"; provisioned=1; break
+    fi
   done
+  [ -n "$provisioned" ] || { log "FATAL: provision did not complete (no PROVISION DONE) — refusing to capture"; return 1; }
   log "provision done; capturing turnkey image -> $GHCR_REPO:$GHCR_TAG"
   capture_and_push "$GHCR_TAG"   # tahoe:26 = SA-skipped, user 'cocoon', SSH on first boot
 }

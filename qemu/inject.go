@@ -123,10 +123,11 @@ func patchPlist(path string, sm *SMBIOS) error {
 		g["ROM"] = rom
 		g["SpoofVendor"] = true
 	}
-	// Auto-boot the installed macOS: hide the EFI/recovery aux entry + a short timeout, so the VM
-	// never stalls at the OpenCore picker (which can't be driven reliably headlessly — a missed
-	// sendkey boots the dead EFI entry and the VM never reaches macOS).
+	// Boot the installed macOS with no picker UI: ShowPicker=false makes OpenCore boot the default
+	// entry straight away. A visible picker can't be driven reliably headlessly — OpenCanopy cancels
+	// its Timeout countdown on the stray input from USB device enumeration and then waits forever.
 	boot := ensureSubMap(ensureSubMap(cfg, "Misc"), "Boot")
+	boot["ShowPicker"] = false
 	boot["HideAuxiliary"] = true
 	boot["Timeout"] = uint64(5)
 	ensureSubMap(ensureSubMap(cfg, "UEFI"), "Quirks")["RequestBootVarRouting"] = true

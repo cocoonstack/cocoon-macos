@@ -76,6 +76,7 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			terminate(ctx, r, grace)
+			stopVNCProxy(dir)
 			r.PID = 0
 			return saveRec(dir, r)
 		}); err != nil {
@@ -103,6 +104,7 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 		if err := withVMLock(ctx, dir, func() error {
 			if r, err := loadRec(dir); err == nil {
 				terminate(ctx, r, grace)
+				stopVNCProxy(dir)
 				teardownNet(cmd, r)
 			}
 			if err := os.RemoveAll(dir); err != nil {
@@ -183,6 +185,11 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		DataDisks: r.DataDisks,
 		MonSock:   filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
 	}
+	// CNI runs qemu in a netns, so a 127.0.0.1 VNC binds unreachably there; route it through a unix
+	// socket that a host-side proxy fronts on a TCP port (see startVNCProxy).
+	if r.Netns != "" && r.VNCDisp >= 0 {
+		spec.VNCSock = filepath.Join(dir, vncSockName)
+	}
 	pidfile := filepath.Join(dir, "qemu.pid")
 	args := append(spec.Args(), "-daemonize", "-pidfile", pidfile)
 	ensureNetnsLoopback(ctx, r) // CNI: a fresh netns has lo DOWN, so qemu's -vnc 127.0.0.1 would fail to bind
@@ -193,6 +200,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	c := launchCmd(r, args) // CNI: wraps in `ip netns exec` so -netdev tap finds the in-netns TAP
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
 	if err := c.Run(); err != nil {
+		stopVNCProxy(dir)
 		teardownNet(cmd, r) // don't leak an auto-created TAP/netns on a failed launch
 		return fmt.Errorf("launch qemu: %w", err)
 	}
@@ -202,6 +210,11 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	if r.VNCPass != "" {
 		if err := setVNCPassword(ctx, spec.MonSock, r.VNCPass); err != nil {
 			logger.Warnf(ctx, "set vnc password: %v", err)
+		}
+	}
+	if spec.VNCSock != "" {
+		if err := startVNCProxy(dir, r.VNCDisp); err != nil {
+			logger.Warnf(ctx, "start vnc proxy: %v", err)
 		}
 	}
 	return saveRec(dir, r)

@@ -42,6 +42,7 @@ type Spec struct {
 	CPUs      int
 	Memory    string   // MiB, e.g. "8192"
 	VNCDisp   int      // n => host 127.0.0.1:590n; <0 disables
+	VNCSock   string   // when set, bind VNC to this unix socket instead of 127.0.0.1 (CNI: fronted by vncProxy)
 	VNCPass   string   // set via the monitor post-launch (macOS Screen Sharing needs password auth)
 	SSHPort   int      // host port forwarded to guest :22; 0 disables
 	Hugepages bool     // needs host hugepages reserved; off => default RAM
@@ -127,14 +128,24 @@ func (s Spec) Args() []string {
 		nic += ",mac=" + s.MAC
 	}
 	a = append(a, "-device", nic)
+	// Always headless: the CLI has no display, and without -display QEMU defaults to GTK and aborts
+	// ("gtk initialization failed") — which bit any VM launched without --vnc.
+	a = append(a, "-display", "none")
 	if s.VNCDisp >= 0 {
-		vnc := fmt.Sprintf("127.0.0.1:%d", s.VNCDisp)
+		// CNI runs qemu inside a netns, so a 127.0.0.1 VNC would only be reachable there; bind to a
+		// unix socket (visible on the host FS across namespaces) that vncProxy fronts on a host port.
+		var vnc string
+		if s.VNCSock != "" {
+			vnc = "unix:" + s.VNCSock
+		} else {
+			vnc = fmt.Sprintf("127.0.0.1:%d", s.VNCDisp)
+		}
 		if s.VNCPass != "" {
 			vnc += ",password=on" // macOS Screen Sharing can't use QEMU's bare "None" auth
 		}
 		// -k en-us maps received VNC keysyms through the en-US keymap so shifted keys aren't dropped
 		// (the guacamole "keyboard garbled" bug: V->v, &->7).
-		a = append(a, "-k", "en-us", "-display", "none", "-vnc", vnc)
+		a = append(a, "-k", "en-us", "-vnc", vnc)
 	}
 	if s.MonSock != "" {
 		a = append(a, "-monitor", "unix:"+s.MonSock+",server,nowait")

@@ -113,6 +113,7 @@ func Command(h Actions) *cobra.Command {
 	}
 	addVMFlags(cloneCmd) // loader is inherited from SRC
 
+	vmCmd.AddCommand(vncProxyCommand())
 	vmCmd.AddCommand(createCmd, runCmd, startCmd, stopCmd, listCmd, inspectCmd, consoleCmd, rmCmd,
 		snapshotCmd, restoreCmd, cloneCmd)
 	return vmCmd

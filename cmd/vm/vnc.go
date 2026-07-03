@@ -30,6 +30,16 @@ const (
 // never expose that unauthenticated.
 var errCNIVNCPassRequired = errors.New("--vnc with --net cni serves VNC on a host port reachable off-box; --vnc-password is required")
 
+// requireCNIVNCPassword rejects an unauthenticated VNC display on a CNI VM whose
+// host port is reachable off-box. isCNI is the flag intent at create/clone
+// (pre-scaffold) or the resolved Netns at launch (post-scaffold).
+func requireCNIVNCPassword(isCNI bool, vncDisp int, vncPass string) error {
+	if isCNI && vncDisp >= 0 && vncPass == "" {
+		return errCNIVNCPassRequired
+	}
+	return nil
+}
+
 // vncProxyCommand is the hidden re-exec target that runs the forwarder for its lifetime, accepting
 // on the TCP listener inherited as fd 3 (bound by the parent so bind errors fail the launch).
 func vncProxyCommand() *cobra.Command {
@@ -72,7 +82,11 @@ func startVNCProxy(ctx context.Context, dir string, disp int) error {
 	if err := c.Start(); err != nil {
 		return err
 	}
-	return utils.WritePIDFile(filepath.Join(dir, vncProxyPID), c.Process.Pid)
+	if err := utils.WritePIDFile(filepath.Join(dir, vncProxyPID), c.Process.Pid); err != nil {
+		_ = c.Process.Kill() // no pidfile -> stopVNCProxy can't reap it; don't orphan the proxy
+		return err
+	}
+	return nil
 }
 
 // stopVNCProxy kills a running proxy (best-effort) and removes its pidfile. Zero grace: the CLI's

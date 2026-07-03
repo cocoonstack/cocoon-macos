@@ -142,8 +142,8 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	netMode, _ := cmd.Flags().GetString("net")
-	if netMode == netCNI && vnc >= 0 && vncPass == "" { // fail before scaffolding leaves a half-made VM
-		return nil, errCNIVNCPassRequired
+	if err = requireCNIVNCPassword(netMode == netCNI, vnc, vncPass); err != nil { // fail before scaffolding leaves a half-made VM
+		return nil, err
 	}
 	oc, code, varsTmpl, err := resolveFirmware(cmd)
 	if err != nil {
@@ -182,8 +182,8 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	ctx := cliutil.CommandContext(cmd)
 	logger := log.WithFunc("cmd.vm.launch")
-	if r.Netns != "" && r.VNCDisp >= 0 && r.VNCPass == "" {
-		return errCNIVNCPassRequired
+	if err := requireCNIVNCPassword(r.Netns != "", r.VNCDisp, r.VNCPass); err != nil {
+		return err
 	}
 	if hostIsAMD() {
 		// macOS reads MSRs an AMD host lacks; without kvm.ignore_msrs KVM injects #GP. Best-effort,

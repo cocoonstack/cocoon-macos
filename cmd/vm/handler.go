@@ -37,7 +37,7 @@ type record struct {
 	CPUs      int      `json:"cpus"`
 	Memory    string   `json:"memory"`
 	VNCDisp   int      `json:"vnc"`
-	VNCPass   string   `json:"vnc_password,omitempty"`
+	VNCPass   string   `json:"-"` // launch-scoped, set from the flag each start; never persisted (would leak at rest)
 	SSHPort   int      `json:"ssh_port"`
 	NetMode   string   `json:"net_mode,omitempty"`
 	Hugepages bool     `json:"hugepages,omitempty"`

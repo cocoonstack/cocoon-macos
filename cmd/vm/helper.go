@@ -227,7 +227,8 @@ func setVNCPassword(ctx context.Context, monSock, pw string) error {
 	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	out, _ := readUntil(conn, "(qemu)")
 	if strings.Contains(out, "Could not") {
-		return fmt.Errorf("qemu: %s", strings.TrimSpace(out))
+		// out echoes the typed "set_password vnc <pw>" line — never surface it.
+		return errors.New("qemu rejected set_password (vnc display not active?)")
 	}
 	return nil
 }

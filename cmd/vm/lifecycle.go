@@ -80,7 +80,7 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			terminate(ctx, r, grace)
-			stopVNCProxy(dir)
+			stopVNCProxy(ctx, dir)
 			r.PID, r.VNCDisp, r.VNCPass = 0, -1, "" // VNC is launch-scoped: gone with the qemu it belonged to
 			return saveRec(dir, r)
 		}); err != nil {
@@ -108,7 +108,7 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 		if err := withVMLock(ctx, dir, func() error {
 			if r, err := loadRec(dir); err == nil {
 				terminate(ctx, r, grace)
-				stopVNCProxy(dir)
+				stopVNCProxy(ctx, dir)
 				teardownNet(cmd, r)
 			}
 			if err := os.RemoveAll(dir); err != nil {
@@ -204,7 +204,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	c := launchCmd(r, args) // CNI: wraps in `ip netns exec` so -netdev tap finds the in-netns TAP
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
 	if err := c.Run(); err != nil {
-		stopVNCProxy(dir)
+		stopVNCProxy(ctx, dir)
 		teardownNet(cmd, r) // don't leak an auto-created TAP/netns on a failed launch
 		return fmt.Errorf("launch qemu: %w", err)
 	}
@@ -217,7 +217,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		}
 	}
 	if spec.VNCSock != "" {
-		if err := startVNCProxy(dir, r.VNCDisp); err != nil {
+		if err := startVNCProxy(ctx, dir, r.VNCDisp); err != nil {
 			logger.Warnf(ctx, "start vnc proxy: %v", err)
 		}
 	}

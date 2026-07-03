@@ -408,19 +408,26 @@ stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the ins
     log "try $tries (right x$steps): booted a non-OS entry, proceeding to provision"; reached=1; break
   done
   [ -n "$reached" ] || { log "FATAL: could not reach Recovery to provision the image"; return 1; }
-  log "opening Terminal (Shift-Cmd-T) + running provision script via curl|bash"
-  chord shift meta_l t; sleep 5; screendump "su-02-terminal"
-  typestr "curl -fsSL $PROVISION_URL -o /tmp/p.sh && bash /tmp/p.sh"; keys ret
-  # Capture only once provision actually finishes — it ends by printing "PROVISION DONE". The old
-  # unconditional capture shipped an un-provisioned base (no cocoon user/SSH) whenever the recovery
-  # nav silently failed.
-  local i provisioned=""
-  for ((i = 1; i <= 15; i++)); do
-    sleep 12; screendump "su-03-provision-$(printf '%02d' "$i")"
-    kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited"; return 1; }
-    if printf '%s' "$(ocrtext 2>/dev/null)" | grep -qi "PROVISION DONE"; then
-      log "provision completed at frame $i"; provisioned=1; break
-    fi
+  # Recovery keeps booting (Apple logo + progress bar) for ~2-3min after we select it, so opening
+  # Terminal once immediately fires onto the boot screen and no-ops. Retry Shift-Cmd-T + the provision
+  # curl|bash until the guest prints "PROVISION DONE": early rounds miss while Recovery boots, and once
+  # its Utilities window is up the Terminal opens and provision runs. Capture only on that gate so a
+  # silent miss can never ship an un-provisioned base (no cocoon user/SSH).
+  log "opening Terminal + running provision (retrying while Recovery finishes booting)"
+  local attempt i provisioned=""
+  for attempt in 1 2 3 4 5; do
+    sleep 40
+    chord shift meta_l t; sleep 5; screendump "su-02-terminal-$attempt"
+    typestr "curl -fsSL $PROVISION_URL -o /tmp/p.sh && bash /tmp/p.sh"; keys ret
+    for ((i = 1; i <= 8; i++)); do
+      sleep 12; screendump "su-03-p${attempt}-$(printf '%02d' "$i")"
+      kill -0 "$QEMU_PID" 2>/dev/null || { log "QEMU exited"; return 1; }
+      if printf '%s' "$(ocrtext 2>/dev/null)" | grep -qi "PROVISION DONE"; then
+        log "provision completed (attempt $attempt, frame $i)"; provisioned=1; break
+      fi
+    done
+    [ -n "$provisioned" ] && break
+    log "attempt $attempt: no PROVISION DONE yet (Recovery still booting?), retrying Terminal+provision"
   done
   [ -n "$provisioned" ] || { log "FATAL: provision did not complete (no PROVISION DONE) — refusing to capture"; return 1; }
   log "provision done; capturing turnkey image -> $GHCR_REPO:$GHCR_TAG"

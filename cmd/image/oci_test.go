@@ -69,31 +69,3 @@ func TestPickQcow2Layer(t *testing.T) {
 		})
 	}
 }
-
-func TestSplitRanges(t *testing.T) {
-	sizes := []int64{1, 7, 8, 9, 100, 257 << 10, (257 << 10) + 7}
-	for _, size := range sizes {
-		for _, n := range []int{1, 3, 8, 100} {
-			ranges := splitRanges(size, n)
-			if len(ranges) == 0 {
-				t.Fatalf("size=%d n=%d: no ranges", size, n)
-			}
-			if ranges[0][0] != 0 {
-				t.Errorf("size=%d n=%d: first start %d, want 0", size, n, ranges[0][0])
-			}
-			if last := ranges[len(ranges)-1][1]; last != size-1 {
-				t.Errorf("size=%d n=%d: last end %d, want %d", size, n, last, size-1)
-			}
-			// contiguous + non-overlapping: each start is the previous end + 1
-			for i := 1; i < len(ranges); i++ {
-				if ranges[i][0] != ranges[i-1][1]+1 {
-					t.Errorf("size=%d n=%d: gap/overlap at %d: %v after %v", size, n, i, ranges[i], ranges[i-1])
-				}
-			}
-			// every range is non-empty and never exceeds n chunks
-			if len(ranges) > n {
-				t.Errorf("size=%d n=%d: %d chunks exceeds n", size, n, len(ranges))
-			}
-		}
-	}
-}

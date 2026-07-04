@@ -43,7 +43,7 @@ func VMDir(cmd *cobra.Command, name string) string {
 // command context alongside it.
 func OpenStore(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) {
 	ctx := cliutil.CommandContext(cmd)
-	s, err := cloudimg.New(ctx, Dir(cmd))
+	s, err := cloudimg.New(ctx, Dir(cmd), 0) // 0 = cloudimg's default pull connections
 	if err != nil {
 		return ctx, nil, fmt.Errorf("init cloudimg store: %w", err)
 	}

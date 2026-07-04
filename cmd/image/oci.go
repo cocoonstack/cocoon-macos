@@ -17,6 +17,8 @@ import (
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/credentials"
+
+	"github.com/cocoonstack/cocoon/utils"
 )
 
 // pullConns is the number of parallel HTTP Range connections used to fetch a blob; ghcr throttles a
@@ -101,25 +103,11 @@ func rangeSupported(ctx context.Context, client *auth.Client, url string) bool {
 // fetchParallel downloads [0,size) in pullConns chunks concurrently, each writing at its offset.
 func fetchParallel(ctx context.Context, client *auth.Client, url string, size int64, f *os.File) error {
 	g, gctx := errgroup.WithContext(ctx)
-	for _, r := range splitRanges(size, pullConns) {
+	for _, r := range utils.SplitRanges(size, pullConns) {
 		start, end := r[0], r[1]
 		g.Go(func() error { return fetchRange(gctx, client, url, start, end, f) })
 	}
 	return g.Wait()
-}
-
-// splitRanges divides [0,size) into up to n contiguous, inclusive-ended byte ranges.
-func splitRanges(size int64, n int) [][2]int64 {
-	chunk := (size + int64(n) - 1) / int64(n)
-	var ranges [][2]int64
-	for start := int64(0); start < size; start += chunk {
-		end := start + chunk - 1
-		if end >= size {
-			end = size - 1
-		}
-		ranges = append(ranges, [2]int64{start, end})
-	}
-	return ranges
 }
 
 func fetchRange(ctx context.Context, client *auth.Client, url string, start, end int64, f *os.File) error {
@@ -133,23 +121,7 @@ func fetchRange(ctx context.Context, client *auth.Client, url string, start, end
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusPartialContent {
-		return fmt.Errorf("range %d-%d: unexpected status %s", start, end, resp.Status)
-	}
-	// A mismatched span lands bytes at the wrong offset; a short body leaves a zero
-	// hole — both would only surface after verifyDigest re-hashes the whole file.
-	if cr := resp.Header.Get("Content-Range"); !strings.HasPrefix(cr, fmt.Sprintf("bytes %d-%d/", start, end)) {
-		return fmt.Errorf("range %d-%d: mismatched content-range %q", start, end, cr)
-	}
-	want := end - start + 1
-	n, err := io.Copy(io.NewOffsetWriter(f, start), io.LimitReader(resp.Body, want))
-	if err != nil {
-		return err
-	}
-	if n != want {
-		return fmt.Errorf("range %d-%d: short body %d of %d bytes", start, end, n, want)
-	}
-	return nil
+	return utils.CopyRangeBody(resp, io.NewOffsetWriter(f, start), start, end)
 }
 
 // fetchSingle streams the blob in one connection (fallback when Range isn't supported).

@@ -1,6 +1,7 @@
 package image
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -165,7 +167,7 @@ func dockerCredential() auth.CredentialFunc {
 }
 
 // pickQcow2Layer selects the qcow2 layer from a manifest: prefer one whose title annotation ends in
-// .qcow2 (what `oras push` writes), else the sole layer, else the largest.
+// .qcow2 (what `oras push` writes), else the largest.
 func pickQcow2Layer(layers []ocispec.Descriptor) (ocispec.Descriptor, error) {
 	if len(layers) == 0 {
 		return ocispec.Descriptor{}, fmt.Errorf("manifest has no layers")
@@ -175,14 +177,5 @@ func pickQcow2Layer(layers []ocispec.Descriptor) (ocispec.Descriptor, error) {
 			return l, nil
 		}
 	}
-	if len(layers) == 1 {
-		return layers[0], nil
-	}
-	largest := layers[0]
-	for _, l := range layers[1:] {
-		if l.Size > largest.Size {
-			largest = l
-		}
-	}
-	return largest, nil
+	return slices.MaxFunc(layers, func(a, b ocispec.Descriptor) int { return cmp.Compare(a.Size, b.Size) }), nil
 }

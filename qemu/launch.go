@@ -59,13 +59,6 @@ type Spec struct {
 	QMPSock string
 }
 
-// IsQcow2NVRAM reports whether the NVRAM file is qcow2 (by suffix). Single source of the rule
-// that decides both the pflash -drive format below and whether NVRAM participates in
-// qcow2-internal snapshots (a raw .fd can't hold them) — the two must stay in lockstep.
-func IsQcow2NVRAM(path string) bool {
-	return strings.HasSuffix(path, ".qcow2")
-}
-
 // Args returns the qemu-system-x86_64 argument vector for the macOS guest.
 func (s Spec) Args() []string {
 	cores := max(s.CPUs/2, 1)
@@ -154,4 +147,11 @@ func (s Spec) Args() []string {
 		a = append(a, "-qmp", "unix:"+s.QMPSock+",server,nowait")
 	}
 	return a
+}
+
+// IsQcow2NVRAM reports whether the NVRAM file is qcow2 (by suffix). Single source of the rule
+// that decides both the pflash -drive format in Args and whether NVRAM participates in
+// qcow2-internal snapshots (a raw .fd can't hold them) — the two must stay in lockstep.
+func IsQcow2NVRAM(path string) bool {
+	return strings.HasSuffix(path, ".qcow2")
 }

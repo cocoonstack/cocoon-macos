@@ -75,7 +75,7 @@ func vncCol(r *record) string {
 	if r.VNCDisp < 0 {
 		return "-"
 	}
-	return strconv.Itoa(5900 + r.VNCDisp)
+	return strconv.Itoa(vncBasePort + r.VNCDisp)
 }
 
 func sshCol(r *record) string {

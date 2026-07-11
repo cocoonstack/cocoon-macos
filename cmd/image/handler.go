@@ -25,8 +25,6 @@ type Handler struct{}
 // NewHandler returns a Handler backed by the cloudimg store.
 func NewHandler() *Handler { return &Handler{} }
 
-// Pull fetches IMAGE into the store: an http(s) URL goes straight through cloudimg; an OCI/ghcr ref
-// has its qcow2 layer pulled (parallel Range download, digest-verified) and imported.
 func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	ctx, s, err := home.OpenStore(cmd)
 	if err != nil {
@@ -45,10 +43,8 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 	}
-	// Download the qcow2 layer to a temp file via parallel Range connections (credentials from the
-	// user's docker config; public images pull anonymously), retrying transient registry drops, then
-	// import the verified file. ghcr throttles/resets a single HTTP/2 stream on multi-GB blobs, so
-	// the parallel pull is both faster and more robust than streaming straight into the store.
+	// ghcr resets a single HTTP/2 stream on multi-GB blobs, so pull to a temp file over parallel
+	// Range connections and import that, rather than streaming straight into the store.
 	logger.Debugf(ctx, "pulling OCI artifact %s via parallel Range download", ref)
 	tmp, err := os.CreateTemp(home.Dir(cmd), "pull-*.qcow2")
 	if err != nil {
@@ -75,7 +71,6 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	return fmt.Errorf("pull %s after 3 attempts: %w", ref, perr)
 }
 
-// List renders stored images as a table (NAME TYPE SIZE DIGEST CREATED), or JSON with -o json.
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	ctx, s, err := home.OpenStore(cmd)
 	if err != nil {
@@ -95,7 +90,6 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	})
 }
 
-// Inspect prints a single stored image's metadata as JSON.
 func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 	ctx, s, err := home.OpenStore(cmd)
 	if err != nil {
@@ -111,7 +105,6 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 	return cliutil.OutputJSON(img)
 }
 
-// RM deletes one or more images from the store, printing each removed ref.
 func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 	ctx, s, err := home.OpenStore(cmd)
 	if err != nil {

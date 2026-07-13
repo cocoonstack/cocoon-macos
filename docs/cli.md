@@ -1,0 +1,54 @@
+# CLI Reference
+
+The CLI mirrors cocoon's `vm` / `image` command surface, trimmed to the macOS VM path.
+
+## Images
+
+```bash
+# pull the golden qcow2 from ghcr into the local store (cocoon cloudimg; /var/lib/cocoon-macos)
+cocoon-macos image pull ghcr.io/cocoonstack/cocoon-macos/tahoe:26
+cocoon-macos image list        # table (NAME TYPE SIZE DIGEST CREATED); -o json for JSON
+cocoon-macos image inspect <ref>
+cocoon-macos image rm <ref>
+```
+
+See [Images](images.md) for the store layout and the parallel-Range download.
+
+## VMs
+
+```bash
+# clone the golden image into a per-VM overlay and boot it (x86 Linux + /dev/kvm).
+# IMAGE is a store ref or a direct qcow2 path; firmware defaults to the doctor's install.
+cocoon-macos vm run ghcr.io/cocoonstack/cocoon-macos/tahoe:26 \
+  --name m1 --cpus 4 --memory 8192 --ssh-port 2222 --vnc 1 --random-smbios
+
+cocoon-macos vm list           # table (NAME STATE CPU MEM NET VNC SSH IMAGE CREATED); -o json for JSON
+cocoon-macos vm inspect m1     # full record as JSON
+cocoon-macos vm stop m1
+cocoon-macos vm rm m1
+# also: create (no boot), start, console
+```
+
+- `create` scaffolds the VM (overlay, identity, network, record) without booting; `run` = `create` +
+  boot; `start` boots a created/stopped VM.
+- `run` is atomic: if the boot fails it removes everything it just created (no half-made VM left
+  behind).
+
+Networking (`--net`) and VNC (`--vnc` / `--vnc-password`) are covered in
+[Networking & VNC](networking.md); snapshot/clone and `--data-disk` in
+[Snapshot, Clone & Data Disks](snapshots.md).
+
+## What `vm run` does
+
+1. `qemu-img create -b <golden> overlay.qcow2` — instant copy-on-write clone of the golden image.
+2. Copy a per-VM `OVMF_VARS`.
+3. With `--random-smbios`, copy OpenCore per-VM and inject a generated identity into its
+   `config.plist` `PlatformInfo/Generic` via a `qemu-nbd` mount — model stays `iMac19,1` (proven to
+   boot Tahoe), only serial/MLB/UUID/ROM are randomized. The identity is recorded and shown by
+   `vm inspect`.
+4. Launch `qemu-system-x86_64` daemonized with the boot recipe (a `Skylake-Client-v4` CPU spoofing
+   `GenuineIntel`, `isa-applesmc` OSK, OVMF, the LongQT OpenCore loader, and the macOS qcow2). The
+   same recipe boots macOS identically on Intel and AMD; on AMD it also sets `kvm.ignore_msrs=1`
+   (macOS reads MSRs an AMD host lacks). See [Boot, Firmware & GUI](vm.md).
+
+State is recorded under `--state-dir` / `$COCOON_MACOS_HOME` (default `/var/lib/cocoon-macos`).

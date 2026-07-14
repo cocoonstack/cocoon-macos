@@ -181,6 +181,12 @@ for i in 1 2 3 4 5; do /usr/bin/mdutil -a -i off >/dev/null 2>&1 && break; sleep
 for svc in com.apple.photoanalysisd com.apple.mediaanalysisd com.apple.parsecd com.apple.suggestd; do
   /bin/launchctl disable "user/501/$svc" 2>/dev/null || true
 done
+# XProtect malware scans (startup + periodic) burn ~75% CPU for ~2min on every boot (measured on a
+# 2-vCPU tahoe:26 VM); a disposable headless VM needs no on-access scanning, so disable the scan
+# launchds. system domain, so the persisted disable-override survives this daemon self-removing.
+for svc in com.apple.XProtect.daemon.scan.startup com.apple.XProtect.daemon.scan; do
+  /bin/launchctl disable "system/$svc" 2>/dev/null || true
+done
 echo "spotlight: $(/usr/bin/mdutil -a -s 2>/dev/null | tr '\n' ' ')"
 /bin/rm -f /Library/LaunchDaemons/com.cocoon.firstboot.plist /usr/local/bin/cocoon-firstboot.sh
 SH

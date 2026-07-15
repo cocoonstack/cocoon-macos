@@ -12,6 +12,7 @@ import (
 
 	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
+	"github.com/vishvananda/netlink"
 
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/config"
@@ -84,9 +85,8 @@ func teardownNet(cmd *cobra.Command, r *record) {
 	if provider, err := newProvider(cmd, r); err != nil {
 		logger.Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
 	} else {
-		// quiesce before Delete: a killed VMM leaves the TAP carrier-less while its veth stays up on
-		// the bridge, so tc mirred redirect storms host softirqs against the down device in the window
-		// before Delete removes the redirect (long enough to soft-lock a host on a busy bridge).
+		// quiesce before Delete closes the same idle-TAP softirq window quiesceNet guards, for the gap
+		// between the VMM dying and Delete dropping the redirect.
 		if err := provider.Quiesce(ctx, r.VMID); err != nil {
 			logger.Warnf(ctx, "quiesce network for %s: %v", r.VMID, err)
 		}
@@ -101,10 +101,9 @@ func teardownNet(cmd *cobra.Command, r *record) {
 	}
 }
 
-// quiesceNet brings a stopped VM's auto-created host NICs down so the carrier-less TAP a dead VMM
-// leaves behind can't storm host softirqs (CNI: tc mirred redirect firing against the down device
-// per broadcast packet). unquiesceNet reverses it on restart. Best-effort, gated on ownership like
-// teardownNet — never touches a user-supplied --tap.
+// quiesceNet brings a stopped VM's owned host NICs down so a dead VMM's carrier-less TAP can't storm
+// host softirqs (tc mirred redirect firing against the down device per broadcast packet) — CNI via
+// the provider's veths, tap/bridge via setTapLink. unquiesceNet reverses it on start.
 func quiesceNet(cmd *cobra.Command, r *record) {
 	if !r.TapOwned {
 		return
@@ -116,7 +115,7 @@ func quiesceNet(cmd *cobra.Command, r *record) {
 	} else if err := provider.Quiesce(ctx, r.VMID); err != nil {
 		logger.Warnf(ctx, "quiesce network for %s: %v", r.VMID, err)
 	}
-	setTapLink(ctx, r, "down")
+	setTapLink(ctx, r, false)
 }
 
 func unquiesceNet(cmd *cobra.Command, r *record) {
@@ -130,19 +129,28 @@ func unquiesceNet(cmd *cobra.Command, r *record) {
 	} else if err := provider.Unquiesce(ctx, r.VMID); err != nil {
 		logger.Warnf(ctx, "unquiesce network for %s: %v", r.VMID, err)
 	}
-	setTapLink(ctx, r, "up")
+	setTapLink(ctx, r, true)
 }
 
-// setTapLink toggles the host TAP's admin state for --net tap|bridge, where cocoon's bridge backend
-// no-ops Quiesce and QEMU opens the TAP with script=no (never touching its link): on stop the
-// readerless TAP would otherwise sit up on the bridge, and on restart stay down until raised. CNI's
-// TAP lives in a netns and is handled by the provider, so this is scoped to the host-side modes.
-func setTapLink(ctx context.Context, r *record, state string) {
-	if r.Tap == "" || (r.NetMode != netTAP && r.NetMode != netBridge) {
+// setTapLink flips a host TAP's admin state (down on stop, up on start). QEMU opens it with script=no
+// and cocoon's bridge backend no-ops Quiesce, so cocoon-macos owns the toggle; a CNI TAP lives in a
+// netns (r.Netns != "") and is the provider's job, so this only reaches host-netns TAPs.
+func setTapLink(ctx context.Context, r *record, up bool) {
+	if r.Tap == "" || r.Netns != "" {
 		return
 	}
-	if err := exec.CommandContext(ctx, "ip", "link", "set", r.Tap, state).Run(); err != nil {
-		log.WithFunc("cmd.vm.setTapLink").Warnf(ctx, "set tap %s %s: %v", r.Tap, state, err)
+	logger := log.WithFunc("cmd.vm.setTapLink")
+	link, err := netlink.LinkByName(r.Tap)
+	if err != nil {
+		logger.Warnf(ctx, "find tap %s: %v", r.Tap, err)
+		return
+	}
+	set := netlink.LinkSetUp
+	if !up {
+		set = netlink.LinkSetDown
+	}
+	if err := set(link); err != nil {
+		logger.Warnf(ctx, "set tap %s up=%v: %v", r.Tap, up, err)
 	}
 }
 

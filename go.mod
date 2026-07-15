@@ -8,6 +8,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/projecteru2/core v0.0.0-20241016125006-ff909eefe04c
 	github.com/spf13/cobra v1.10.2
+	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/sync v0.21.0
 	howett.net/plist v1.0.1
 	oras.land/oras-go/v2 v2.6.1
@@ -36,7 +37,6 @@ require (
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/rs/zerolog v1.34.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/net v0.50.0 // indirect

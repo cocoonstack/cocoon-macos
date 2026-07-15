@@ -78,7 +78,7 @@ func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir,
 		return "", "", "", "", err
 	}
 	ovmfVars = filepath.Join(dir, varsName)
-	if err = utils.ReflinkCopy(ovmfVars, varsSrc); err != nil {
+	if err = utils.ReflinkCopy(ovmfVars, varsSrc, utils.Sync); err != nil {
 		return "", "", "", "", fmt.Errorf("copy OVMF_VARS: %w", err)
 	}
 	return dir, overlay, ovmfVars, digest, nil

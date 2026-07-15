@@ -19,6 +19,10 @@ func provisionNet(_ *cobra.Command, _ *record) (tap, netns, mac string, err erro
 
 func teardownNet(_ *cobra.Command, _ *record) {}
 
+func quiesceNet(_ *cobra.Command, _ *record) {}
+
+func unquiesceNet(_ *cobra.Command, _ *record) {}
+
 // launchCmd builds the qemu exec; qemu-system-x86_64 is the authoritative VMM with no Go-native
 // equivalent (and off Linux there is no netns to enter).
 func launchCmd(_ *record, args []string) *exec.Cmd {

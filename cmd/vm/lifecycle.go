@@ -64,6 +64,7 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 			if err := h.launch(cmd, dir, r); err != nil {
 				return err
 			}
+			unquiesceNet(cmd, r)
 			fmt.Printf("%s (pid %d)\n", n, r.PID)
 			return nil
 		}); err != nil {
@@ -85,6 +86,7 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			terminate(ctx, r, grace)
+			quiesceNet(cmd, r)
 			stopVNCProxy(ctx, dir)
 			r.PID, r.VNCDisp, r.VNCPass = 0, -1, "" // VNC is launch-scoped: gone with the qemu it belonged to
 			return saveRec(dir, r)

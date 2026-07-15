@@ -83,13 +83,66 @@ func teardownNet(cmd *cobra.Command, r *record) {
 	// warn instead of failing: rm must proceed, but a leaked TAP/netns should leave a trail
 	if provider, err := newProvider(cmd, r); err != nil {
 		logger.Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
-	} else if _, err := provider.Delete(ctx, []string{r.VMID}); err != nil {
-		logger.Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
+	} else {
+		// quiesce before Delete: a killed VMM leaves the TAP carrier-less while its veth stays up on
+		// the bridge, so tc mirred redirect storms host softirqs against the down device in the window
+		// before Delete removes the redirect (long enough to soft-lock a host on a busy bridge).
+		if err := provider.Quiesce(ctx, r.VMID); err != nil {
+			logger.Warnf(ctx, "quiesce network for %s: %v", r.VMID, err)
+		}
+		if _, err := provider.Delete(ctx, []string{r.VMID}); err != nil {
+			logger.Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
+		}
 	}
 	// CleanupTAPs runs unconditionally: it removes bt<vmid>-* by name and must not be gated on
 	// newProvider succeeding (rm has no --bridge flag), or an auto-created TAP would leak.
 	if r.NetMode == netTAP || r.NetMode == netBridge {
 		bridge.CleanupTAPs([]string{r.VMID})
+	}
+}
+
+// quiesceNet brings a stopped VM's auto-created host NICs down so the carrier-less TAP a dead VMM
+// leaves behind can't storm host softirqs (CNI: tc mirred redirect firing against the down device
+// per broadcast packet). unquiesceNet reverses it on restart. Best-effort, gated on ownership like
+// teardownNet — never touches a user-supplied --tap.
+func quiesceNet(cmd *cobra.Command, r *record) {
+	if !r.TapOwned {
+		return
+	}
+	ctx := cliutil.CommandContext(cmd)
+	logger := log.WithFunc("cmd.vm.quiesceNet")
+	if provider, err := newProvider(cmd, r); err != nil {
+		logger.Warnf(ctx, "quiesce network for %s: %v", r.VMID, err)
+	} else if err := provider.Quiesce(ctx, r.VMID); err != nil {
+		logger.Warnf(ctx, "quiesce network for %s: %v", r.VMID, err)
+	}
+	setTapLink(ctx, r, "down")
+}
+
+func unquiesceNet(cmd *cobra.Command, r *record) {
+	if !r.TapOwned {
+		return
+	}
+	ctx := cliutil.CommandContext(cmd)
+	logger := log.WithFunc("cmd.vm.unquiesceNet")
+	if provider, err := newProvider(cmd, r); err != nil {
+		logger.Warnf(ctx, "unquiesce network for %s: %v", r.VMID, err)
+	} else if err := provider.Unquiesce(ctx, r.VMID); err != nil {
+		logger.Warnf(ctx, "unquiesce network for %s: %v", r.VMID, err)
+	}
+	setTapLink(ctx, r, "up")
+}
+
+// setTapLink toggles the host TAP's admin state for --net tap|bridge, where cocoon's bridge backend
+// no-ops Quiesce and QEMU opens the TAP with script=no (never touching its link): on stop the
+// readerless TAP would otherwise sit up on the bridge, and on restart stay down until raised. CNI's
+// TAP lives in a netns and is handled by the provider, so this is scoped to the host-side modes.
+func setTapLink(ctx context.Context, r *record, state string) {
+	if r.Tap == "" || (r.NetMode != netTAP && r.NetMode != netBridge) {
+		return
+	}
+	if err := exec.CommandContext(ctx, "ip", "link", "set", r.Tap, state).Run(); err != nil {
+		log.WithFunc("cmd.vm.setTapLink").Warnf(ctx, "set tap %s %s: %v", r.Tap, state, err)
 	}
 }
 

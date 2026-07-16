@@ -62,6 +62,11 @@ func pullOCIBlob(ctx context.Context, ref, dest string) error {
 			return err
 		}
 	}
+	// Flush before the pinned cocoon import adopts this file, so a crash right
+	// after "pull complete" can't leave an unverified blob in the store.
+	if err = f.Sync(); err != nil {
+		return fmt.Errorf("sync %s: %w", dest, err)
+	}
 	return verifyDigest(dest, layer.Digest.String())
 }
 

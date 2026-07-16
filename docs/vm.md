@@ -13,10 +13,11 @@ Every VM boots the same way on Intel and AMD:
 - **CPU:** `Skylake-Client` spoofing `GenuineIntel` with `-hle,-rtm` (TSX off), `+invtsc`, and
   `vmware-cpuid-freq=on`. The TSC flags are load-bearing: without them macOS self-calibrates the TSC
   and spins pathologically under nested KVM on first boot.
-- **OpenCore picker:** the injected `config.plist` sets `ShowPicker=false` so OpenCore boots the
-  default entry immediately, with no picker UI. A visible picker can't be driven reliably headlessly —
-  OpenCanopy cancels its `Timeout` countdown on the stray input from USB device enumeration and then
-  waits forever.
+- **OpenCore picker:** the shipped `OpenCore.qcow2` template boots the default entry immediately with
+  no picker UI (a visible picker can't be driven reliably headlessly — OpenCanopy cancels its
+  `Timeout` countdown on stray USB-enumeration input and then waits forever). `--random-smbios`
+  additionally patches `config.plist` in place to inject a per-VM SMBIOS identity; the default
+  `vm create` / `vm run` path leaves the template's config untouched.
 - **AMD:** `kvm.ignore_msrs=1` is set host-wide (macOS reads MSRs an AMD host lacks).
 
 ## GUI renders; Setup-Assistant skip is WIP

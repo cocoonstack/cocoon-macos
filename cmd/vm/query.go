@@ -19,7 +19,10 @@ import (
 // List renders every VM as a table (NAME STATE CPU MEM NET VNC SSH IMAGE CREATED), or JSON with -o json.
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	vmsDir := home.VMsDir(cmd)
-	ents, _ := os.ReadDir(vmsDir)
+	ents, err := os.ReadDir(vmsDir)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read vms dir %s: %w", vmsDir, err)
+	}
 	recs := []*record{}
 	for _, e := range ents {
 		if r, err := loadRec(filepath.Join(vmsDir, e.Name())); err == nil {

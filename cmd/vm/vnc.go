@@ -9,8 +9,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 
@@ -36,6 +38,18 @@ var errCNIVNCPassRequired = errors.New("--vnc with --net cni serves VNC on a hos
 func requireCNIVNCPassword(isCNI bool, vncDisp int, vncPass string) error {
 	if isCNI && vncDisp >= 0 && vncPass == "" {
 		return errCNIVNCPassRequired
+	}
+	return validateVNCPassword(vncPass)
+}
+
+// validateVNCPassword rejects control characters (a newline would inject a
+// second HMP command into set_password) and enforces QEMU's 8-char VNC limit.
+func validateVNCPassword(pw string) error {
+	if len(pw) > 8 {
+		return fmt.Errorf("--vnc-password must be at most 8 characters, got %d", len(pw))
+	}
+	if strings.ContainsFunc(pw, unicode.IsControl) {
+		return errors.New("--vnc-password must not contain control characters")
 	}
 	return nil
 }

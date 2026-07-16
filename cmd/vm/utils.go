@@ -202,6 +202,10 @@ func resolveFirmware(cmd *cobra.Command) (opencore, code, vars string, err error
 // setVNCPassword applies the VNC password over the HMP monitor (QEMU was started with
 // password=on); macOS Screen Sharing needs password auth, not QEMU's default "None".
 func setVNCPassword(ctx context.Context, monSock, pw string) error {
+	// Airtight guard: Start reaches here without the create/clone pre-check.
+	if err := validateVNCPassword(pw); err != nil {
+		return err
+	}
 	var conn net.Conn
 	var dialErr error
 	// the monitor socket appears asynchronously after -daemonize

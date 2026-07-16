@@ -1,9 +1,11 @@
 package vm
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
 
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
@@ -29,10 +31,8 @@ func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {
 		if isRunning(r) {
 			return fmt.Errorf("vm %q is running (pid %d); stop it first (qemu-img snapshot on a live image corrupts it)", r.Name, r.PID)
 		}
-		for _, img := range imagesToSnapshot(r) {
-			if err := qemu.SnapCreate(ctx, img, tag); err != nil {
-				return err
-			}
+		if err := snapshotAllOrNothing(ctx, imagesToSnapshot(r), tag); err != nil {
+			return err
 		}
 		r.Snapshots = append(r.Snapshots, tag)
 		return saveRec(dir, r)
@@ -69,9 +69,21 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 			}
 			tag = r.Snapshots[len(r.Snapshots)-1]
 		}
-		for _, img := range imagesToSnapshot(r) {
-			if err := qemu.SnapApply(ctx, img, tag); err != nil {
+		imgs := imagesToSnapshot(r)
+		// Pre-flight: apply reverts each disk in place and can't be undone, so
+		// confirm every disk carries the tag before touching any of them.
+		for _, img := range imgs {
+			ok, err := qemu.SnapExists(ctx, img, tag)
+			if err != nil {
 				return err
+			}
+			if !ok {
+				return fmt.Errorf("snapshot %q missing on disk %s; refusing a partial restore", tag, img)
+			}
+		}
+		for _, img := range imgs {
+			if err := qemu.SnapApply(ctx, img, tag); err != nil {
+				return fmt.Errorf("restore %q on %s failed mid-apply; disks may be inconsistent: %w", tag, img, err)
 			}
 		}
 		if wasRunning {
@@ -89,6 +101,24 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 // the data disks (all qcow2, so they roll back with the OS disk), plus OVMF_VARS only if it is
 // qcow2 (raw .fd can't hold internal snapshots, so with a raw NVRAM the firmware vars do NOT roll
 // back — only guest disk state does).
+// snapshotAllOrNothing tags every image or rolls back the ones already tagged,
+// so a partial failure never leaves an untracked snapshot point on some disks.
+func snapshotAllOrNothing(ctx context.Context, imgs []string, tag string) error {
+	var created []string
+	for _, img := range imgs {
+		if err := qemu.SnapCreate(ctx, img, tag); err != nil {
+			for _, done := range created {
+				if rbErr := qemu.SnapDelete(ctx, done, tag); rbErr != nil {
+					log.WithFunc("vm.snapshotAllOrNothing").Warnf(ctx, "rollback snapshot %q on %s: %v", tag, done, rbErr)
+				}
+			}
+			return fmt.Errorf("snapshot %s: %w", img, err)
+		}
+		created = append(created, img)
+	}
+	return nil
+}
+
 func imagesToSnapshot(r *record) []string {
 	imgs := []string{r.Disk}
 	if qemu.IsQcow2NVRAM(r.OVMFVars) {

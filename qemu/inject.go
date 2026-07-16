@@ -23,12 +23,9 @@ import (
 // and no vault signature rejects the edit.
 func InjectConfig(ctx context.Context, ocPath string, sm *SMBIOS) error {
 	_ = exec.CommandContext(ctx, "modprobe", "nbd", "max_part=8").Run()
-	nbd, err := findFreeNBD()
+	nbd, err := connectFreeNBD(ctx, ocPath)
 	if err != nil {
 		return err
-	}
-	if out, cerr := exec.CommandContext(ctx, "qemu-nbd", "--connect="+nbd, "-f", "qcow2", ocPath).CombinedOutput(); cerr != nil {
-		return fmt.Errorf("connect qemu-nbd %s (output: %s): %w", nbd, out, cerr)
 	}
 	// cleanup stays on plain exec.Command: it must still run after ctx cancellation
 	defer disconnectNBD(ctx, nbd, ocPath)
@@ -85,14 +82,27 @@ func isFileHeld(ocPath string) bool {
 	return err == nil && len(pids) > 0
 }
 
-func findFreeNBD() (string, error) {
+// connectFreeNBD claims a device by connecting to it: the connect itself is the
+// exclusive operation, so a race with another VM create just advances to the
+// next candidate instead of both picking the same device.
+func connectFreeNBD(ctx context.Context, ocPath string) (string, error) {
+	var lastErr error
 	for i := range 16 {
-		if _, err := os.Stat(fmt.Sprintf("/dev/nbd%d", i)); err != nil {
+		nbd := fmt.Sprintf("/dev/nbd%d", i)
+		if _, err := os.Stat(nbd); err != nil {
 			continue
 		}
-		if _, err := os.Stat(fmt.Sprintf("/sys/block/nbd%d/pid", i)); os.IsNotExist(err) {
-			return fmt.Sprintf("/dev/nbd%d", i), nil
+		if _, err := os.Stat(fmt.Sprintf("/sys/block/nbd%d/pid", i)); !os.IsNotExist(err) {
+			continue
 		}
+		out, cerr := exec.CommandContext(ctx, "qemu-nbd", "--connect="+nbd, "-f", "qcow2", ocPath).CombinedOutput()
+		if cerr == nil {
+			return nbd, nil
+		}
+		lastErr = fmt.Errorf("connect qemu-nbd %s (output: %s): %w", nbd, out, cerr)
+	}
+	if lastErr != nil {
+		return "", lastErr
 	}
 	return "", errors.New("no free /dev/nbd device (is the nbd module loaded)")
 }

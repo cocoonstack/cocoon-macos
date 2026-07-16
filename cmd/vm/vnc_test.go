@@ -30,3 +30,26 @@ func TestRequireCNIVNCPassword(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateVNCPassword(t *testing.T) {
+	tests := []struct {
+		name    string
+		pw      string
+		wantErr bool
+	}{
+		{"empty ok", "", false},
+		{"normal ok", "s3cret", false},
+		{"max length ok", "8charpwd", false},
+		{"too long rejected", "9charpass", true},
+		{"newline injection rejected", "x\nquit", true},
+		{"carriage return rejected", "x\rset", true},
+		{"tab rejected", "a\tb", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateVNCPassword(tt.pw); (err != nil) != tt.wantErr {
+				t.Errorf("validateVNCPassword(%q) err = %v, wantErr %v", tt.pw, err, tt.wantErr)
+			}
+		})
+	}
+}

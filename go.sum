@@ -8,8 +8,8 @@ github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b h1:r6VH0faHjZe
 github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
 github.com/cockroachdb/redact v1.1.5 h1:u1PMllDkdFfPWaNGMyLD1+so+aq3uUItthCFqzwPJ30=
 github.com/cockroachdb/redact v1.1.5/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
-github.com/cocoonstack/cocoon v0.5.2-0.20260713182614-0f6c21b5b6f6 h1:OKpbRm7j/WoON1iB26jiIshYwzLibu+5f/p49Um0rzc=
-github.com/cocoonstack/cocoon v0.5.2-0.20260713182614-0f6c21b5b6f6/go.mod h1:Rl/SAzj1RbyL8XJaIyWiHdT96yK2D1e0xCr8flVqIcA=
+github.com/cocoonstack/cocoon v0.5.3 h1:rKYDjVpVefn147lVsuLFDCAB6yx8oH4imD2LATt6vi8=
+github.com/cocoonstack/cocoon v0.5.3/go.mod h1:Rl/SAzj1RbyL8XJaIyWiHdT96yK2D1e0xCr8flVqIcA=
 github.com/containernetworking/cni v1.3.0 h1:v6EpN8RznAZj9765HhXQrtXgX+ECGebEYEmnuFjskwo=
 github.com/containernetworking/cni v1.3.0/go.mod h1:Bs8glZjjFfGPHMw6hQu82RUgEPNGEaBb9KS5KtNMnJ4=
 github.com/containernetworking/plugins v1.9.0 h1:Mg3SXBdRGkdXyFC4lcwr6u2ZB2SDeL6LC3U+QrEANuQ=

@@ -30,8 +30,7 @@ func loadRec(dir string) (*record, error) {
 	return &r, nil
 }
 
-// saveRec atomically writes the VM record (temp + fsync + rename), so a crash mid-write can't
-// leave a truncated vm.json that orphans a qemu or leaks a TAP.
+// saveRec writes vm.json atomically (temp + fsync + rename) so a crash can't truncate it.
 func saveRec(dir string, r *record) error {
 	if err := utils.AtomicWriteJSON(filepath.Join(dir, "vm.json"), r); err != nil {
 		return fmt.Errorf("write vm record: %w", err)
@@ -39,8 +38,7 @@ func saveRec(dir string, r *record) error {
 	return nil
 }
 
-// withVMLock runs fn while holding the per-VM flock, so concurrent lifecycle ops (stop/start/
-// snapshot/restore) on the same VM serialize instead of racing on vm.json's read-modify-write.
+// withVMLock serializes concurrent lifecycle ops on one VM (vm.json is read-modify-write).
 func withVMLock(ctx context.Context, dir string, fn func() error) error {
 	l := flock.New(filepath.Join(dir, "vm.json.lock"))
 	if err := l.Lock(ctx); err != nil {
@@ -58,9 +56,8 @@ func bakeOverlay(ctx context.Context, base, dst string) error {
 	return nil
 }
 
-// scaffoldVM lays down a new VM's directory: refuses an existing record (a second create/clone
-// under the same name would truncate the live overlay and orphan its qemu), then bakes the disk
-// overlay on the resolved base and copies the OVMF_VARS template.
+// scaffoldVM lays down a new VM dir, disk overlay, and OVMF_VARS copy; it refuses an existing
+// record — a second create/clone under the same name would truncate the live overlay.
 func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir, overlay, ovmfVars, digest string, err error) {
 	dir = home.VMDir(cmd, name)
 	if _, statErr := os.Stat(filepath.Join(dir, "vm.json")); statErr == nil {
@@ -84,9 +81,8 @@ func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir,
 	return dir, overlay, ovmfVars, digest, nil
 }
 
-// prepareNet provisions host-side networking and returns the TAP ifname, the netns path (CNI;
-// "" otherwise) and the guest MAC. user-mode and a pre-created --tap need no provisioning; every
-// other mode goes through the per-OS provisionNet.
+// prepareNet returns the TAP ifname, netns path (CNI only), and guest MAC; user-mode and a
+// pre-created --tap need no provisioning, every other mode goes through the per-OS provisionNet.
 func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err error) {
 	switch r.NetMode {
 	case "", netUser:
@@ -99,8 +95,8 @@ func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err erro
 	return provisionNet(cmd, r)
 }
 
-// applyNet provisions networking for r and records the result. r.Tap at entry is the user's
-// --tap value: an auto-created TAP is "owned" (torn down on rm) only when the user did not pass one.
+// applyNet provisions networking and records it; a TAP is "owned" (torn down on rm) only
+// when auto-created, never when the user passed --tap.
 func applyNet(cmd *cobra.Command, r *record) error {
 	userTap := r.Tap
 	netTap, netns, mac, err := prepareNet(cmd, r)
@@ -116,23 +112,18 @@ func applyNet(cmd *cobra.Command, r *record) error {
 	return nil
 }
 
-// isRunning reports whether the VM's qemu process is alive AND is actually this VM's qemu (argv0 +
-// the overlay path in /proc/<pid>/cmdline), so a recycled PID isn't mistaken for a live VM; falls
-// back to a bare liveness probe on non-Linux.
+// isRunning is PID-reuse-safe: it verifies argv0 + the overlay path in the process cmdline.
 func isRunning(r *record) bool {
 	return utils.VerifyProcessCmdline(r.PID, qemuBinary, r.Disk)
 }
 
-// terminate stops the VM's qemu process (PID-reuse-safe — verifies the cmdline before signaling);
-// grace=0 is the --force path (SIGTERM, then immediate SIGKILL).
+// terminate stops the VM's qemu, verifying the cmdline before signaling; grace=0 means immediate SIGKILL.
 func terminate(ctx context.Context, r *record, grace time.Duration) {
 	if r.PID > 0 {
 		_ = utils.TerminateProcess(ctx, r.PID, qemuBinary, r.Disk, grace)
 	}
 }
 
-// graceFromFlags is the terminate grace period: 0 (immediate SIGKILL) when --force is set, else the
-// default ACPI grace window.
 func graceFromFlags(cmd *cobra.Command) time.Duration {
 	if force, _ := cmd.Flags().GetBool("force"); force {
 		return 0
@@ -140,16 +131,13 @@ func graceFromFlags(cmd *cobra.Command) time.Duration {
 	return stopGracePeriod
 }
 
-// hostIsAMD reports whether the host CPU is AMD, which needs kvm.ignore_msrs=1 so macOS's reads of
-// MSRs AMD lacks return 0 instead of #GP. Reads /proc/cpuinfo; false off Linux, where these VMs don't run.
 func hostIsAMD() bool {
 	b, err := os.ReadFile("/proc/cpuinfo")
 	return err == nil && strings.Contains(string(b), "AuthenticAMD")
 }
 
-// resolveBase returns the immutable base qcow2 for image: a direct filesystem path (legacy), else
-// an image ref resolved through cocoon's cloudimg store (returns the content-addressed blob + its
-// digest). Per-VM overlays are baked on this base, which stays read-only.
+// resolveBase returns the immutable base qcow2 (+ digest): a direct filesystem path, else an
+// image ref resolved through cocoon's cloudimg store.
 func resolveBase(cmd *cobra.Command, image, name string) (string, string, error) {
 	if _, err := os.Stat(image); err == nil {
 		return image, "", nil
@@ -170,9 +158,8 @@ func resolveBase(cmd *cobra.Command, image, name string) (string, string, error)
 	return sc[0][0].Path, vm.ImageDigest, nil
 }
 
-// ensureCloudimgFirmware writes a placeholder CLOUDHV.fd where cocoon's cloudimg.Config insists a
-// UEFI firmware exists (it targets cloud-hypervisor). cocoon-macos boots via OVMF + OpenCore and
-// DISCARDS that BootConfig, so the file is never read — it only unblocks Config's validation.
+// ensureCloudimgFirmware writes a placeholder CLOUDHV.fd purely to satisfy cloudimg.Config's
+// firmware validation — cocoon-macos boots via OVMF and never reads it.
 func ensureCloudimgFirmware(cmd *cobra.Command) {
 	fw := images.FirmwarePath(home.Dir(cmd))
 	if utils.ValidFile(fw) {
@@ -183,9 +170,8 @@ func ensureCloudimgFirmware(cmd *cobra.Command) {
 	}
 }
 
-// resolveFirmware returns the OpenCore loader + OVMF code/vars: an explicit flag always wins,
-// else the shared managed copy under <state-dir>/firmware/. OVMF_CODE is shared read-only; the
-// OpenCore + OVMF_VARS here are the base/template that per-VM copies (overlay/NVRAM) derive from.
+// resolveFirmware returns the OpenCore loader + OVMF code/vars base/template paths: an explicit
+// flag wins, else the shared copy under <state-dir>/firmware/.
 func resolveFirmware(cmd *cobra.Command) (opencore, code, vars string, err error) {
 	fw := home.FirmwareDir(cmd)
 	opencore = flagOr(cmd, "opencore", filepath.Join(fw, "OpenCore.qcow2"))
@@ -199,10 +185,9 @@ func resolveFirmware(cmd *cobra.Command) (opencore, code, vars string, err error
 	return opencore, code, vars, nil
 }
 
-// setVNCPassword applies the VNC password over the HMP monitor (QEMU was started with
-// password=on); macOS Screen Sharing needs password auth, not QEMU's default "None".
+// setVNCPassword applies the VNC password over the HMP monitor (QEMU was started with password=on).
 func setVNCPassword(ctx context.Context, monSock, pw string) error {
-	// Airtight guard: Start reaches here without the create/clone pre-check.
+	// Start reaches here without the create/clone pre-check
 	if err := validateVNCPassword(pw); err != nil {
 		return err
 	}
@@ -216,9 +201,7 @@ func setVNCPassword(ctx context.Context, monSock, pw string) error {
 		return fmt.Errorf("dial monitor: %w", cmp.Or(dialErr, err))
 	}
 	defer func() { _ = conn.Close() }()
-	// Wait for the HMP prompt before sending: right after -daemonize the monitor accepts the
-	// connection but discards input until it is ready, so an early set_password is silently lost
-	// (QEMU keeps password=on with no password set -> all auth fails).
+	// the monitor discards input until its first prompt, so an early set_password is silently lost
 	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	if _, ok := readUntil(conn, "(qemu)"); !ok {
 		return errors.New("monitor prompt not seen")
@@ -226,12 +209,11 @@ func setVNCPassword(ctx context.Context, monSock, pw string) error {
 	if _, err := fmt.Fprintf(conn, "set_password vnc %s\n", pw); err != nil {
 		return fmt.Errorf("send set_password: %w", err)
 	}
-	// Wait for the NEXT prompt so QEMU has actually executed the line before we close — the HMP
-	// echoes input char-by-char, so reading only the first echo bytes and closing drops the command.
+	// wait for the next prompt so QEMU has executed the line before we close (HMP echoes char-by-char)
 	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	out, _ := readUntil(conn, "(qemu)")
 	if strings.Contains(out, "Could not") {
-		// out echoes the typed "set_password vnc <pw>" line — never surface it.
+		// out echoes the typed "set_password vnc <pw>" line — never surface it
 		return errors.New("qemu rejected set_password (vnc display not active?)")
 	}
 	return nil
@@ -252,7 +234,6 @@ func readUntil(conn net.Conn, marker string) (string, bool) {
 	}
 }
 
-// flagOr returns the named string flag's value, or def when the flag is unset/empty.
 func flagOr(cmd *cobra.Command, name, def string) string {
 	if v, _ := cmd.Flags().GetString(name); v != "" {
 		return v

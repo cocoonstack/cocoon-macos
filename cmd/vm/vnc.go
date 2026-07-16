@@ -19,8 +19,7 @@ import (
 	"github.com/cocoonstack/cocoon/utils"
 )
 
-// vncSockName / vncProxyPID live in the per-VM dir. The proxy fronts the netns-local QEMU VNC unix
-// socket (see qemu.Spec.VNCSock) on a host TCP port so a CNI VM's console is reachable off-box.
+// The proxy fronts a CNI VM's netns-local VNC unix socket on a host TCP port (see qemu.Spec.VNCSock).
 const (
 	vncSockName = "vnc.sock"
 	vncProxyPID = "vnc-proxy.pid"
@@ -28,13 +27,10 @@ const (
 	vncBasePort = 5900
 )
 
-// Unlike the loopback bind of the other net modes, the CNI proxy listens on all host interfaces —
-// never expose that unauthenticated.
 var errCNIVNCPassRequired = errors.New("--vnc with --net cni serves VNC on a host port reachable off-box; --vnc-password is required")
 
-// requireCNIVNCPassword rejects an unauthenticated VNC display on a CNI VM whose
-// host port is reachable off-box. isCNI is the flag intent at create/clone
-// (pre-scaffold) or the resolved Netns at launch (post-scaffold).
+// requireCNIVNCPassword rejects an unauthenticated VNC display on a CNI VM (the proxy listens on
+// 0.0.0.0); isCNI is the flag intent at create/clone or the resolved Netns at launch.
 func requireCNIVNCPassword(isCNI bool, vncDisp int, vncPass string) error {
 	if isCNI && vncDisp >= 0 && vncPass == "" {
 		return errCNIVNCPassRequired
@@ -42,8 +38,8 @@ func requireCNIVNCPassword(isCNI bool, vncDisp int, vncPass string) error {
 	return validateVNCPassword(vncPass)
 }
 
-// validateVNCPassword rejects control characters (a newline would inject a
-// second HMP command into set_password) and enforces QEMU's 8-char VNC limit.
+// validateVNCPassword rejects control characters (a newline would inject a second HMP command)
+// and enforces QEMU's 8-char VNC limit.
 func validateVNCPassword(pw string) error {
 	if len(pw) > 8 {
 		return fmt.Errorf("--vnc-password must be at most 8 characters, got %d", len(pw))
@@ -54,8 +50,7 @@ func validateVNCPassword(pw string) error {
 	return nil
 }
 
-// vncProxyCommand is the hidden re-exec target that runs the forwarder for its lifetime, accepting
-// on the TCP listener inherited as fd 3 (bound by the parent so bind errors fail the launch).
+// vncProxyCommand is the hidden re-exec target running the forwarder on the listener inherited as fd 3.
 func vncProxyCommand() *cobra.Command {
 	return &cobra.Command{
 		Use: vncProxyOp + " <unix-sock>", Hidden: true, Args: cobra.ExactArgs(1),
@@ -63,8 +58,8 @@ func vncProxyCommand() *cobra.Command {
 	}
 }
 
-// startVNCProxy re-execs this binary as the hidden proxy, detached, in the HOST netns (so its TCP
-// listener is reachable off-box while qemu's VNC stays inside the CNI netns). Idempotent.
+// startVNCProxy re-execs this binary as the detached proxy in the HOST netns, so its TCP listener
+// is reachable while qemu's VNC stays inside the CNI netns. Idempotent.
 func startVNCProxy(ctx context.Context, dir string, disp int) error {
 	stopVNCProxy(ctx, dir) // a stale proxy would hold the port and shadow the new one
 	sock := filepath.Join(dir, vncSockName)
@@ -74,8 +69,7 @@ func startVNCProxy(ctx context.Context, dir string, disp int) error {
 	}); err != nil {
 		return fmt.Errorf("vnc socket %s not created by qemu: %w", sock, err)
 	}
-	// Bind here, not in the child: the child is detached, so its bind error (port taken) would be
-	// invisible and the launch would report a VNC entry point that doesn't exist.
+	// bind here, not in the detached child, so a port-taken error fails the launch instead of vanishing
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", vncBasePort+disp))
 	if err != nil {
 		return fmt.Errorf("bind vnc port: %w", err)
@@ -103,9 +97,8 @@ func startVNCProxy(ctx context.Context, dir string, disp int) error {
 	return nil
 }
 
-// stopVNCProxy kills a running proxy (best-effort) and removes its pidfile. Zero grace: the CLI's
-// root command traps SIGTERM via signal.NotifyContext, so a TERMed proxy would just keep accepting;
-// TerminateProcess then escalates straight to SIGKILL, which loses nothing on a stateless pipe.
+// stopVNCProxy kills a running proxy (best-effort). Zero grace: the proxy traps SIGTERM via the
+// root NotifyContext and would keep accepting, and SIGKILL loses nothing on a stateless pipe.
 func stopVNCProxy(ctx context.Context, dir string) {
 	pidPath := filepath.Join(dir, vncProxyPID)
 	if pid, err := utils.ReadPIDFile(pidPath); err == nil {
@@ -129,7 +122,6 @@ func runVNCProxy(sock string) error {
 	}
 }
 
-// pipeVNC bridges one client connection to the VM's VNC unix socket, copying both directions.
 func pipeVNC(client net.Conn, sock string) {
 	defer func() { _ = client.Close() }()
 	backend, err := net.Dial("unix", sock)

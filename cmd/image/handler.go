@@ -17,9 +17,8 @@ import (
 
 var _ Actions = (*Handler)(nil)
 
-// Handler implements Actions on cocoon's cloudimg store (content-addressed qcow2 blobs under
-// <state-dir>/cloudimg). The macOS golden disk is a single immutable qcow2, which is exactly the
-// cloudimg shape; vm clone bakes a CoW overlay on the resolved blob (see cmd/vm).
+// Handler implements Actions on cocoon's cloudimg store — the macOS golden disk is a single
+// immutable qcow2, exactly the cloudimg shape.
 type Handler struct{}
 
 // NewHandler returns a Handler backed by the cloudimg store.
@@ -43,8 +42,7 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 	}
-	// ghcr resets a single HTTP/2 stream on multi-GB blobs, so pull to a temp file over parallel
-	// Range connections and import that, rather than streaming straight into the store.
+	// ghcr resets a single HTTP/2 stream on multi-GB blobs: pull to a temp file over parallel Ranges, then import
 	logger.Debugf(ctx, "pulling OCI artifact %s via parallel Range download", ref)
 	tmp, err := os.CreateTemp(home.Dir(cmd), "pull-*.qcow2")
 	if err != nil {

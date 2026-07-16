@@ -16,7 +16,6 @@ import (
 	"github.com/cocoonstack/cocoon-macos/home"
 )
 
-// List renders every VM as a table (NAME STATE CPU MEM NET VNC SSH IMAGE CREATED), or JSON with -o json.
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	vmsDir := home.VMsDir(cmd)
 	ents, err := os.ReadDir(vmsDir)
@@ -39,7 +38,6 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	})
 }
 
-// Inspect prints a single VM's full record as JSON.
 func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 	r, err := loadRec(home.VMDir(cmd, args[0]))
 	if err != nil {
@@ -48,8 +46,6 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 	return cliutil.OutputJSON(r)
 }
 
-// Console prints the VNC endpoint and SSH command for reaching a VM ("-" when disabled),
-// deriving both from the same helpers vm list uses so the 5900+display rule lives in one place.
 func (h *Handler) Console(cmd *cobra.Command, args []string) error {
 	r, err := loadRec(home.VMDir(cmd, args[0]))
 	if err != nil {
@@ -88,7 +84,6 @@ func sshCol(r *record) string {
 	return strconv.Itoa(r.SSHPort)
 }
 
-// formatTime renders the record's RFC3339 Created stamp as local time.DateTime; raw on parse failure.
 func formatTime(s string) string {
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
 		return t.Local().Format(time.DateTime)

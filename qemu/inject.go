@@ -16,11 +16,8 @@ import (
 	"github.com/cocoonstack/cocoon/utils"
 )
 
-// InjectConfig mounts the OpenCore qcow2 and patches its config.plist with a per-VM SMBIOS identity.
-//
-// qemu-nbd is the only way to edit a FAT partition inside a qcow2, so this needs root and the nbd
-// module. The shipped OpenCore runs Automatic=true + Vault=Optional, so Generic is the SMBIOS source
-// and no vault signature rejects the edit.
+// InjectConfig mounts the OpenCore qcow2 via qemu-nbd (the only way to edit a FAT partition
+// inside a qcow2; needs root + the nbd module) and patches config.plist with a per-VM identity.
 func InjectConfig(ctx context.Context, ocPath string, sm *SMBIOS) error {
 	_ = exec.CommandContext(ctx, "modprobe", "nbd", "max_part=8").Run()
 	nbd, err := connectFreeNBD(ctx, ocPath)
@@ -48,8 +45,7 @@ func InjectConfig(ctx context.Context, ocPath string, sm *SMBIOS) error {
 	return patchPlist(filepath.Join(mnt, "EFI", "OC", "config.plist"), sm)
 }
 
-// waitForPart blocks until the kernel has scanned the qcow2's partition table (nbd partition
-// creation is asynchronous after --connect), so the mount below sees nbdXp1.
+// waitForPart blocks until the kernel's async partition scan exposes nbdXp1 for the mount.
 func waitForPart(ctx context.Context, nbd string) {
 	_ = utils.WaitFor(ctx, 5*time.Second, 100*time.Millisecond, func() (bool, error) {
 		if _, err := os.Stat(nbd + "p1"); err == nil {
@@ -60,31 +56,26 @@ func waitForPart(ctx context.Context, nbd string) {
 	})
 }
 
-// disconnectNBD tears down the qemu-nbd mapping and waits until the qcow2 is no longer held.
-// qemu-nbd --disconnect releases the device asynchronously and the server pid is not
-// /sys/block/nbdX/pid, so returning early would let the qemu launch race in and fail with
-// "Failed to get shared write lock".
+// disconnectNBD waits out qemu-nbd's asynchronous release, or the qemu launch races in and fails
+// with "Failed to get shared write lock".
 func disconnectNBD(ctx context.Context, nbd, ocPath string) {
 	_ = exec.Command("qemu-nbd", "--disconnect", nbd).Run()
 	if err := utils.WaitFor(ctx, 10*time.Second, 100*time.Millisecond, func() (bool, error) {
 		return !isFileHeld(ocPath), nil
 	}); err != nil {
-		// surfaces the failure the godoc warns about instead of leaving no diagnostic trail
 		log.WithFunc("qemu.disconnectNBD").Warnf(ctx, "qcow2 %s still held after nbd disconnect: %v", ocPath, err)
 	}
 }
 
-// isFileHeld reports whether a qemu-nbd server still has ocPath open, by matching its cmdline
-// (one /proc walk) — cheaper than scanning every process's fd table, and the daemonized server
-// is the only holder to wait out.
+// isFileHeld matches the daemonized qemu-nbd server's cmdline — cheaper than scanning fd tables,
+// and that server is the only holder to wait out.
 func isFileHeld(ocPath string) bool {
 	pids, err := utils.FindVMMByCmdline("qemu-nbd", ocPath)
 	return err == nil && len(pids) > 0
 }
 
-// connectFreeNBD claims a device by connecting to it: the connect itself is the
-// exclusive operation, so a race with another VM create just advances to the
-// next candidate instead of both picking the same device.
+// connectFreeNBD claims a device by connecting: the connect itself is the exclusive operation,
+// so a race with another VM create just advances to the next candidate.
 func connectFreeNBD(ctx context.Context, ocPath string) (string, error) {
 	var lastErr error
 	for i := range 16 {
@@ -133,9 +124,8 @@ func patchPlist(path string, sm *SMBIOS) error {
 		g["ROM"] = rom
 		g["SpoofVendor"] = true
 	}
-	// Boot the installed macOS with no picker UI: ShowPicker=false makes OpenCore boot the default
-	// entry straight away. A visible picker can't be driven reliably headlessly — OpenCanopy cancels
-	// its Timeout countdown on the stray input from USB device enumeration and then waits forever.
+	// ShowPicker=false: a visible picker can't be driven headlessly — OpenCanopy cancels its
+	// Timeout on stray USB-enumeration input and waits forever
 	boot := ensureSubMap(ensureSubMap(cfg, "Misc"), "Boot")
 	boot["ShowPicker"] = false
 	boot["HideAuxiliary"] = true

@@ -23,13 +23,12 @@ import (
 	"github.com/cocoonstack/cocoon/utils"
 )
 
-// pullConns is the number of parallel HTTP Range connections used to fetch a blob; ghcr throttles a
-// single stream to a fraction of the link, so 8 chunks pull the multi-GB base images far faster.
+// pullConns is the parallel HTTP Range connection count; ghcr throttles a single stream to a
+// fraction of the link.
 const pullConns = 8
 
-// pullOCIBlob resolves ref's qcow2 layer and downloads it to dest, using parallel HTTP Range
-// requests when the registry supports them (falling back to a single stream otherwise) and verifying
-// the content against the layer's sha256 digest.
+// pullOCIBlob downloads ref's qcow2 layer to dest — parallel Range requests when supported,
+// single stream otherwise — and verifies the sha256 digest.
 func pullOCIBlob(ctx context.Context, ref, dest string) error {
 	repo, err := remote.NewRepository(ref)
 	if err != nil {
@@ -62,15 +61,13 @@ func pullOCIBlob(ctx context.Context, ref, dest string) error {
 			return err
 		}
 	}
-	// Flush before the pinned cocoon import adopts this file, so a crash right
-	// after "pull complete" can't leave an unverified blob in the store.
+	// flush before import adopts the file, so a crash can't leave an unverified blob in the store
 	if err = f.Sync(); err != nil {
 		return fmt.Errorf("sync %s: %w", dest, err)
 	}
 	return verifyDigest(dest, layer.Digest.String())
 }
 
-// resolveQcow2Layer fetches ref's manifest and returns its qcow2 layer descriptor.
 func resolveQcow2Layer(ctx context.Context, repo *remote.Repository, ref string) (ocispec.Descriptor, error) {
 	desc, err := repo.Resolve(ctx, ref)
 	if err != nil {
@@ -91,8 +88,8 @@ func resolveQcow2Layer(ctx context.Context, repo *remote.Repository, ref string)
 	return layer, nil
 }
 
-// rangeSupported probes whether the blob endpoint honors a Range request (ghcr redirects to a
-// presigned URL that does; a registry that returns 200 does not).
+// rangeSupported probes whether the blob endpoint honors Range (ghcr's presigned redirect does;
+// a registry answering 200 does not).
 func rangeSupported(ctx context.Context, client *auth.Client, url string) bool {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -107,7 +104,6 @@ func rangeSupported(ctx context.Context, client *auth.Client, url string) bool {
 	return resp.StatusCode == http.StatusPartialContent
 }
 
-// fetchParallel downloads [0,size) in pullConns chunks concurrently, each writing at its offset.
 func fetchParallel(ctx context.Context, client *auth.Client, url string, size int64, f *os.File) error {
 	g, gctx := errgroup.WithContext(ctx)
 	for _, r := range utils.SplitRanges(size, pullConns) {
@@ -131,7 +127,6 @@ func fetchRange(ctx context.Context, client *auth.Client, url string, start, end
 	return utils.CopyRangeBody(resp, io.NewOffsetWriter(f, start), start, end)
 }
 
-// fetchSingle streams the blob in one connection (fallback when Range isn't supported).
 func fetchSingle(ctx context.Context, repo *remote.Repository, layer ocispec.Descriptor, f *os.File) error {
 	rc, err := repo.Blobs().Fetch(ctx, layer)
 	if err != nil {
@@ -142,7 +137,6 @@ func fetchSingle(ctx context.Context, repo *remote.Repository, layer ocispec.Des
 	return err
 }
 
-// verifyDigest re-hashes the downloaded file and checks it against "sha256:<hex>".
 func verifyDigest(path, want string) error {
 	f, err := os.Open(path) //nolint:gosec // path is an internal temp path (os.CreateTemp), not user input
 	if err != nil {
@@ -160,9 +154,8 @@ func verifyDigest(path, want string) error {
 	return nil
 }
 
-// dockerCredential resolves registry credentials from the user's docker config. NewStoreFromDocker
-// tolerates a missing config, so an empty store yields anonymous pulls and public ghcr images work
-// without a login.
+// dockerCredential resolves credentials from the user's docker config; a missing config yields an
+// empty store, so anonymous public pulls still work.
 func dockerCredential() auth.CredentialFunc {
 	store, err := credentials.NewStoreFromDocker(credentials.StoreOptions{})
 	if err != nil {
@@ -171,8 +164,8 @@ func dockerCredential() auth.CredentialFunc {
 	return credentials.Credential(store)
 }
 
-// pickQcow2Layer selects the qcow2 layer from a manifest: prefer one whose title annotation ends in
-// .qcow2 (what `oras push` writes), else the largest.
+// pickQcow2Layer prefers the layer whose title annotation ends in .qcow2 (what `oras push`
+// writes), else the largest.
 func pickQcow2Layer(layers []ocispec.Descriptor) (ocispec.Descriptor, error) {
 	if len(layers) == 0 {
 		return ocispec.Descriptor{}, fmt.Errorf("manifest has no layers")

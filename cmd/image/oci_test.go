@@ -6,8 +6,6 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-// TestPickQcow2Layer covers each selection branch: title match, first of many matches, sole layer,
-// largest fallback, and the empty-layers error.
 func TestPickQcow2Layer(t *testing.T) {
 	tests := []struct {
 		name    string

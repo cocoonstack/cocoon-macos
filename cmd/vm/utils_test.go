@@ -7,8 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TestGraceFromFlags pins the shared stop/rm force mapping: --force is an immediate SIGKILL
-// (grace 0), everything else waits the ACPI grace window.
+// TestGraceFromFlags pins the stop/rm mapping: --force is grace 0, else the ACPI grace window.
 func TestGraceFromFlags(t *testing.T) {
 	tests := []struct {
 		name  string

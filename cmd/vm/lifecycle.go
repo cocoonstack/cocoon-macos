@@ -17,8 +17,6 @@ import (
 	"github.com/cocoonstack/cocoon-macos/qemu"
 )
 
-// Create derives a per-VM copy-on-write overlay on the golden image and writes the record,
-// without booting it. It prints the VM name.
 func (h *Handler) Create(cmd *cobra.Command, args []string) error {
 	r, err := h.create(cmd, args[0])
 	if err != nil {
@@ -28,16 +26,14 @@ func (h *Handler) Create(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// Run creates a per-VM overlay and immediately boots it, printing the name and qemu PID.
 func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 	r, err := h.create(cmd, args[0])
 	if err != nil {
 		return err
 	}
 	if err := h.launch(cmd, home.VMDir(cmd, r.Name), r); err != nil {
-		// run is an atomic create+boot: on failure remove everything it just made — a leftover
-		// record would point at the torn-down netns/TAP and brick retries ("already exists",
-		// un-startable). Restart failures (vm start) must NOT do this: their network is persisted.
+		// atomic create+boot: remove everything on failure or the leftover record bricks retries;
+		// start must NOT do this — its network is persisted
 		teardownNet(cmd, r)
 		_ = os.RemoveAll(home.VMDir(cmd, r.Name))
 		return err
@@ -46,9 +42,6 @@ func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// Start boots one or more previously-created VMs, reusing each persisted TAP/netns
-// across stop/start (only rm tears those down). VNC is decided per start — off unless
-// --vnc is given — so the host port is only exposed while actually wanted.
 func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 	ctx := cliutil.CommandContext(cmd)
 	vnc, _ := cmd.Flags().GetInt("vnc")
@@ -74,7 +67,6 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// Stop terminates one or more running VMs. --force skips the ACPI grace window (immediate SIGKILL).
 func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 	grace := graceFromFlags(cmd)
 	ctx := cliutil.CommandContext(cmd)
@@ -98,9 +90,6 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// RM stops one or more VMs, tears down any auto-created TAP/netns (no-op for a user --tap or
-// user-mode), and removes the VM's state directory. --force skips the ACPI grace window
-// (immediate SIGKILL), which also reaps a wedged qemu.
 func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 	grace := graceFromFlags(cmd)
 	ctx := cliutil.CommandContext(cmd)
@@ -110,8 +99,7 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 			fmt.Println(n) // nothing to remove (and no dir to hold the flock in)
 			continue
 		}
-		// same per-VM flock as stop/start/snapshot, so a concurrent start can't relaunch qemu
-		// between terminate and RemoveAll; the held lock fd stays valid across the unlink
+		// the flock stops a concurrent start relaunching qemu between terminate and RemoveAll
 		if err := withVMLock(ctx, dir, func() error {
 			if r, err := loadRec(dir); err == nil {
 				terminate(ctx, r, grace)
@@ -130,7 +118,6 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// create is the shared worker behind Create and Run: overlay, identity, network, record.
 func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	name, _ := cmd.Flags().GetString("name")
 	if name == "" {
@@ -144,7 +131,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	netMode, _ := cmd.Flags().GetString("net")
-	if err = requireCNIVNCPassword(netMode == netCNI, vnc, vncPass); err != nil { // fail before scaffolding leaves a half-made VM
+	if err = requireCNIVNCPassword(netMode == netCNI, vnc, vncPass); err != nil {
 		return nil, err
 	}
 	oc, code, varsTmpl, err := resolveFirmware(cmd)
@@ -180,7 +167,6 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	return r, saveRec(dir, r)
 }
 
-// launch boots qemu for the record's spec, records the PID, and applies the VNC password (if any).
 func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	ctx := cliutil.CommandContext(cmd)
 	logger := log.WithFunc("cmd.vm.launch")
@@ -188,8 +174,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		return err
 	}
 	if hostIsAMD() {
-		// macOS reads MSRs an AMD host lacks; without kvm.ignore_msrs KVM injects #GP. Best-effort,
-		// host-global, and only set on AMD where macOS needs it.
+		// macOS reads MSRs an AMD host lacks; without kvm.ignore_msrs KVM injects #GP (best-effort, host-global)
 		if err := os.WriteFile("/sys/module/kvm/parameters/ignore_msrs", []byte("1\n"), 0o600); err != nil {
 			logger.Warnf(ctx, "set kvm ignore_msrs for AMD: %v", err)
 		}
@@ -202,8 +187,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		DataDisks: r.DataDisks,
 		MonSock:   filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
 	}
-	// CNI runs qemu in a netns, so a 127.0.0.1 VNC binds unreachably there; route it through a unix
-	// socket that a host-side proxy fronts on a TCP port (see startVNCProxy).
+	// CNI: a 127.0.0.1 VNC inside the netns is unreachable; use a unix socket fronted by startVNCProxy
 	if r.Netns != "" && r.VNCDisp >= 0 {
 		spec.VNCSock = filepath.Join(dir, vncSockName)
 	}
@@ -225,15 +209,13 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	}
 	if r.VNCPass != "" {
 		if err := setVNCPassword(ctx, spec.MonSock, r.VNCPass); err != nil {
-			// qemu keeps password=on with no password set, so every VNC auth would fail —
-			// reporting success here would hand out a dead entry point
+			// qemu keeps password=on with no password set, so every VNC auth would fail
 			terminate(ctx, r, 0)
 			return fmt.Errorf("set vnc password: %w", err)
 		}
 	}
 	if spec.VNCSock != "" {
 		if err := startVNCProxy(ctx, dir, r.VNCDisp); err != nil {
-			// the requested VNC entry point doesn't exist — a "running with VNC" success would lie
 			terminate(ctx, r, 0)
 			return fmt.Errorf("start vnc proxy: %w", err)
 		}
@@ -241,9 +223,8 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	return saveRec(dir, r)
 }
 
-// prepareOpenCore points r.OpenCore at the loader to boot. Without a random identity the shared
-// base is used directly (no per-VM copy); otherwise a per-VM CoW overlay is baked on ocBase and its
-// config.plist patched with a unique SMBIOS identity.
+// prepareOpenCore points r.OpenCore at the shared base, or with randomSMBIOS at a per-VM
+// overlay whose config.plist is patched with a unique identity.
 func prepareOpenCore(ctx context.Context, dir, ocBase string, randomSMBIOS bool, r *record) error {
 	if !randomSMBIOS {
 		r.OpenCore, r.OpenCoreBase = ocBase, ""

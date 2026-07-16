@@ -13,25 +13,19 @@ const (
 	// OSK is the Apple SMC key required for macOS guests (public, from OSX-KVM).
 	OSK = "ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
 
-	// macOSCPU is the -cpu for macOS Sequoia/Tahoe. Every token is load-bearing and MUST NOT be
-	// simplified away — a testbed proved a stripped "Skylake-Client-v4,vendor=GenuineIntel,kvm=on"
-	// makes a fresh image's first boot SPIN FOREVER (the "completing installation" storm never ends):
-	//   -hle,-rtm            disable TSX; the v4 model enables it and macOS spins on TSX under nested KVM
-	//   +invtsc,vmware-cpuid-freq=on  hand macOS the invariant-TSC frequency via CPUID so it skips the
-	//                        self-calibration that spins under an unstable nested-KVM TSC
-	//   vendor=GenuineIntel  macOS refuses to boot on a non-Intel vendor string
-	//   the +flags are perf (pcid/invpcid TLB, tsc-deadline timer, …); most are in the base but are
-	//   affirmed here with check= so a base-model bump can't silently drop them again.
-	// AMD support comes from the LongQT OpenCore EFI, not the -cpu, so this boots on Intel and AMD.
+	// macOSCPU is the -cpu for macOS Sequoia/Tahoe; every token is load-bearing — a stripped
+	// "Skylake-Client-v4" makes a fresh image's first boot spin forever (regression dacf35c):
+	// -hle,-rtm drop TSX (macOS spins on it under nested KVM); +invtsc,vmware-cpuid-freq=on feed
+	// the TSC frequency via CPUID so macOS skips self-calibration; vendor=GenuineIntel is
+	// mandatory; the +perf flags are affirmed with check= so a base-model bump can't drop them.
+	// AMD support comes from the LongQT OpenCore EFI, not the -cpu.
 	macOSCPU = "Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on," +
 		"+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt," +
 		"+pcid,+invpcid,+tsc-deadline,+rdtscp,+xsavec,check"
 
-	// ahciDriveOpts is the shared -drive tuning for every writable macOS AHCI/IDE disk (OS disk +
-	// data disks; macOS has no virtio-blk). io_uring beats the default threads aio backend, and
-	// cache=writeback uses host RAM to mask qcow2-overlay + cloud-disk (GCP PD) latency — do NOT use
-	// cache=none, O_DIRECT would hit the network disk on every I/O; discard/detect-zeroes reclaim
-	// freed clusters (the slim stage depends on it).
+	// ahciDriveOpts tunes every writable disk (macOS has no virtio-blk): io_uring beats the threads
+	// aio backend; cache=writeback masks qcow2 + cloud-disk latency (cache=none would hit the
+	// network disk on every I/O); discard/detect-zeroes reclaim freed clusters (slim depends on it).
 	ahciDriveOpts = "if=none,format=qcow2,cache=writeback,aio=io_uring,discard=unmap,detect-zeroes=unmap"
 )
 
@@ -66,8 +60,7 @@ func (s Spec) Args() []string {
 	if IsQcow2NVRAM(s.OVMFVars) {
 		varsFmt = "qcow2"
 	}
-	// 2 MiB hugetlb pages cut TLB/EPT pressure on a memory-heavy GUI guest, but the host must have
-	// them reserved (else qemu won't start); plain anonymous RAM is already THP-eligible.
+	// 2 MiB hugetlb pages cut TLB/EPT pressure but must be pre-reserved on the host (else qemu won't start)
 	machine := "q35"
 	var memBackend []string
 	if s.Hugepages {
@@ -94,8 +87,7 @@ func (s Spec) Args() []string {
 		"-device", "vmware-svga",
 	}
 	a = append(memBackend, a...) // -object must precede the -machine memory-backend reference
-	// data disks ride the SATA ports OpenCoreBoot (sata.2) and MacHDD (sata.4) leave free; the count
-	// is capped at 4 upstream so the index never runs past dataDiskPorts.
+	// the SATA ports OpenCoreBoot (sata.2) and MacHDD (sata.4) leave free; the count is capped at 4 upstream
 	dataDiskPorts := []int{0, 1, 3, 5}
 	for i, path := range s.DataDisks {
 		if i >= len(dataDiskPorts) {
@@ -108,8 +100,6 @@ func (s Spec) Args() []string {
 	}
 	switch {
 	case s.Tap != "":
-		// attach to a pre-created host TAP (cocoon's network plane / a bridge owns IP+forwarding);
-		// the macOS virtio-net front-end is unchanged, the guest just re-DHCPs off the bridge
 		a = append(a, "-netdev", "tap,id=net0,ifname="+s.Tap+",script=no,downscript=no")
 	case s.SSHPort > 0:
 		a = append(a, "-netdev", fmt.Sprintf("user,id=net0,hostfwd=tcp::%d-:22", s.SSHPort))
@@ -121,12 +111,9 @@ func (s Spec) Args() []string {
 		nic += ",mac=" + s.MAC
 	}
 	a = append(a, "-device", nic)
-	// Always headless: the CLI has no display, and without -display QEMU defaults to GTK and aborts
-	// ("gtk initialization failed") — which bit any VM launched without --vnc.
+	// without -display QEMU defaults to GTK and aborts ("gtk initialization failed")
 	a = append(a, "-display", "none")
 	if s.VNCDisp >= 0 {
-		// CNI runs qemu inside a netns, so a 127.0.0.1 VNC would only be reachable there; bind to a
-		// unix socket (visible on the host FS across namespaces) that vncProxy fronts on a host port.
 		var vnc string
 		if s.VNCSock != "" {
 			vnc = "unix:" + s.VNCSock
@@ -136,8 +123,7 @@ func (s Spec) Args() []string {
 		if s.VNCPass != "" {
 			vnc += ",password=on" // macOS Screen Sharing can't use QEMU's bare "None" auth
 		}
-		// -k en-us maps received VNC keysyms through the en-US keymap so shifted keys aren't dropped
-		// (the guacamole "keyboard garbled" bug: V->v, &->7).
+		// -k en-us maps VNC keysyms so shifted keys aren't dropped (guacamole "keyboard garbled" bug)
 		a = append(a, "-k", "en-us", "-vnc", vnc)
 	}
 	if s.MonSock != "" {
@@ -149,9 +135,8 @@ func (s Spec) Args() []string {
 	return a
 }
 
-// IsQcow2NVRAM reports whether the NVRAM file is qcow2 (by suffix). Single source of the rule
-// that decides both the pflash -drive format in Args and whether NVRAM participates in
-// qcow2-internal snapshots (a raw .fd can't hold them) — the two must stay in lockstep.
+// IsQcow2NVRAM is the single source of the qcow2-NVRAM rule: the pflash -drive format and NVRAM's
+// participation in internal snapshots must stay in lockstep.
 func IsQcow2NVRAM(path string) bool {
 	return strings.HasSuffix(path, ".qcow2")
 }

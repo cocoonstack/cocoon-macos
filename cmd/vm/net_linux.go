@@ -24,9 +24,8 @@ import (
 	"github.com/cocoonstack/cocoon-macos/home"
 )
 
-// newProvider builds the cocoon host-side network provider for r.NetMode. "tap"/"bridge" both
-// use the bridge backend (QEMU -netdev tap,ifname= opens the device in the host netns, so the
-// TAP must be a host-side bridge port); "cni" uses the CNI backend (TAP lives inside a netns).
+// newProvider builds the cocoon network provider: tap/bridge both use the bridge backend (QEMU
+// opens the TAP in the host netns, so it must be a host-side bridge port); cni's TAP lives in a netns.
 func newProvider(cmd *cobra.Command, r *record) (network.Network, error) {
 	conf := &config.Config{
 		RootDir:    home.Dir(cmd),
@@ -85,8 +84,7 @@ func teardownNet(cmd *cobra.Command, r *record) {
 	if provider, err := newProvider(cmd, r); err != nil {
 		logger.Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
 	} else {
-		// quiesce before Delete closes the same idle-TAP softirq window quiesceNet guards, for the gap
-		// between the VMM dying and Delete dropping the redirect.
+		// quiesce first: covers the idle-TAP softirq gap between the VMM dying and Delete dropping the redirect
 		if err := provider.Quiesce(ctx, r.VMID); err != nil {
 			logger.Warnf(ctx, "quiesce network for %s: %v", r.VMID, err)
 		}
@@ -94,16 +92,14 @@ func teardownNet(cmd *cobra.Command, r *record) {
 			logger.Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
 		}
 	}
-	// CleanupTAPs runs unconditionally: it removes bt<vmid>-* by name and must not be gated on
-	// newProvider succeeding (rm has no --bridge flag), or an auto-created TAP would leak.
+	// not gated on newProvider succeeding (rm has no --bridge flag), or an auto-created TAP would leak
 	if r.NetMode == netTAP || r.NetMode == netBridge {
 		bridge.CleanupTAPs([]string{r.VMID})
 	}
 }
 
-// quiesceNet brings a stopped VM's owned host NICs down so a dead VMM's carrier-less TAP can't storm
-// host softirqs (tc mirred redirect firing against the down device per broadcast packet) — CNI via
-// the provider's veths, tap/bridge via setTapLink. unquiesceNet reverses it on start.
+// quiesceNet downs a stopped VM's owned NICs so a dead VMM's carrier-less TAP can't storm host
+// softirqs via the tc mirred redirect; unquiesceNet reverses it on start.
 func quiesceNet(cmd *cobra.Command, r *record) {
 	if !r.TapOwned {
 		return
@@ -132,9 +128,8 @@ func unquiesceNet(cmd *cobra.Command, r *record) {
 	setTapLink(ctx, r, true)
 }
 
-// setTapLink flips a host TAP's admin state (down on stop, up on start). QEMU opens it with script=no
-// and cocoon's bridge backend no-ops Quiesce, so cocoon-macos owns the toggle; a CNI TAP lives in a
-// netns (r.Netns != "") and is the provider's job, so this only reaches host-netns TAPs.
+// setTapLink flips a host-netns TAP's admin state: cocoon's bridge backend no-ops Quiesce, so the
+// toggle lives here; a CNI TAP is inside a netns and is the provider's job.
 func setTapLink(ctx context.Context, r *record, up bool) {
 	if r.Tap == "" || r.Netns != "" {
 		return
@@ -154,10 +149,8 @@ func setTapLink(ctx context.Context, r *record, up bool) {
 	}
 }
 
-// ensureNetnsLoopback brings up lo inside the CNI netns. A freshly-created netns has its loopback
-// DOWN, so qemu's -vnc 127.0.0.1:N (and any other loopback bind) fails with EADDRNOTAVAIL until lo
-// is up. No-op outside CNI (no netns). Shells out to `ip` because the qemu launch already runs via
-// `ip netns exec` (the fork-safe, cgo-free way to run a daemonized process in a netns).
+// ensureNetnsLoopback brings up lo inside the CNI netns — a fresh netns has it DOWN, so qemu's
+// 127.0.0.1 binds would fail with EADDRNOTAVAIL.
 func ensureNetnsLoopback(ctx context.Context, r *record) {
 	if r.Netns == "" {
 		return
@@ -167,10 +160,8 @@ func ensureNetnsLoopback(ctx context.Context, r *record) {
 	_ = exec.Command("ip", "netns", "exec", ns, "ip", "link", "set", "lo", "up").Run()
 }
 
-// launchCmd builds the qemu exec. For CNI the TAP lives inside a netns, so the qemu process must
-// run there (ip netns exec) for -netdev tap,ifname= to find it; ip netns exec is the fork-safe
-// path for a daemonized launch (no cgo/setns), which is why this shells out rather than using
-// netlink. qemu-system-x86_64 itself is the authoritative VMM with no Go-native equivalent.
+// launchCmd builds the qemu exec, wrapped in `ip netns exec` for CNI so -netdev tap finds the
+// in-netns TAP (the fork-safe, cgo-free way to daemonize into a netns).
 func launchCmd(r *record, args []string) *exec.Cmd {
 	if r.Netns != "" {
 		ns := filepath.Base(r.Netns)

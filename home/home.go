@@ -14,8 +14,7 @@ import (
 	"github.com/cocoonstack/cocoon/images/cloudimg"
 )
 
-// Default is the state root used when neither --state-dir nor $COCOON_MACOS_HOME is set
-// (mirrors cocoon's /var/lib/cocoon).
+// Default is the state root when neither --state-dir nor $COCOON_MACOS_HOME is set.
 const Default = "/var/lib/cocoon-macos"
 
 // Dir resolves the state root: --state-dir wins, else $COCOON_MACOS_HOME, else Default.
@@ -39,8 +38,7 @@ func VMDir(cmd *cobra.Command, name string) string {
 	return filepath.Join(VMsDir(cmd), name)
 }
 
-// OpenStore opens the shared cloudimg store rooted at the resolved state dir, returning the
-// command context alongside it.
+// OpenStore opens the cloudimg store at the resolved state dir, returning the command context with it.
 func OpenStore(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) {
 	ctx := cliutil.CommandContext(cmd)
 	s, err := cloudimg.New(ctx, Dir(cmd), 0) // 0 = cloudimg's default pull connections

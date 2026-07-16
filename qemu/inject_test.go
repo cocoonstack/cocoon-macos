@@ -9,8 +9,7 @@ import (
 	"howett.net/plist"
 )
 
-// sampleConfig mirrors OSX-KVM's config.plist (placeholder PlatformInfo + an unrelated Misc key)
-// so patchPlist round-trips a realistic input.
+// sampleConfig mirrors OSX-KVM's config.plist so patchPlist round-trips a realistic input.
 const sampleConfig = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">

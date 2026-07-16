@@ -11,9 +11,8 @@ const (
 	serialAlphabet = "ABCDEFGHIJKLMNPQRSTUVWXYZ0123456789" // Apple omits O (0/O ambiguity)
 )
 
-// SMBIOS is a per-VM Apple machine identity injected into OpenCore PlatformInfo/Generic so
-// cloned VMs do not all share one identity. The values are format-valid + unique but NOT
-// Apple-validated: iServices/App Store registration is the consumer's policy concern.
+// SMBIOS is a per-VM Apple machine identity injected into OpenCore PlatformInfo/Generic;
+// format-valid and unique but NOT Apple-validated.
 type SMBIOS struct {
 	Model  string `json:"model"`  // SystemProductName (fixed; proven to boot Tahoe)
 	Serial string `json:"serial"` // SystemSerialNumber

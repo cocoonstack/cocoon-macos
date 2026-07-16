@@ -10,8 +10,7 @@ const (
 	qemuBinary      = "qemu-system-x86_64"
 	stopGracePeriod = 10 * time.Second
 
-	// --net modes; bridge/cni provisioning is Linux-only (see net_linux.go) but the names are
-	// needed cross-platform for flag validation.
+	// --net modes, needed cross-platform for flag validation; provisioning is Linux-only.
 	netUser   = "user"
 	netTAP    = "tap"
 	netBridge = "bridge"
@@ -20,8 +19,8 @@ const (
 
 var _ Actions = (*Handler)(nil)
 
-// Handler implements the vm Actions by cloning a golden macOS qcow2 (copy-on-write overlay)
-// and launching qemu-system-x86_64 on an x86 Linux/KVM host.
+// Handler implements the vm Actions: per-VM CoW overlays on a golden macOS qcow2, booted by
+// qemu-system-x86_64 on an x86 Linux/KVM host.
 type Handler struct{}
 
 // NewHandler returns a Handler ready to serve the vm subcommands.

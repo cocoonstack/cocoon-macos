@@ -1,6 +1,7 @@
 /work/
 /bin/
 /cocoon-macos
+coverage.out
 *.qcow2
 *.img
 *.dmg

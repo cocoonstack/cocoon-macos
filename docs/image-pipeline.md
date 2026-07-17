@@ -29,6 +29,7 @@ Shown for `tahoe:26`; the actual `repo:tag` follows `macos`.
 | `boot` | Smoke: boot OpenCore → macOS Recovery (proves KVM + OpenCore + recovery). |
 | `install` | Full install from scratch → capture → push `<repo>:<tag>-base` (~65 min). |
 | `setup` | Pull `<repo>:<tag>-base` → boot Recovery → `provision-macos.sh` (SA-skip recipe + user + SSH) → push `<repo>:<tag>`. |
+| `desktop` | Pull `<repo>:<tag>` → boot → attempt auto-login + Setup-Assistant skip + slim → re-push `<repo>:<tag>` (WIP, currently blocked on the Setup Assistant — see [Known issues](known-issues.md)). |
 | `slim` | Pull `<repo>:<tag>` → boot → reclaim stale clusters → re-push `<repo>:<tag>` (smaller). |
 | `verify` | Pull `<repo>:<tag>` → boot → confirm login + SSH (`cocoon@localhost`). |
 

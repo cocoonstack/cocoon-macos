@@ -66,6 +66,4 @@ cocoon-macos CLI ──► image: pull the golden macOS qcow2 from ghcr (paralle
 
 Source and issue tracker:
 [github.com/cocoonstack/cocoon-macos](https://github.com/cocoonstack/cocoon-macos).
-Upstream engine:
-[github.com/cocoonstack/cocoon](https://github.com/cocoonstack/cocoon)
-(Lightweight MicroVM engine with Cloud Hypervisor and Firecracker backends).
+Part of the [cocoonstack](https://cocoonstack.github.io/) MicroVM platform.

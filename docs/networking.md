@@ -45,8 +45,10 @@ The VNC password is never written to disk — it is read from the flag on each s
 ### macOS Screen Sharing
 
 QEMU's default `None` auth **hangs macOS Screen Sharing**. Pass `--vnc-password <≤8 chars>` (applied
-via the QEMU monitor post-launch, capped at 8 chars by the VNC DES scheme) so Screen Sharing prompts
-and connects. Plain VNC clients (RealVNC/TigerVNC) work without a password on the loopback modes.
+via the QEMU monitor post-launch) so Screen Sharing prompts and connects. The launch is **rejected**
+(not truncated) if the password exceeds 8 characters or contains control characters — QEMU's VNC DES
+auth only supports 8-byte passwords. Plain VNC clients (RealVNC/TigerVNC) work without a password on
+the loopback modes.
 
 > In-guest macOS Screen Sharing (to the guest's own IP) is **not** enabled headlessly — macOS
 > requires the Screen Recording TCC grant from the GUI or MDM. Use QEMU's built-in VNC above instead.

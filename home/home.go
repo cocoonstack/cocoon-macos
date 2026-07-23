@@ -11,10 +11,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
-	"github.com/cocoonstack/cocoon/images"
 	"github.com/cocoonstack/cocoon/images/cloudimg"
 	metajson "github.com/cocoonstack/cocoon/meta/json"
-	"github.com/cocoonstack/cocoon/meta/tombstone"
 )
 
 // Default is the state root when neither --state-dir nor $COCOON_MACOS_HOME is set.
@@ -44,7 +42,7 @@ func VMDir(cmd *cobra.Command, name string) string {
 // OpenStore opens the cloudimg store at the resolved state dir, returning the command context with it.
 func OpenStore(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) {
 	ctx := cliutil.CommandContext(cmd)
-	metaStore, err := metajson.Open(cloudimgNamespace(Dir(cmd)))
+	metaStore, err := metajson.Open(cloudimg.NewConfig(Dir(cmd), 0).JSONNamespace())
 	if err != nil {
 		return ctx, nil, fmt.Errorf("open meta store: %w", err)
 	}
@@ -53,20 +51,4 @@ func OpenStore(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) 
 		return ctx, nil, fmt.Errorf("init cloudimg store: %w", err)
 	}
 	return ctx, s, nil
-}
-
-// cloudimgNamespace mirrors cocoon's own cloudimg json namespace (cmd/core
-// MetaJSONNamespaces); the layout is cocoon's, so on-disk state stays readable
-// by both binaries.
-func cloudimgNamespace(rootDir string) metajson.Namespace {
-	conf := cloudimg.NewConfig(rootDir, 0)
-	return metajson.Namespace{
-		Name:     cloudimg.NamespaceName,
-		FilePath: conf.IndexFile(),
-		LockPath: conf.IndexLock(),
-		Codec: metajson.TableCodec{Specs: []metajson.TableSpec{
-			{Key: "images", Table: images.TableRecords},
-			{Key: tombstone.TableName, Table: tombstone.TableName, Optional: true},
-		}},
-	}
 }

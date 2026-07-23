@@ -16,6 +16,8 @@ import (
 
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/config"
+	metajson "github.com/cocoonstack/cocoon/meta/json"
+	"github.com/cocoonstack/cocoon/meta/tombstone"
 	"github.com/cocoonstack/cocoon/network"
 	"github.com/cocoonstack/cocoon/network/bridge"
 	"github.com/cocoonstack/cocoon/network/cni"
@@ -35,7 +37,11 @@ func newProvider(cmd *cobra.Command, r *record) (network.Network, error) {
 	}
 	switch r.NetMode {
 	case netCNI:
-		return cni.New(conf)
+		store, err := metajson.Open(cniNamespace(conf))
+		if err != nil {
+			return nil, fmt.Errorf("open meta store: %w", err)
+		}
+		return cni.New(conf, store)
 	case netTAP, netBridge:
 		if r.BridgeDev == "" { // persisted at create; flag is only present on create/run/clone, not rm
 			r.BridgeDev, _ = cmd.Flags().GetString("bridge")
@@ -46,6 +52,21 @@ func newProvider(cmd *cobra.Command, r *record) (network.Network, error) {
 		return bridge.New(conf, r.BridgeDev)
 	}
 	return nil, fmt.Errorf("unknown --net mode %q (want user|tap|cni|bridge)", r.NetMode)
+}
+
+// cniNamespace mirrors cocoon's own cni json namespace (cmd/core
+// MetaJSONNamespaces) so both binaries read the same network state.
+func cniNamespace(conf *config.Config) metajson.Namespace {
+	c := cni.NewConfig(conf)
+	return metajson.Namespace{
+		Name:     cni.NamespaceName,
+		FilePath: c.IndexFile(),
+		LockPath: c.IndexLock(),
+		Codec: metajson.TableCodec{Specs: []metajson.TableSpec{
+			{Key: "networks", Table: cni.TableRecords},
+			{Key: tombstone.TableName, Table: tombstone.TableName, Optional: true},
+		}},
+	}
 }
 
 // provisionNet auto-creates a TAP via cocoon — the SAME forwarding plane as cocoon's CH/FC VMs.

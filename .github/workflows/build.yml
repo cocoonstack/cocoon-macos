@@ -23,12 +23,13 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      - name: Build
+      - name: Build (all packages, both GOOS)
         env:
-          GOOS: linux
-          GOARCH: amd64
           CGO_ENABLED: '0'
-        run: go build -o cocoon-macos .
+        run: |
+          GOOS=linux GOARCH=amd64 go build ./...
+          GOOS=darwin GOARCH=arm64 go build ./...
+          GOOS=linux GOARCH=amd64 go build -o cocoon-macos .
 
       - name: Upload binary
         uses: actions/upload-artifact@v7

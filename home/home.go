@@ -44,8 +44,23 @@ func VMDir(cmd *cobra.Command, name string) string {
 // OpenStore opens the cloudimg store at the resolved state dir, returning the command context with it.
 func OpenStore(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) {
 	ctx := cliutil.CommandContext(cmd)
-	conf := cloudimg.NewConfig(Dir(cmd), 0) // 0 = cloudimg's default pull connections
-	metaStore, err := metajson.Open(metajson.Namespace{
+	metaStore, err := metajson.Open(cloudimgNamespace(Dir(cmd)))
+	if err != nil {
+		return ctx, nil, fmt.Errorf("open meta store: %w", err)
+	}
+	s, err := cloudimg.New(ctx, Dir(cmd), 0, metaStore) // 0 = cloudimg's default pull connections
+	if err != nil {
+		return ctx, nil, fmt.Errorf("init cloudimg store: %w", err)
+	}
+	return ctx, s, nil
+}
+
+// cloudimgNamespace mirrors cocoon's own cloudimg json namespace (cmd/core
+// MetaJSONNamespaces); the layout is cocoon's, so on-disk state stays readable
+// by both binaries.
+func cloudimgNamespace(rootDir string) metajson.Namespace {
+	conf := cloudimg.NewConfig(rootDir, 0)
+	return metajson.Namespace{
 		Name:     cloudimg.NamespaceName,
 		FilePath: conf.IndexFile(),
 		LockPath: conf.IndexLock(),
@@ -53,13 +68,5 @@ func OpenStore(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) 
 			{Key: "images", Table: images.TableRecords},
 			{Key: tombstone.TableName, Table: tombstone.TableName, Optional: true},
 		}},
-	})
-	if err != nil {
-		return ctx, nil, fmt.Errorf("open meta store: %w", err)
 	}
-	s, err := cloudimg.New(ctx, Dir(cmd), 0, metaStore)
-	if err != nil {
-		return ctx, nil, fmt.Errorf("init cloudimg store: %w", err)
-	}
-	return ctx, s, nil
 }

@@ -10,10 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/utils"
-
-	"github.com/cocoonstack/cocoon-macos/home"
 )
 
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {

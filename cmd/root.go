@@ -49,8 +49,7 @@ func run(ctx context.Context) error {
 	return root.ExecuteContext(ctx)
 }
 
-// setupLog swaps stderr in for the SetupLog call (which binds os.Stdout), keeping command output
-// on stdout while logs go to stderr.
+// setupLog swaps stderr in because SetupLog binds whatever os.Stdout is at call time.
 func setupLog(ctx context.Context) error {
 	level := cmp.Or(os.Getenv("COCOON_MACOS_LOG_LEVEL"), "info")
 	origStdout := os.Stdout

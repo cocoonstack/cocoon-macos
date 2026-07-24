@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/vishvananda/netlink"
 
+	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/config"
 	metajson "github.com/cocoonstack/cocoon/meta/json"
@@ -21,8 +22,6 @@ import (
 	"github.com/cocoonstack/cocoon/network/bridge"
 	"github.com/cocoonstack/cocoon/network/cni"
 	"github.com/cocoonstack/cocoon/types"
-
-	"github.com/cocoonstack/cocoon-macos/home"
 )
 
 // newProvider builds the cocoon network provider: tap/bridge both use the bridge backend (QEMU

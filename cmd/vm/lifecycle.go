@@ -10,11 +10,10 @@ import (
 	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon/cmd/cliutil"
-	"github.com/cocoonstack/cocoon/utils"
-
 	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon-macos/qemu"
+	"github.com/cocoonstack/cocoon/cmd/cliutil"
+	"github.com/cocoonstack/cocoon/utils"
 )
 
 func (h *Handler) Create(cmd *cobra.Command, args []string) error {

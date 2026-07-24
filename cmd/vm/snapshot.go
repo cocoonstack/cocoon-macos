@@ -8,10 +8,9 @@ import (
 	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon/cmd/cliutil"
-
 	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon-macos/qemu"
+	"github.com/cocoonstack/cocoon/cmd/cliutil"
 )
 
 func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {

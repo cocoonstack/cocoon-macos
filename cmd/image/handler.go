@@ -9,18 +9,16 @@ import (
 	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
 
+	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/progress"
-
-	"github.com/cocoonstack/cocoon-macos/home"
 )
 
 const maxPullAttempts = 3
 
 var _ Actions = (*Handler)(nil)
 
-// Handler implements Actions on cocoon's cloudimg store — the macOS golden disk is a single
-// immutable qcow2, exactly the cloudimg shape.
+// Handler implements Actions on cocoon's cloudimg store.
 type Handler struct{}
 
 // NewHandler returns a Handler backed by the cloudimg store.

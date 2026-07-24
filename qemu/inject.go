@@ -59,11 +59,12 @@ func waitForPart(ctx context.Context, nbd string) {
 // disconnectNBD waits out qemu-nbd's asynchronous release, or the qemu launch races in and fails
 // with "Failed to get shared write lock".
 func disconnectNBD(ctx context.Context, nbd, ocPath string) {
+	logger := log.WithFunc("qemu.disconnectNBD")
 	_ = exec.Command("qemu-nbd", "--disconnect", nbd).Run()
 	if err := utils.WaitFor(ctx, 10*time.Second, 100*time.Millisecond, func() (bool, error) {
 		return !isFileHeld(ocPath), nil
 	}); err != nil {
-		log.WithFunc("qemu.disconnectNBD").Warnf(ctx, "qcow2 %s still held after nbd disconnect: %v", ocPath, err)
+		logger.Warnf(ctx, "qcow2 %s still held after nbd disconnect: %v", ocPath, err)
 	}
 }
 

@@ -27,8 +27,7 @@ import (
 // fraction of the link.
 const pullConns = 8
 
-// pullOCIBlob downloads ref's qcow2 layer to dest — parallel Range requests when supported,
-// single stream otherwise — and verifies the sha256 digest.
+// pullOCIBlob downloads ref's qcow2 layer to dest and verifies its sha256 digest.
 func pullOCIBlob(ctx context.Context, ref, dest string) error {
 	repo, err := remote.NewRepository(ref)
 	if err != nil {

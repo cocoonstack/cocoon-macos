@@ -15,6 +15,8 @@ import (
 	"github.com/cocoonstack/cocoon-macos/home"
 )
 
+const maxPullAttempts = 3
+
 var _ Actions = (*Handler)(nil)
 
 // Handler implements Actions on cocoon's cloudimg store — the macOS golden disk is a single
@@ -53,12 +55,12 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	defer func() { _ = os.Remove(tmpPath) }()
 
 	var perr error
-	for attempt := 1; attempt <= 3; attempt++ {
+	for attempt := 1; attempt <= maxPullAttempts; attempt++ {
 		if perr = pullOCIBlob(ctx, ref, tmpPath); perr == nil {
 			return s.Import(ctx, ref, progress.Nop, tmpPath)
 		}
-		logger.Warnf(ctx, "oci pull attempt %d/3 failed: %v", attempt, perr)
-		if attempt < 3 {
+		logger.Warnf(ctx, "oci pull attempt %d/%d failed: %v", attempt, maxPullAttempts, perr)
+		if attempt < maxPullAttempts {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -66,7 +68,7 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
-	return fmt.Errorf("pull %s after 3 attempts: %w", ref, perr)
+	return fmt.Errorf("pull %s after %d attempts: %w", ref, maxPullAttempts, perr)
 }
 
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {

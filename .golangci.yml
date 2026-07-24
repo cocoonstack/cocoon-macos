@@ -52,6 +52,10 @@ linters:
     goconst:
       min-len: 3
       min-occurrences: 3
+      # The qemu/ip argv builders repeat flag tokens ("-device", "-drive"); naming them would
+      # break the argv's one-to-one correspondence with the command line it mirrors.
+      ignore-string-values:
+        - '^-'
     gocyclo:
       min-complexity: 30
     nakedret:

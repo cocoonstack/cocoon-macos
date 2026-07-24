@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TestOpenStoreEmpty covers the full OpenStore path on a fresh state dir.
 func TestOpenStoreEmpty(t *testing.T) {
 	cmd := newTestCmd(t)
 	ctx, store, err := OpenStore(cmd)

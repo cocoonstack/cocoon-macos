@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TestCloneOpenCoreBase: a clone overlays the recorded base, never SRC's per-VM overlay.
 func TestCloneOpenCoreBase(t *testing.T) {
 	tests := []struct {
 		name string
@@ -50,8 +49,7 @@ func TestImagesToSnapshot(t *testing.T) {
 	}
 }
 
-// TestPrepareNetNoProvision covers the OS-independent no-provisioning paths; auto-create/CNI/
-// bridge need Linux + CAP_NET_ADMIN and are smoke-tested on the testbed.
+// auto-create/CNI/bridge need Linux + CAP_NET_ADMIN; they are smoke-tested on the testbed.
 func TestPrepareNetNoProvision(t *testing.T) {
 	tests := []struct {
 		name                        string

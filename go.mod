@@ -3,7 +3,7 @@ module github.com/cocoonstack/cocoon-macos
 go 1.26.5
 
 require (
-	github.com/cocoonstack/cocoon v0.5.6-0.20260723121642-d95fdb8f906d
+	github.com/cocoonstack/cocoon v0.5.6
 	github.com/docker/go-units v0.5.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/projecteru2/core v0.0.0-20241016125006-ff909eefe04c
@@ -43,7 +43,7 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/tools v0.47.0 // indirect
-	google.golang.org/grpc v1.79.3 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
+	google.golang.org/grpc v1.82.1 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )

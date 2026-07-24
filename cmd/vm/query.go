@@ -3,7 +3,6 @@ package vm
 import (
 	"cmp"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"text/tabwriter"
@@ -12,19 +11,20 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
+	"github.com/cocoonstack/cocoon/utils"
 
 	"github.com/cocoonstack/cocoon-macos/home"
 )
 
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	vmsDir := home.VMsDir(cmd)
-	ents, err := os.ReadDir(vmsDir)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("read vms dir %s: %w", vmsDir, err)
+	names, err := utils.ScanSubdirs(vmsDir)
+	if err != nil {
+		return err
 	}
 	recs := []*record{}
-	for _, e := range ents {
-		if r, err := loadRec(filepath.Join(vmsDir, e.Name())); err == nil {
+	for _, n := range names {
+		if r, err := loadRec(filepath.Join(vmsDir, n)); err == nil {
 			recs = append(recs, r)
 		}
 	}

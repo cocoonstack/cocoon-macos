@@ -235,8 +235,6 @@ func readUntil(conn net.Conn, marker string) (string, bool) {
 }
 
 func flagOr(cmd *cobra.Command, name, def string) string {
-	if v, _ := cmd.Flags().GetString(name); v != "" {
-		return v
-	}
-	return def
+	v, _ := cmd.Flags().GetString(name)
+	return cmp.Or(v, def)
 }

@@ -38,6 +38,13 @@ Networking (`--net`) and VNC (`--vnc` / `--vnc-password`) are covered in
 [Networking & VNC](networking.md); snapshot/clone and `--data-disk` in
 [Snapshot, Clone & Data Disks](snapshots.md).
 
+`--hugepages` (on `run` / `create` / `clone`) backs guest RAM with 2 MiB
+hugepages for lower TLB/EPT overhead. The host must have enough pages
+reserved (`vm.nr_hugepages`) for the VM's full `--memory`, or QEMU fails to
+start — the allocation is not best-effort. On `clone` the flag is only
+applied when passed explicitly; otherwise the source VM's setting carries
+over.
+
 ## What `vm run` does
 
 1. `qemu-img create -b <golden> overlay.qcow2` — instant copy-on-write clone of the golden image.
@@ -52,3 +59,4 @@ Networking (`--net`) and VNC (`--vnc` / `--vnc-password`) are covered in
    (macOS reads MSRs an AMD host lacks). See [Boot, Firmware & GUI](vm.md).
 
 State is recorded under `--state-dir` / `$COCOON_MACOS_HOME` (default `/var/lib/cocoon-macos`).
+`$COCOON_MACOS_LOG_LEVEL` sets the log level (`debug` / `info` / `warn` / `error`, default `info`).

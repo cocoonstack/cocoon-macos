@@ -21,6 +21,10 @@ with **TC ingress redirect** (`mirred`), not a bridge — the guest's DHCP/traff
 tap → eth0 → `cni0` → upstream, and it comes back the same way. The guest gets a real ToR IP; SSH
 goes straight to that IP (no port-forward).
 
+`--cni-conf-dir` (default `/etc/cni/net.d`) and `--cni-bin-dir` (default
+`/opt/cni/bin`) point at a non-standard CNI installation; both are ignored by
+the other net modes.
+
 ## VNC exposure
 
 VNC exposure depends on the net mode:

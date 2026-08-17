@@ -24,15 +24,23 @@ import (
 	"github.com/cocoonstack/cocoon/types"
 )
 
-// newProvider builds the cocoon network provider: tap/bridge both use the bridge backend (QEMU
-// opens the TAP in the host netns, so it must be a host-side bridge port); cni's TAP lives in a netns.
-func newProvider(cmd *cobra.Command, r *record) (network.Network, error) {
-	conf := &config.Config{
+// netScope keys cocoon-macos's host TAP/netns families apart from a co-hosted cocoon's, so neither GC reclaims the other's live guests.
+const netScope = "cm"
+
+// netConf is the cocoon network config: bridge/CNI provisioning shares cocoon's forwarding plane, keyed under our own device family.
+func netConf(cmd *cobra.Command) *config.Config {
+	return &config.Config{
 		RootDir:    home.Dir(cmd),
 		DNS:        "8.8.8.8,1.1.1.1",
 		CNIConfDir: flagOr(cmd, "cni-conf-dir", "/etc/cni/net.d"),
 		CNIBinDir:  flagOr(cmd, "cni-bin-dir", "/opt/cni/bin"),
+		NetScope:   netScope,
 	}
+}
+
+// newProvider builds the cocoon network provider: tap/bridge both use the bridge backend (QEMU opens the TAP in the host netns, so it must be a host-side bridge port); cni's TAP lives in a netns.
+func newProvider(cmd *cobra.Command, r *record) (network.Network, error) {
+	conf := netConf(cmd)
 	switch r.NetMode {
 	case netCNI:
 		store, err := metajson.Open(cni.NewConfig(conf).JSONNamespace())
@@ -98,12 +106,11 @@ func teardownNet(cmd *cobra.Command, r *record) {
 	}
 	// not gated on newProvider succeeding (rm has no --bridge flag), or an auto-created TAP would leak
 	if r.NetMode == netTAP || r.NetMode == netBridge {
-		bridge.CleanupTAPs([]string{r.VMID})
+		bridge.CleanupTAPs(netConf(cmd).BridgeTAPPrefix(), []string{r.VMID})
 	}
 }
 
-// quiesceNet downs a stopped VM's owned NICs so a dead VMM's carrier-less TAP can't storm host
-// softirqs via the tc mirred redirect; unquiesceNet reverses it on start.
+// quiesceNet downs a stopped VM's owned NICs so a dead VMM's carrier-less TAP can't storm host softirqs via the tc mirred redirect; unquiesceNet reverses it on start.
 func quiesceNet(cmd *cobra.Command, r *record) {
 	if !r.TapOwned {
 		return
@@ -132,8 +139,7 @@ func unquiesceNet(cmd *cobra.Command, r *record) {
 	setTapLink(ctx, r, true)
 }
 
-// setTapLink flips a host-netns TAP's admin state: cocoon's bridge backend no-ops Quiesce, so the
-// toggle lives here; a CNI TAP is inside a netns and is the provider's job.
+// setTapLink flips a host-netns TAP's admin state: cocoon's bridge backend no-ops Quiesce, so the toggle lives here; a CNI TAP is inside a netns and is the provider's job.
 func setTapLink(ctx context.Context, r *record, up bool) {
 	if r.Tap == "" || r.Netns != "" {
 		return
@@ -153,8 +159,7 @@ func setTapLink(ctx context.Context, r *record, up bool) {
 	}
 }
 
-// ensureNetnsLoopback brings up lo inside the CNI netns — a fresh netns has it DOWN, so qemu's
-// 127.0.0.1 binds would fail with EADDRNOTAVAIL.
+// ensureNetnsLoopback brings up lo inside the CNI netns — a fresh netns has it DOWN, so qemu's 127.0.0.1 binds would fail with EADDRNOTAVAIL.
 func ensureNetnsLoopback(ctx context.Context, r *record) {
 	if r.Netns == "" {
 		return
@@ -164,8 +169,7 @@ func ensureNetnsLoopback(ctx context.Context, r *record) {
 	_ = exec.Command("ip", "netns", "exec", ns, "ip", "link", "set", "lo", "up").Run()
 }
 
-// launchCmd builds the qemu exec, wrapped in `ip netns exec` for CNI so -netdev tap finds the
-// in-netns TAP (the fork-safe, cgo-free way to daemonize into a netns).
+// launchCmd builds the qemu exec, wrapped in `ip netns exec` for CNI so -netdev tap finds the in-netns TAP (the fork-safe, cgo-free way to daemonize into a netns).
 func launchCmd(r *record, args []string) *exec.Cmd {
 	if r.Netns != "" {
 		ns := filepath.Base(r.Netns)

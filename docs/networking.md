@@ -14,6 +14,10 @@ Hypervisor / Firecracker VMs on the node, so the guest can DHCP a **real LAN IP*
 network. The guest NIC MAC stays equal to the SMBIOS ROM. Auto-create (`bridge`/`cni`) is Linux-only
 (needs `CAP_NET_ADMIN`); `user` and a pre-created `--tap` work everywhere.
 
+Auto-created devices carry cocoon-macos's own host name family (`net_scope` `cm`: TAPs
+`cm<vmid8>-<nic>`, netns `cm-<vmid>`), so a cocoon daemon's GC on the same node never reads a live
+macOS guest's TAP as an orphan (see cocoon's `net_scope` in its networking docs).
+
 ### `--net cni` and TC redirect
 
 CNI runs QEMU inside a per-VM network namespace. cocoon's CNI wires the netns veth to the QEMU TAP

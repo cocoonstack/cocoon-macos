@@ -10,8 +10,7 @@ import (
 	"github.com/cocoonstack/cocoon/utils"
 )
 
-// SnapCreate records an internal snapshot tag in the qcow2 img. Offline only: +invtsc blocks live
-// savevm, and qemu-img snapshot on a live image corrupts it — the VM must be stopped.
+// SnapCreate records an internal snapshot tag in the qcow2 img. Offline only: +invtsc blocks live savevm, and qemu-img snapshot on a live image corrupts it — the VM must be stopped.
 func SnapCreate(ctx context.Context, img, tag string) error {
 	return utils.RunQemuImg(ctx, "snapshot", "-c", tag, img)
 }

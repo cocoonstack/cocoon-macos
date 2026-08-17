@@ -1,7 +1,4 @@
-// Package qemu builds and launches the qemu-system-x86_64 command for booting
-// macOS (Sequoia 15 / Tahoe 26) via OpenCore on an x86 Linux/KVM host. The argument vector spoofs a
-// GenuineIntel Skylake-Client (TSX off, invariant-TSC frequency fed via CPUID) + isa-applesmc OSK +
-// OVMF + an OpenCore boot disk; with the LongQT OpenCore EFI it boots identically on Intel and AMD.
+// Package qemu builds and launches the qemu-system-x86_64 command that boots macOS (Sequoia 15 / Tahoe 26) via OpenCore on an x86 Linux/KVM host, spoofing a GenuineIntel Skylake-Client (TSX off, invariant TSC via CPUID) plus isa-applesmc OSK, OVMF and an OpenCore boot disk; the LongQT OpenCore EFI makes it boot identically on Intel and AMD.
 package qemu
 
 import (
@@ -13,19 +10,12 @@ const (
 	// OSK is the Apple SMC key required for macOS guests (public, from OSX-KVM).
 	OSK = "ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
 
-	// macOSCPU is the -cpu for macOS Sequoia/Tahoe; every token is load-bearing — a stripped
-	// "Skylake-Client-v4" makes a fresh image's first boot spin forever (regression dacf35c):
-	// -hle,-rtm drop TSX (macOS spins on it under nested KVM); +invtsc,vmware-cpuid-freq=on feed
-	// the TSC frequency via CPUID so macOS skips self-calibration; vendor=GenuineIntel is
-	// mandatory; the +perf flags are affirmed with check= so a base-model bump can't drop them.
-	// AMD support comes from the LongQT OpenCore EFI, not the -cpu.
+	// macOSCPU is the -cpu for macOS Sequoia/Tahoe; every token is load-bearing — a stripped "Skylake-Client-v4" makes a fresh image's first boot spin forever (regression dacf35c): -hle,-rtm drop TSX (macOS spins on it under nested KVM); +invtsc,vmware-cpuid-freq=on feed the TSC frequency via CPUID so macOS skips self-calibration; vendor=GenuineIntel is mandatory; the +perf flags are affirmed with check= so a base-model bump can't drop them. AMD support comes from the LongQT OpenCore EFI, not the -cpu.
 	macOSCPU = "Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on," +
 		"+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt," +
 		"+pcid,+invpcid,+tsc-deadline,+rdtscp,+xsavec,check"
 
-	// ahciDriveOpts tunes every writable disk (macOS has no virtio-blk): io_uring beats the threads
-	// aio backend; cache=writeback masks qcow2 + cloud-disk latency (cache=none would hit the
-	// network disk on every I/O); discard/detect-zeroes reclaim freed clusters (slim depends on it).
+	// ahciDriveOpts tunes every writable disk (macOS has no virtio-blk): io_uring beats the threads aio backend; cache=writeback masks qcow2 + cloud-disk latency (cache=none would hit the network disk on every I/O); discard/detect-zeroes reclaim freed clusters (slim depends on it).
 	ahciDriveOpts = "if=none,format=qcow2,cache=writeback,aio=io_uring,discard=unmap,detect-zeroes=unmap"
 )
 
@@ -135,8 +125,7 @@ func (s Spec) Args() []string {
 	return a
 }
 
-// IsQcow2NVRAM is the single source of the qcow2-NVRAM rule: the pflash -drive format and NVRAM's
-// participation in internal snapshots must stay in lockstep.
+// IsQcow2NVRAM is the single source of the qcow2-NVRAM rule: the pflash -drive format and NVRAM's participation in internal snapshots must stay in lockstep.
 func IsQcow2NVRAM(path string) bool {
 	return strings.HasSuffix(path, ".qcow2")
 }

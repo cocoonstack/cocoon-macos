@@ -6,8 +6,7 @@ import (
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 )
 
-// Actions mirrors cocoon's cmd/vm Actions, re-declared rather than imported because cocoon's
-// commands.go drags in the Linux-only CH/netlink backend.
+// Actions mirrors cocoon's cmd/vm Actions, re-declared rather than imported because cocoon's commands.go drags in the Linux-only CH/netlink backend.
 type Actions interface {
 	Create(cmd *cobra.Command, args []string) error
 	Run(cmd *cobra.Command, args []string) error

@@ -7,7 +7,7 @@
 #   [REAL]   boots ghcr tahoe:26, passes the OpenCore picker over the HMP monitor, asserts SSH.
 #            Gated behind --real (needs /dev/kvm + the ~15GB image + OVMF/OpenCore loaders).
 #
-# Idempotent: cleans state-dir + test bridge + leftover bt*/netns at start AND end.
+# Idempotent: cleans state-dir + test bridge + leftover cm* TAPs/netns at start AND end.
 #
 # Usage:
 #   sudo ./cm-smoke.sh                 # [DUMMY] tier only
@@ -89,12 +89,12 @@ clean_state() {
   fi
   # 2) belt-and-suspenders: kill any qemu stand-ins we spawned
   pkill -f "$QEMU_STUB" 2>/dev/null || true
-  # 3) nuke leftover cocoon bridge TAPs (bt<8hex>-N) + any test netns, in case rm raced/failed
+  # 3) nuke leftover cocoon-macos bridge TAPs (cm<vmid8>-N, net_scope cm) + our netns, in case rm raced/failed
   if command -v ip >/dev/null 2>&1; then
-    ip -o link show 2>/dev/null | grep -oE 'bt[0-9a-f]{1,8}-[0-9]+' | sort -u | while read -r t; do
+    ip -o link show 2>/dev/null | grep -oE 'cm[A-Z2-7]{8}-[0-9]+' | sort -u | while read -r t; do
       ip link del "$t" 2>/dev/null || true
     done
-    ip -o netns list 2>/dev/null | awk '{print $1}' | grep -E '^cni-|cocoon|cmsmoke' | while read -r ns; do
+    ip -o netns list 2>/dev/null | awk '{print $1}' | grep -E '^cm-|cmsmoke' | while read -r ns; do
       ip netns del "$ns" 2>/dev/null || true
     done
     ip link show "$CM_BRIDGE" >/dev/null 2>&1 && { ip link set "$CM_BRIDGE" down 2>/dev/null; ip link del "$CM_BRIDGE" 2>/dev/null; }
@@ -259,8 +259,8 @@ PY
 
 post_conditions_dummy() {
   log "---- [DUMMY] post-conditions ----"
-  leaks=$(ip -o link show 2>/dev/null | grep -oE 'bt[0-9a-f]{1,8}-[0-9]+' | sort -u || true)
-  if [ -z "$leaks" ]; then pass "[POST] no leaked bt* TAPs"; else fail "[POST] leaked bt* TAPs" "$leaks"; fi
+  leaks=$(ip -o link show 2>/dev/null | grep -oE 'cm[A-Z2-7]{8}-[0-9]+' | sort -u || true)
+  if [ -z "$leaks" ]; then pass "[POST] no leaked cm* TAPs"; else fail "[POST] leaked cm* TAPs" "$leaks"; fi
   if ! pgrep -f "$QEMU_STUB" >/dev/null 2>&1; then pass "[POST] no leaked stand-in procs"; else fail "[POST] leaked procs" "$(pgrep -fa "$QEMU_STUB")"; fi
   bad=0
   for d in "$CM_HOME"/vms/*/disk.qcow2; do

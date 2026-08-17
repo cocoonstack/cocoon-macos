@@ -96,8 +96,7 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// cloneOpenCoreBase returns the immutable base a clone overlays — never SRC's per-VM overlay,
-// which would break on `vm rm SRC`.
+// cloneOpenCoreBase returns the immutable base a clone overlays — never SRC's per-VM overlay, which would break on `vm rm SRC`.
 func cloneOpenCoreBase(cmd *cobra.Command, src *record) (string, error) {
 	switch {
 	case src.OpenCoreBase != "":

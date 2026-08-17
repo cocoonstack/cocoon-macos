@@ -16,8 +16,7 @@ import (
 	"github.com/cocoonstack/cocoon/utils"
 )
 
-// InjectConfig mounts the OpenCore qcow2 via qemu-nbd (the only way to edit a FAT partition
-// inside a qcow2; needs root + the nbd module) and patches config.plist with a per-VM identity.
+// InjectConfig mounts the OpenCore qcow2 via qemu-nbd (the only way to edit a FAT partition inside a qcow2; needs root + the nbd module) and patches config.plist with a per-VM identity.
 func InjectConfig(ctx context.Context, ocPath string, sm *SMBIOS) error {
 	_ = exec.CommandContext(ctx, "modprobe", "nbd", "max_part=8").Run()
 	nbd, err := connectFreeNBD(ctx, ocPath)
@@ -56,8 +55,7 @@ func waitForPart(ctx context.Context, nbd string) {
 	})
 }
 
-// disconnectNBD waits out qemu-nbd's asynchronous release, or the qemu launch races in and fails
-// with "Failed to get shared write lock".
+// disconnectNBD waits out qemu-nbd's asynchronous release, or the qemu launch races in and fails with "Failed to get shared write lock".
 func disconnectNBD(ctx context.Context, nbd, ocPath string) {
 	logger := log.WithFunc("qemu.disconnectNBD")
 	_ = exec.Command("qemu-nbd", "--disconnect", nbd).Run()
@@ -68,15 +66,13 @@ func disconnectNBD(ctx context.Context, nbd, ocPath string) {
 	}
 }
 
-// isFileHeld matches the daemonized qemu-nbd server's cmdline — cheaper than scanning fd tables,
-// and that server is the only holder to wait out.
+// isFileHeld matches the daemonized qemu-nbd server's cmdline — cheaper than scanning fd tables, and that server is the only holder to wait out.
 func isFileHeld(ocPath string) bool {
 	pids, err := utils.FindVMMByCmdline("qemu-nbd", ocPath)
 	return err == nil && len(pids) > 0
 }
 
-// connectFreeNBD claims a device by connecting: the connect itself is the exclusive operation,
-// so a race with another VM create just advances to the next candidate.
+// connectFreeNBD claims a device by connecting: the connect itself is the exclusive operation, so a race with another VM create just advances to the next candidate.
 func connectFreeNBD(ctx context.Context, ocPath string) (string, error) {
 	var lastErr error
 	for i := range 16 {
@@ -125,8 +121,7 @@ func patchPlist(path string, sm *SMBIOS) error {
 		g["ROM"] = rom
 		g["SpoofVendor"] = true
 	}
-	// ShowPicker=false: a visible picker can't be driven headlessly — OpenCanopy cancels its
-	// Timeout on stray USB-enumeration input and waits forever
+	// ShowPicker=false: a visible picker can't be driven headlessly — OpenCanopy cancels its Timeout on stray USB-enumeration input and waits forever
 	boot := ensureSubMap(ensureSubMap(cfg, "Misc"), "Boot")
 	boot["ShowPicker"] = false
 	boot["HideAuxiliary"] = true

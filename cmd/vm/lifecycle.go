@@ -31,8 +31,7 @@ func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if err := h.launch(cmd, home.VMDir(cmd, r.Name), r); err != nil {
-		// atomic create+boot: remove everything on failure or the leftover record bricks retries;
-		// start must NOT do this — its network is persisted
+		// atomic create+boot: remove everything on failure or the leftover record bricks retries; start must NOT do this — its network is persisted
 		teardownNet(cmd, r)
 		_ = os.RemoveAll(home.VMDir(cmd, r.Name))
 		return err
@@ -222,8 +221,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	return saveRec(dir, r)
 }
 
-// prepareOpenCore points r.OpenCore at the shared base, or with randomSMBIOS at a per-VM
-// overlay whose config.plist is patched with a unique identity.
+// prepareOpenCore points r.OpenCore at the shared base, or with randomSMBIOS at a per-VM overlay whose config.plist is patched with a unique identity.
 func prepareOpenCore(ctx context.Context, dir, ocBase string, randomSMBIOS bool, r *record) error {
 	if !randomSMBIOS {
 		r.OpenCore, r.OpenCoreBase = ocBase, ""

@@ -91,8 +91,7 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// snapshotAllOrNothing tags every image or rolls back the ones already tagged, so a partial
-// failure never leaves an untracked snapshot point on some disks.
+// snapshotAllOrNothing tags every image or rolls back the ones already tagged, so a partial failure never leaves an untracked snapshot point on some disks.
 func snapshotAllOrNothing(ctx context.Context, imgs []string, tag string) error {
 	var created []string
 	for _, img := range imgs {
@@ -109,8 +108,7 @@ func snapshotAllOrNothing(ctx context.Context, imgs []string, tag string) error 
 	return nil
 }
 
-// imagesToSnapshot includes OVMF_VARS only when qcow2 — a raw .fd can't hold internal snapshots,
-// so with raw NVRAM only guest disk state rolls back.
+// imagesToSnapshot includes OVMF_VARS only when qcow2 — a raw .fd can't hold internal snapshots, so with raw NVRAM only guest disk state rolls back.
 func imagesToSnapshot(r *record) []string {
 	imgs := []string{r.Disk}
 	if qemu.IsQcow2NVRAM(r.OVMFVars) {

@@ -29,8 +29,7 @@ const (
 
 var errCNIVNCPassRequired = errors.New("--vnc with --net cni serves VNC on a host port reachable off-box; --vnc-password is required")
 
-// requireCNIVNCPassword rejects an unauthenticated VNC display on a CNI VM (the proxy listens on
-// 0.0.0.0); isCNI is the flag intent at create/clone or the resolved Netns at launch.
+// requireCNIVNCPassword rejects an unauthenticated VNC display on a CNI VM (the proxy listens on 0.0.0.0); isCNI is the flag intent at create/clone or the resolved Netns at launch.
 func requireCNIVNCPassword(isCNI bool, vncDisp int, vncPass string) error {
 	if isCNI && vncDisp >= 0 && vncPass == "" {
 		return errCNIVNCPassRequired
@@ -38,8 +37,7 @@ func requireCNIVNCPassword(isCNI bool, vncDisp int, vncPass string) error {
 	return validateVNCPassword(vncPass)
 }
 
-// validateVNCPassword rejects control characters (a newline would inject a second HMP command)
-// and enforces QEMU's 8-char VNC limit.
+// validateVNCPassword rejects control characters (a newline would inject a second HMP command) and enforces QEMU's 8-char VNC limit.
 func validateVNCPassword(pw string) error {
 	if len(pw) > 8 {
 		return fmt.Errorf("--vnc-password must be at most 8 characters, got %d", len(pw))
@@ -58,8 +56,7 @@ func vncProxyCommand() *cobra.Command {
 	}
 }
 
-// startVNCProxy re-execs this binary as the detached proxy in the HOST netns, so its TCP listener
-// is reachable while qemu's VNC stays inside the CNI netns. Idempotent.
+// startVNCProxy re-execs this binary as the detached proxy in the HOST netns, so its TCP listener is reachable while qemu's VNC stays inside the CNI netns. Idempotent.
 func startVNCProxy(ctx context.Context, dir string, disp int) error {
 	stopVNCProxy(ctx, dir) // a stale proxy would hold the port and shadow the new one
 	sock := filepath.Join(dir, vncSockName)
@@ -97,8 +94,7 @@ func startVNCProxy(ctx context.Context, dir string, disp int) error {
 	return nil
 }
 
-// stopVNCProxy kills a running proxy (best-effort). Zero grace: the proxy traps SIGTERM via the
-// root NotifyContext and would keep accepting, and SIGKILL loses nothing on a stateless pipe.
+// stopVNCProxy kills a running proxy (best-effort). Zero grace: the proxy traps SIGTERM via the root NotifyContext and would keep accepting, and SIGKILL loses nothing on a stateless pipe.
 func stopVNCProxy(ctx context.Context, dir string) {
 	pidPath := filepath.Join(dir, vncProxyPID)
 	if pid, err := utils.ReadPIDFile(pidPath); err == nil {

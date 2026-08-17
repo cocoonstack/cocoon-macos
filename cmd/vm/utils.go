@@ -55,8 +55,7 @@ func bakeOverlay(ctx context.Context, base, dst string) error {
 	return nil
 }
 
-// scaffoldVM lays down a new VM dir, disk overlay, and OVMF_VARS copy; it refuses an existing
-// record — a second create/clone under the same name would truncate the live overlay.
+// scaffoldVM lays down a new VM dir, disk overlay, and OVMF_VARS copy; it refuses an existing record — a second create/clone under the same name would truncate the live overlay.
 func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir, overlay, ovmfVars, digest string, err error) {
 	dir = home.VMDir(cmd, name)
 	if _, statErr := os.Stat(filepath.Join(dir, "vm.json")); statErr == nil {
@@ -80,8 +79,7 @@ func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir,
 	return dir, overlay, ovmfVars, digest, nil
 }
 
-// prepareNet returns the TAP ifname, netns path (CNI only), and guest MAC; user-mode and a
-// pre-created --tap need no provisioning, every other mode goes through the per-OS provisionNet.
+// prepareNet returns the TAP ifname, netns path (CNI only), and guest MAC; user-mode and a pre-created --tap need no provisioning, every other mode goes through the per-OS provisionNet.
 func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err error) {
 	switch r.NetMode {
 	case "", netUser:
@@ -94,8 +92,7 @@ func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err erro
 	return provisionNet(cmd, r)
 }
 
-// applyNet provisions networking and records it; a TAP is "owned" (torn down on rm) only
-// when auto-created, never when the user passed --tap.
+// applyNet provisions networking and records it; a TAP is "owned" (torn down on rm) only when auto-created, never when the user passed --tap.
 func applyNet(cmd *cobra.Command, r *record) error {
 	userTap := r.Tap
 	netTap, netns, mac, err := prepareNet(cmd, r)
@@ -135,8 +132,7 @@ func hostIsAMD() bool {
 	return err == nil && strings.Contains(string(b), "AuthenticAMD")
 }
 
-// resolveBase returns the immutable base qcow2 (+ digest): a direct filesystem path, else an
-// image ref resolved through cocoon's cloudimg store.
+// resolveBase returns the immutable base qcow2 (+ digest): a direct filesystem path, else an image ref resolved through cocoon's cloudimg store.
 func resolveBase(cmd *cobra.Command, image, name string) (string, string, error) {
 	if _, err := os.Stat(image); err == nil {
 		return image, "", nil
@@ -157,8 +153,7 @@ func resolveBase(cmd *cobra.Command, image, name string) (string, string, error)
 	return sc[0][0].Path, vm.ImageDigest, nil
 }
 
-// ensureCloudimgFirmware writes a placeholder CLOUDHV.fd purely to satisfy cloudimg.Config's
-// firmware validation — cocoon-macos boots via OVMF and never reads it.
+// ensureCloudimgFirmware writes a placeholder CLOUDHV.fd purely to satisfy cloudimg.Config's firmware validation — cocoon-macos boots via OVMF and never reads it.
 func ensureCloudimgFirmware(cmd *cobra.Command) {
 	fw := images.FirmwarePath(home.Dir(cmd))
 	if utils.ValidFile(fw) {
@@ -169,8 +164,7 @@ func ensureCloudimgFirmware(cmd *cobra.Command) {
 	}
 }
 
-// resolveFirmware returns the OpenCore loader + OVMF code/vars base/template paths: an explicit
-// flag wins, else the shared copy under <state-dir>/firmware/.
+// resolveFirmware returns the OpenCore loader + OVMF code/vars base/template paths: an explicit flag wins, else the shared copy under <state-dir>/firmware/.
 func resolveFirmware(cmd *cobra.Command) (opencore, code, vars string, err error) {
 	fw := home.FirmwareDir(cmd)
 	opencore = flagOr(cmd, "opencore", filepath.Join(fw, "OpenCore.qcow2"))

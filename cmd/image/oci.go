@@ -23,8 +23,7 @@ import (
 	"github.com/cocoonstack/cocoon/utils"
 )
 
-// pullConns is the parallel HTTP Range connection count; ghcr throttles a single stream to a
-// fraction of the link.
+// pullConns is the parallel HTTP Range connection count; ghcr throttles a single stream to a fraction of the link.
 const pullConns = 8
 
 // pullOCIBlob downloads ref's qcow2 layer to dest and verifies its sha256 digest.
@@ -87,8 +86,7 @@ func resolveQcow2Layer(ctx context.Context, repo *remote.Repository, ref string)
 	return layer, nil
 }
 
-// rangeSupported probes whether the blob endpoint honors Range (ghcr's presigned redirect does;
-// a registry answering 200 does not).
+// rangeSupported probes whether the blob endpoint honors Range (ghcr's presigned redirect does; a registry answering 200 does not).
 func rangeSupported(ctx context.Context, client *auth.Client, url string) bool {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -153,8 +151,7 @@ func verifyDigest(path, want string) error {
 	return nil
 }
 
-// dockerCredential resolves credentials from the user's docker config; a missing config yields an
-// empty store, so anonymous public pulls still work.
+// dockerCredential resolves credentials from the user's docker config; a missing config yields an empty store, so anonymous public pulls still work.
 func dockerCredential() auth.CredentialFunc {
 	store, err := credentials.NewStoreFromDocker(credentials.StoreOptions{})
 	if err != nil {
@@ -163,8 +160,7 @@ func dockerCredential() auth.CredentialFunc {
 	return credentials.Credential(store)
 }
 
-// pickQcow2Layer prefers the layer whose title annotation ends in .qcow2 (what `oras push`
-// writes), else the largest.
+// pickQcow2Layer prefers the layer whose title annotation ends in .qcow2 (what `oras push` writes), else the largest.
 func pickQcow2Layer(layers []ocispec.Descriptor) (ocispec.Descriptor, error) {
 	if len(layers) == 0 {
 		return ocispec.Descriptor{}, fmt.Errorf("manifest has no layers")

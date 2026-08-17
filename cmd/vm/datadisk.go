@@ -14,17 +14,14 @@ import (
 )
 
 const (
-	// minDataDiskSize mirrors cocoon's hypervisor.MinDataDiskSize, kept local because that package
-	// isn't dependency-light.
+	// minDataDiskSize mirrors cocoon's hypervisor.MinDataDiskSize, kept local because that package isn't dependency-light.
 	minDataDiskSize int64 = 16 << 20
 
-	// maxDataDisks: macOS has no virtio-blk, so disks ride ich9-ahci's 6 SATA ports;
-	// OpenCoreBoot=sata.2 and MacHDD=sata.4 leave exactly four free.
+	// maxDataDisks: macOS has no virtio-blk, so disks ride ich9-ahci's 6 SATA ports; OpenCoreBoot=sata.2 and MacHDD=sata.4 leave exactly four free.
 	maxDataDisks = 4
 )
 
-// parseDataDisks parses --data-disk args, auto-naming unnamed ones dataN; reserved names
-// (a clone's copied disks) count against both the duplicate check and the AHCI cap.
+// parseDataDisks parses --data-disk args, auto-naming unnamed ones dataN; reserved names (a clone's copied disks) count against both the duplicate check and the AHCI cap.
 func parseDataDisks(raw, reserved []string) ([]types.DataDiskSpec, error) {
 	used := make(map[string]bool, len(reserved))
 	for _, n := range reserved {

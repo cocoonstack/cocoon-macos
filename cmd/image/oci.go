@@ -8,14 +8,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"golang.org/x/sync/errgroup"
+	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/credentials"
@@ -25,6 +30,11 @@ import (
 
 // pullConns is the parallel HTTP Range connection count; ghcr throttles a single stream to a fraction of the link.
 const pullConns = 8
+
+const (
+	artifactTypeOSImage = "application/vnd.cocoonstack.os-image.v1+json"
+	mediaTypeDiskQcow2  = "application/vnd.cocoonstack.disk.qcow2"
+)
 
 // pullOCIBlob downloads ref's qcow2 layer to dest and verifies its sha256 digest.
 func pullOCIBlob(ctx context.Context, ref, dest string) error {
@@ -158,6 +168,93 @@ func dockerCredential() auth.CredentialFunc {
 		return auth.StaticCredential("", auth.EmptyCredential)
 	}
 	return credentials.Credential(store)
+}
+
+// ValidatePushReference rejects digest destinations before an export stops the VM because the new manifest must be published under a tag.
+func ValidatePushReference(ref string) error {
+	_, _, err := parsePushReference(ref)
+	return err
+}
+
+// PushCloudImage publishes path as a single-layer Cocoon cloud-image artifact.
+func PushCloudImage(ctx context.Context, ref, path string, annotations map[string]string) (ocispec.Descriptor, error) {
+	repoRef, tag, err := parsePushReference(ref)
+	if err != nil {
+		return ocispec.Descriptor{}, err
+	}
+	repo, err := remote.NewRepository(repoRef)
+	if err != nil {
+		return ocispec.Descriptor{}, fmt.Errorf("open repository %s: %w", repoRef, err)
+	}
+	repo.Client = &auth.Client{Cache: auth.NewCache(), Credential: dockerCredential()}
+	title := filepath.Base(repoRef) + ".qcow2"
+	return pushCloudImage(ctx, repo, tag, path, title, annotations)
+}
+
+func parsePushReference(ref string) (repo, tag string, err error) {
+	parsed, err := registry.ParseReference(ref)
+	if err != nil {
+		return "", "", fmt.Errorf("parse OCI destination %q: %w", ref, err)
+	}
+	tag = parsed.ReferenceOrDefault()
+	parsed.Reference = tag
+	if err := parsed.ValidateReferenceAsTag(); err != nil {
+		return "", "", fmt.Errorf("OCI destination %q must use a tag: %w", ref, err)
+	}
+	return parsed.Registry + "/" + parsed.Repository, tag, nil
+}
+
+func pushCloudImage(ctx context.Context, target oras.Target, tag, path, title string, annotations map[string]string) (ocispec.Descriptor, error) {
+	f, err := os.Open(path) //nolint:gosec // local VM export path
+	if err != nil {
+		return ocispec.Descriptor{}, fmt.Errorf("open cloud image: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil {
+		return ocispec.Descriptor{}, fmt.Errorf("stat cloud image: %w", err)
+	}
+	dgst, err := digest.FromReader(f)
+	if err != nil {
+		return ocispec.Descriptor{}, fmt.Errorf("hash cloud image: %w", err)
+	}
+	layer := ocispec.Descriptor{
+		MediaType: mediaTypeDiskQcow2,
+		Digest:    dgst,
+		Size:      info.Size(),
+		Annotations: map[string]string{
+			ocispec.AnnotationTitle: title,
+		},
+	}
+	exists, err := target.Exists(ctx, layer)
+	if err != nil {
+		return ocispec.Descriptor{}, fmt.Errorf("check cloud image blob: %w", err)
+	}
+	if !exists {
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			return ocispec.Descriptor{}, fmt.Errorf("seek cloud image: %w", err)
+		}
+		if err := target.Push(ctx, layer, f); err != nil {
+			return ocispec.Descriptor{}, fmt.Errorf("push cloud image blob: %w", err)
+		}
+	}
+
+	manifestAnnotations := maps.Clone(annotations)
+	if manifestAnnotations == nil {
+		manifestAnnotations = map[string]string{}
+	}
+	manifestAnnotations["cocoonstack.disk.format"] = "qcow2"
+	manifestDesc, err := oras.PackManifest(ctx, target, oras.PackManifestVersion1_1, artifactTypeOSImage, oras.PackManifestOptions{
+		Layers:              []ocispec.Descriptor{layer},
+		ManifestAnnotations: manifestAnnotations,
+	})
+	if err != nil {
+		return ocispec.Descriptor{}, fmt.Errorf("pack cloud image manifest: %w", err)
+	}
+	if err := target.Tag(ctx, manifestDesc, tag); err != nil {
+		return ocispec.Descriptor{}, fmt.Errorf("tag cloud image manifest: %w", err)
+	}
+	return manifestDesc, nil
 }
 
 // pickQcow2Layer prefers the layer whose title annotation ends in .qcow2 (what `oras push` writes), else the largest.

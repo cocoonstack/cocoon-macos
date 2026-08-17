@@ -25,6 +25,7 @@ cocoon-macos vm run ghcr.io/cocoonstack/cocoon-macos/tahoe:26 \
 cocoon-macos vm list           # table (NAME STATE CPU MEM NET VNC SSH IMAGE CREATED); -o json for JSON
 cocoon-macos vm inspect m1     # full record as JSON
 cocoon-macos vm stop m1
+cocoon-macos vm export m1 registry.example.com/team/macos-custom:v1
 cocoon-macos vm rm m1
 # also: create (no boot), start, console
 ```
@@ -60,3 +61,20 @@ over.
 
 State is recorded under `--state-dir` / `$COCOON_MACOS_HOME` (default `/var/lib/cocoon-macos`).
 `$COCOON_MACOS_LOG_LEVEL` sets the log level (`debug` / `info` / `warn` / `error`, default `info`).
+
+## Export a custom image
+
+```bash
+cocoon-macos vm export m1 registry.example.com/team/macos-custom:v1
+```
+
+The command stops a running VM, flattens and compresses its qcow2 backing chain,
+restarts the VM, then uploads the standalone disk as
+`application/vnd.cocoonstack.os-image.v1+json`. Registry credentials come from the
+standard Docker config. Upload happens after restart, so registry latency does not
+extend VM downtime.
+
+The current VNC display is preserved when the VM is restarted. VNC credentials are
+intentionally not persisted, so a CNI VM whose password is no longer available must
+pass `--vnc N --vnc-password PASSWORD`. Pass `--vnc -1` to disable VNC after the
+export. A VM that was already stopped remains stopped.

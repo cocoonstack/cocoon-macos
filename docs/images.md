@@ -38,3 +38,10 @@ verifies the SHA-256 against the layer digest before importing:
   up to 3 times on transient drops.
 
 This is both faster (parallel chunks saturate the link) and more robust than a single stream.
+
+## Publishing VM disks
+
+`cocoon-macos vm export VM REF` publishes a flattened VM root disk using the same
+OCI cloud-image artifact type consumed by `image pull`. It writes one
+`application/vnd.cocoonstack.disk.qcow2` layer and authenticates through the Docker
+credential store; no external `oras` binary is required.

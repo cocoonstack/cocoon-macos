@@ -26,3 +26,5 @@ func launchCmd(_ *record, args []string) *exec.Cmd {
 }
 
 func ensureNetnsLoopback(_ context.Context, _ *record) {}
+
+func syncGuestMAC(_ context.Context, _ *record) error { return nil }

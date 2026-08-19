@@ -12,6 +12,7 @@ import (
 	cmdimage "github.com/cocoonstack/cocoon-macos/cmd/image"
 	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
+	"github.com/cocoonstack/cocoon/progress"
 	"github.com/cocoonstack/cocoon/utils"
 )
 
@@ -83,6 +84,16 @@ func (h *Handler) Export(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("push cloud image: %w", err)
 	}
 	fmt.Println(desc.Digest)
+	localName, _ := cmd.Flags().GetString("local-name")
+	if localName != "" {
+		_, store, openErr := home.OpenStore(cmd)
+		if openErr != nil {
+			return fmt.Errorf("open local cloud-image store: %w", openErr)
+		}
+		if importErr := store.Import(ctx, localName, progress.Nop, tmpPath); importErr != nil {
+			return fmt.Errorf("retain local cloud image %s: %w", localName, importErr)
+		}
+	}
 	return nil
 }
 

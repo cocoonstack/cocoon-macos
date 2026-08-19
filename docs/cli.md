@@ -74,6 +74,10 @@ restarts the VM, then uploads the standalone disk as
 standard Docker config. Upload happens after restart, so registry latency does not
 extend VM downtime.
 
+Use `--local-name NAME` to register the flattened qcow2 in the local cloud-image
+store after a successful push. Later runs on the source node can then reuse it
+without downloading it from the registry.
+
 The current VNC display is preserved when the VM is restarted. VNC credentials are
 intentionally not persisted, so a CNI VM whose password is no longer available must
 pass `--vnc N --vnc-password PASSWORD`. Pass `--vnc -1` to disable VNC after the

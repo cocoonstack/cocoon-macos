@@ -1,5 +1,13 @@
 # Images
 
+Local cloud images can be streamed between compatible macOS nodes without an
+intermediate file:
+
+```bash
+cocoon-macos image export custom-macos-66:tag -o - | \
+  ssh node2 cocoon-macos image import custom-macos-66:tag
+```
+
 ## Golden images on ghcr
 
 The CI pipeline (see [CI Image Pipeline](image-pipeline.md)) publishes two tiers per OS:

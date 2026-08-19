@@ -122,6 +122,7 @@ func Command(h Actions) *cobra.Command {
 	}
 	exportCmd.Flags().Int("vnc", -1, "VNC display number for the restarted VM; omit to preserve the current display")
 	exportCmd.Flags().String("vnc-password", "", "VNC password for the restarted VM; omit to preserve the in-memory password when available (required with CNI VNC)")
+	exportCmd.Flags().String("local-name", "", "also retain the exported qcow2 in the local cloud-image store under this name")
 
 	vmCmd.AddCommand(vncProxyCommand())
 	vmCmd.AddCommand(createCmd, runCmd, startCmd, stopCmd, listCmd, inspectCmd, consoleCmd, rmCmd,

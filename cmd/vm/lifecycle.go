@@ -51,6 +51,15 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
+			// A recovery request may have started waiting while another lifecycle
+			// operation (notably `vm export`) held the VM lock. Re-check after
+			// acquiring the lock: the export may already have restarted qemu and
+			// its VNC proxy. Launching a second qemu would fail and launch's error
+			// cleanup would tear down the healthy proxy belonging to the first one.
+			if isRunning(r) {
+				fmt.Printf("%s (pid %d, already running)\n", n, r.PID)
+				return nil
+			}
 			r.VNCDisp, r.VNCPass = vnc, vncPass
 			if err := h.launch(cmd, dir, r); err != nil {
 				return err

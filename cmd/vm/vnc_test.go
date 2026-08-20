@@ -2,7 +2,12 @@ package vm
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestRequireCNIVNCPassword(t *testing.T) {
@@ -52,4 +57,41 @@ func TestValidateVNCPassword(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestVNCProxyRunning(t *testing.T) {
+	dir := t.TempDir()
+	if vncProxyRunning(dir) {
+		t.Fatal("missing proxy pidfile reported as running")
+	}
+
+	sock := filepath.Join(dir, vncSockName)
+	proxy := exec.Command(os.Args[0], "-test.run=TestVNCProxyHelperProcess", "--", vncProxyOp, sock)
+	proxy.Env = append(os.Environ(), "COCOON_MACOS_VNC_PROXY_HELPER=1")
+	if err := proxy.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = proxy.Process.Kill()
+		_ = proxy.Wait()
+	})
+	if err := os.WriteFile(filepath.Join(dir, vncProxyPID), []byte(fmt.Sprintf("%d\n", proxy.Process.Pid)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for !vncProxyRunning(dir) && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !vncProxyRunning(dir) {
+		t.Fatal("matching proxy process reported as stopped")
+	}
+}
+
+func TestVNCProxyHelperProcess(t *testing.T) {
+	if os.Getenv("COCOON_MACOS_VNC_PROXY_HELPER") != "1" {
+		return
+	}
+	time.Sleep(time.Minute)
+	os.Exit(0)
 }

@@ -46,7 +46,7 @@ cocoon-macos CLI ──► image: pull the golden macOS qcow2 from ghcr (paralle
 - **COW overlays** — an instant copy-on-write clone of the immutable golden base
   per VM
 - **Per-VM Apple identity** — `--random-smbios` injects a unique serial/MLB/UUID/ROM
-  (guest MAC = ROM) into a per-VM OpenCore, so clones never share a serial
+  into a per-VM OpenCore; the ROM is the guest MAC outside CNI
 - **CNI networking with TC redirect** — `--net cni` joins cocoon's forwarding
   plane so the guest DHCPs a real LAN IP; also `user`/`tap`/`bridge`
 - **Reachable VNC** — loopback VNC on user/tap/bridge; a host-side proxy fronts

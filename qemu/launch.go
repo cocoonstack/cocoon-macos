@@ -36,7 +36,7 @@ type Spec struct {
 	OpenCore string
 	OVMFCode string
 	OVMFVars string
-	MAC      string // set to the SMBIOS ROM for --random-smbios
+	MAC      string // guest NIC MAC: SMBIOS ROM by default, CNI eth0 in CNI mode
 	Tap      string // pre-created host TAP; set => -netdev tap (bridged/routed), empty => user-mode SLIRP
 
 	MonSock string

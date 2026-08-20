@@ -154,7 +154,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	if r.DataDisks, err = createDataDisks(ctx, dir, diskSpecs); err != nil {
 		return nil, err
 	}
-	// OpenCore before networking: a random SMBIOS sets r.MAC = ROM, which prepareNet keeps as the guest MAC.
+	// OpenCore seeds the default guest MAC from ROM before network provisioning.
 	randomSMBIOS, _ := cmd.Flags().GetBool("random-smbios")
 	if err = prepareOpenCore(ctx, dir, oc, randomSMBIOS, r); err != nil {
 		return nil, err

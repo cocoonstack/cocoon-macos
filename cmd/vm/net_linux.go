@@ -80,8 +80,10 @@ func provisionNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err er
 	if len(cfgs) == 0 {
 		return "", "", "", errors.New("network add returned no NIC")
 	}
-	// SMBIOS ROM wins as the guest MAC; cocoon's generated MAC is only a fallback
-	mac = cmp.Or(r.MAC, cfgs[0].MAC)
+	mac = cfgs[0].MAC
+	if r.NetMode != netCNI {
+		mac = cmp.Or(r.MAC, mac)
+	}
 	return cfgs[0].TAP, nsPath, mac, nil
 }
 

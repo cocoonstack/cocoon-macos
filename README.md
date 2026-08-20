@@ -9,7 +9,7 @@ macOS VM engine for x86 Linux/KVM, built on [cocoon](https://github.com/cocoonst
 - **Fully-automated macOS install** — a GitHub Action boots OpenCore, erases APFS, drives the installer by OCR, and publishes a golden qcow2 (Tahoe 26 / Sequoia 15) to ghcr; the `:26` image is **SSH-ready** (`cocoon`/`cocoon`)
 - **Docker-like CLI** — `create`, `run`, `start`, `stop`, `list`, `inspect`, `console`, `rm`, `snapshot`, `restore`, `clone`
 - **Parallel Range image pull** — the multi-GB qcow2 is pulled in 8 concurrent HTTP Range chunks with an sha256 digest check (oras-go for auth; no `oras` binary needed)
-- **Per-VM Apple identity** — `--random-smbios` injects a unique serial/MLB/UUID/ROM (guest MAC = ROM) into a per-VM OpenCore, so clones never share a serial
+- **Per-VM Apple identity** — `--random-smbios` injects a unique serial/MLB/UUID/ROM into a per-VM OpenCore; the ROM is the guest MAC outside CNI, so clones never share a serial
 - **CNI networking with TC redirect** — `--net cni` joins cocoon's forwarding plane so the guest DHCPs a real LAN IP; also user/tap/bridge; reachable VNC (launch-scoped, password-gated on CNI)
 - **Snapshot, clone & data disks** — offline qcow2-internal snapshots, CoW clones that cold-boot a fresh Apple identity, and up to 4 extra AHCI data disks
 - **Intel & AMD, built on cocoon** — one boot recipe boots both hosts; imports cocoon's `cloudimg` store, `network` plane, and copy-on-write conventions

@@ -17,7 +17,7 @@ type SMBIOS struct {
 	Serial string `json:"serial"` // SystemSerialNumber
 	MLB    string `json:"mlb"`    // board serial
 	UUID   string `json:"uuid"`   // SystemUUID
-	ROM    string `json:"rom"`    // 6-byte ROM as hex; also the guest en0 MAC
+	ROM    string `json:"rom"`    // 6-byte ROM as hex; default guest NIC MAC outside CNI
 }
 
 // RandomSMBIOS generates a unique per-VM identity (fixed model + random serial/MLB/UUID/ROM).
@@ -41,7 +41,7 @@ func RandomSMBIOS() (SMBIOS, error) {
 	return SMBIOS{Model: smbiosModel, Serial: serial, MLB: mlb, UUID: uuid, ROM: rom}, nil
 }
 
-// MAC returns the ROM formatted as the guest NIC MAC (so en0 == ROM, as iServices expects).
+// MAC returns the ROM formatted as the default guest NIC MAC; CNI supplies its own runtime MAC.
 func (s SMBIOS) MAC() string {
 	b, err := hex.DecodeString(s.ROM)
 	if err != nil || len(b) != 6 {

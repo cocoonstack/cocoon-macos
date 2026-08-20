@@ -15,9 +15,8 @@ network. In `tap` and `bridge` mode the guest NIC MAC stays equal to the SMBIOS 
 (`bridge`/`cni`) is Linux-only (needs `CAP_NET_ADMIN`); `user` and a pre-created `--tap` work
 everywhere.
 
-In `cni` mode, the guest NIC uses the MAC allocated by the CNI bridge plugin rather than the SMBIOS
-ROM value. The plugin installs a per-veth anti-spoof rule during CNI ADD, so QEMU must use that same
-address for DHCP traffic to reach `cni0`. The SMBIOS ROM identity remains unique and unchanged.
+In `cni` mode, the guest NIC uses the MAC CNI assigned to `eth0` because `macspoofchk` allow-lists
+that address; the SMBIOS ROM identity remains unchanged.
 
 Auto-created devices carry cocoon-macos's own host name family (`net_scope` `cm`: TAPs
 `cm<vmid8>-<nic>`, netns `cm-<vmid>`), so a cocoon daemon's GC on the same node never reads a live

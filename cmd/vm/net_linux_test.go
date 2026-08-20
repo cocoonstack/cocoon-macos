@@ -20,13 +20,3 @@ func TestNetConfScope(t *testing.T) {
 		t.Errorf("NetnsPrefix() = %q, want %q", got, want)
 	}
 }
-
-func TestParseLinkMAC(t *testing.T) {
-	mac, err := parseLinkMAC([]byte(`[{"ifindex":2,"ifname":"eth0","address":"AE:77:7B:3B:49:88"}]`))
-	if err != nil {
-		t.Fatalf("parseLinkMAC: %v", err)
-	}
-	if want := "ae:77:7b:3b:49:88"; mac != want {
-		t.Errorf("MAC = %q, want %q", mac, want)
-	}
-}

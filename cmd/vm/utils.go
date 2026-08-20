@@ -99,9 +99,7 @@ func applyNet(cmd *cobra.Command, r *record) error {
 	if err != nil {
 		return err
 	}
-	if r.MAC == "" {
-		r.MAC = mac
-	}
+	r.MAC = mac
 	if netTap != "" {
 		r.Tap, r.Netns, r.TapOwned = netTap, netns, userTap == ""
 	}

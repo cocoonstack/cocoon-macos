@@ -5,10 +5,8 @@ package vm
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os/exec"
 	"path/filepath"
 
@@ -82,9 +80,10 @@ func provisionNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err er
 	if len(cfgs) == 0 {
 		return "", "", "", errors.New("network add returned no NIC")
 	}
-	// SMBIOS ROM wins initially; launch re-reads CNI's actual eth0 MAC after
-	// the plugin has installed its per-veth anti-spoof rule.
-	mac = cmp.Or(r.MAC, cfgs[0].MAC)
+	mac = cfgs[0].MAC
+	if r.NetMode != netCNI {
+		mac = cmp.Or(r.MAC, mac)
+	}
 	return cfgs[0].TAP, nsPath, mac, nil
 }
 
@@ -170,44 +169,6 @@ func ensureNetnsLoopback(ctx context.Context, r *record) {
 	ns := filepath.Base(r.Netns)
 	log.WithFunc("cmd.vm.ensureNetnsLoopback").Debugf(ctx, "bringing up lo in netns %s via `ip netns exec`", ns)
 	_ = exec.Command("ip", "netns", "exec", ns, "ip", "link", "set", "lo", "up").Run()
-}
-
-// syncGuestMAC makes QEMU use the MAC the CNI bridge plugin assigned to eth0.
-// macspoofchk installs a fixed allow rule for that address during CNI ADD, so
-// using the SMBIOS ROM MAC would drop DHCP before it reaches cni0. Reading the
-// live netns also migrates records created by older cocoon-macos versions.
-func syncGuestMAC(ctx context.Context, r *record) error {
-	if r.Netns == "" {
-		return nil
-	}
-	ns := filepath.Base(r.Netns)
-	out, err := exec.CommandContext(ctx, "ip", "netns", "exec", ns, "ip", "-j", "link", "show", "dev", "eth0").Output()
-	if err != nil {
-		return fmt.Errorf("inspect CNI eth0 in %s: %w", ns, err)
-	}
-	mac, err := parseLinkMAC(out)
-	if err != nil {
-		return fmt.Errorf("inspect CNI eth0 in %s: %w", ns, err)
-	}
-	r.MAC = mac
-	return nil
-}
-
-func parseLinkMAC(data []byte) (string, error) {
-	var links []struct {
-		Address string `json:"address"`
-	}
-	if err := json.Unmarshal(data, &links); err != nil {
-		return "", fmt.Errorf("decode ip link JSON: %w", err)
-	}
-	if len(links) != 1 || links[0].Address == "" {
-		return "", fmt.Errorf("expected one interface with an address, got %d", len(links))
-	}
-	hw, err := net.ParseMAC(links[0].Address)
-	if err != nil {
-		return "", fmt.Errorf("parse MAC %q: %w", links[0].Address, err)
-	}
-	return hw.String(), nil
 }
 
 // launchCmd builds the qemu exec, wrapped in `ip netns exec` for CNI so -netdev tap finds the in-netns TAP (the fork-safe, cgo-free way to daemonize into a netns).

@@ -154,9 +154,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	if r.DataDisks, err = createDataDisks(ctx, dir, diskSpecs); err != nil {
 		return nil, err
 	}
-	// OpenCore before networking: a random SMBIOS seeds r.MAC from ROM. CNI
-	// replaces only the guest NIC MAC with its anti-spoof-approved address; the
-	// SMBIOS record retains the unique ROM identity.
+	// OpenCore seeds the default guest MAC from ROM before network provisioning.
 	randomSMBIOS, _ := cmd.Flags().GetBool("random-smbios")
 	if err = prepareOpenCore(ctx, dir, oc, randomSMBIOS, r); err != nil {
 		return nil, err
@@ -178,9 +176,6 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		if err := os.WriteFile("/sys/module/kvm/parameters/ignore_msrs", []byte("1\n"), 0o600); err != nil {
 			logger.Warnf(ctx, "set kvm ignore_msrs for AMD: %v", err)
 		}
-	}
-	if err := syncGuestMAC(ctx, r); err != nil {
-		return err
 	}
 	spec := qemu.Spec{
 		Name: r.Name, Disk: r.Disk, OpenCore: r.OpenCore, OVMFCode: r.OVMFCode, OVMFVars: r.OVMFVars,

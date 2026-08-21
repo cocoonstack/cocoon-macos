@@ -51,13 +51,8 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
-			// A recovery request may have started waiting while another lifecycle
-			// operation (notably `vm export`) held the VM lock. Re-check after
-			// acquiring the lock: the export may already have restarted qemu.
-			// Launching a second qemu would fail and launch's error cleanup would
-			// tear down the healthy proxy belonging to the first one. If an earlier
-			// failed duplicate start already removed the proxy, repair only that
-			// host-side process while preserving the live guest.
+			// Another lifecycle operation may have restarted qemu while Start waited
+			// for the VM lock. Adopt the live guest and repair only its VNC proxy.
 			if isRunning(r) {
 				if r.Netns != "" && r.VNCDisp >= 0 && !vncProxyRunning(dir) {
 					if err := startVNCProxy(ctx, dir, r.VNCDisp); err != nil {

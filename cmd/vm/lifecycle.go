@@ -189,6 +189,9 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	if r.Netns != "" && r.VNCDisp >= 0 {
 		spec.VNCSock = filepath.Join(dir, vncSockName)
 	}
+	if err := spec.Validate(); err != nil {
+		return fmt.Errorf("invalid macOS VM resources: %w", err)
+	}
 	pidfile := filepath.Join(dir, "qemu.pid")
 	args := append(spec.Args(), "-daemonize", "-pidfile", pidfile)
 	ensureNetnsLoopback(ctx, r) // CNI: a fresh netns has lo DOWN, so qemu's -vnc 127.0.0.1 would fail to bind

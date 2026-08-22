@@ -43,9 +43,20 @@ type Spec struct {
 	QMPSock string
 }
 
+// Validate rejects CPU topologies that QEMU would otherwise silently expand
+// into unsupported SMT shapes. macOS expects two threads per virtual core, so
+// the vCPU count must be a positive even number.
+func (s Spec) Validate() error {
+	if s.CPUs < 2 || s.CPUs%2 != 0 {
+		return fmt.Errorf("cpus must be an even number greater than or equal to 2: %d", s.CPUs)
+	}
+	return nil
+}
+
 // Args returns the qemu-system-x86_64 argument vector for the macOS guest.
+// Callers must validate the spec before launching QEMU.
 func (s Spec) Args() []string {
-	cores := max(s.CPUs/2, 1)
+	cores := s.CPUs / 2
 	varsFmt := "raw"
 	if IsQcow2NVRAM(s.OVMFVars) {
 		varsFmt = "qcow2"
@@ -61,7 +72,7 @@ func (s Spec) Args() []string {
 		"-enable-kvm", "-m", s.Memory,
 		"-cpu", macOSCPU,
 		"-machine", machine,
-		"-smp", fmt.Sprintf("%d,cores=%d,sockets=1", s.CPUs, cores),
+		"-smp", fmt.Sprintf("%d,cores=%d,threads=2,sockets=1", s.CPUs, cores),
 		"-device", "qemu-xhci,id=xhci",
 		"-device", "usb-kbd,bus=xhci.0",
 		"-device", "usb-tablet,bus=xhci.0",

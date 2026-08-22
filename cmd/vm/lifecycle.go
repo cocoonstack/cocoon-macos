@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/projecteru2/core/log"
@@ -188,7 +187,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, SSHPort: r.SSHPort, MAC: r.MAC, VNCPass: r.VNCPass,
 		Tap:          r.Tap, // set for tap/bridge/cni (a real host TAP); empty => user-mode SLIRP
 		Hugepages:    r.Hugepages,
-		ExitOnReboot: exitOnRebootEnabled(r),
+		ExitOnReboot: r.ExitOnReboot,
 		DataDisks:    r.DataDisks,
 		MonSock:      filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
 	}
@@ -226,14 +225,6 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		}
 	}
 	return saveRec(dir, r)
-}
-
-func exitOnRebootEnabled(r *record) bool {
-	if r.ExitOnReboot {
-		return true
-	}
-	enabled, err := strconv.ParseBool(os.Getenv("COCOON_MACOS_EXIT_ON_REBOOT"))
-	return err == nil && enabled
 }
 
 // prepareOpenCore points r.OpenCore at the shared base, or with randomSMBIOS at a per-VM overlay whose config.plist is patched with a unique identity.

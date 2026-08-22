@@ -7,23 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestExitOnRebootEnabled(t *testing.T) {
-	if exitOnRebootEnabled(&record{}) {
-		t.Fatal("standalone VM must keep normal reboot behavior by default")
-	}
-	t.Setenv("COCOON_MACOS_EXIT_ON_REBOOT", "true")
-	if !exitOnRebootEnabled(&record{}) {
-		t.Fatal("external supervisor environment must enable cold relaunch behavior")
-	}
-	t.Setenv("COCOON_MACOS_EXIT_ON_REBOOT", "invalid")
-	if exitOnRebootEnabled(&record{}) {
-		t.Fatal("invalid environment value must not change reboot behavior")
-	}
-	if !exitOnRebootEnabled(&record{ExitOnReboot: true}) {
-		t.Fatal("persisted VM setting must enable cold relaunch behavior")
-	}
-}
-
 func TestCloneOpenCoreBase(t *testing.T) {
 	tests := []struct {
 		name string

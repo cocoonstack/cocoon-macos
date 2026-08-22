@@ -45,6 +45,11 @@ start — the allocation is not best-effort. On `clone` the flag is only
 applied when passed explicitly; otherwise the source VM's setting carries
 over.
 
+`--exit-on-reboot` is for VMs owned by an external supervisor. It makes QEMU
+exit when the guest requests a reboot, allowing the supervisor to relaunch the
+VM as a cold boot. The setting is explicit, persisted with the VM, and inherited
+by clones; standalone VMs keep QEMU's normal in-process reboot behavior.
+
 ## What `vm run` does
 
 1. `qemu-img create -b <golden> overlay.qcow2` — instant copy-on-write clone of the golden image.

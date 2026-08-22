@@ -5,6 +5,7 @@
 #   - create a local admin user offline (dscl -f on the volume's dslocal)
 #   - drop a first-boot LaunchDaemon that enables Remote Login (SSH), then self-removes
 #   - install a persistent LaunchDaemon that assigns a per-VM hostname
+#   - install a persistent LaunchDaemon that grows APFS after qcow2 expansion
 # Diagnostics are printed so a VNC screenshot shows progress/errors.
 set -x
 USER_NAME="${USER_NAME:-cocoon}"
@@ -249,4 +250,78 @@ PLIST
 chown 0:0 "$VOL/Library/LaunchDaemons/com.cocoon.set-hostname.plist" "$VOL/usr/local/sbin/cocoon-set-hostname"
 chmod 644 "$VOL/Library/LaunchDaemons/com.cocoon.set-hostname.plist"
 ls -la "$VOL/Library/LaunchDaemons/com.cocoon.set-hostname.plist"
+
+# Persistent system-disk growth. qemu-img enlarges the virtual disk before
+# boot, but macOS leaves the GPT partition and APFS container at the image's
+# original size. The daemon is idempotent and exits quickly when no growth is
+# available.
+mkdir -p "$VOL/usr/local/sbin"
+cat > "$VOL/usr/local/sbin/cocoon-resize-system-disk" <<'SH'
+#!/bin/zsh
+
+set -eu
+
+log=/var/log/cocoon-resize-system-disk.log
+exec >>"$log" 2>&1
+
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) resize check started"
+
+physical_store=""
+for _ in {1..12}; do
+  physical_store=$(/usr/sbin/diskutil info / | /usr/bin/awk -F: '/APFS Physical Store/ {gsub(/[[:space:]]/, "", $2); print $2; exit}')
+  [[ -n "$physical_store" ]] && break
+  /bin/sleep 5
+done
+
+if [[ -z "$physical_store" ]]; then
+  echo "unable to determine the root APFS physical store"
+  exit 1
+fi
+
+whole_disk=$(/usr/sbin/diskutil info "$physical_store" | /usr/bin/awk -F: '/Part of Whole/ {gsub(/[[:space:]]/, "", $2); print $2; exit}')
+if [[ -z "$whole_disk" ]]; then
+  echo "unable to determine the whole disk for $physical_store"
+  exit 1
+fi
+
+limits=$(/usr/sbin/diskutil apfs resizeContainer "$physical_store" limits)
+current=$(printf '%s\n' "$limits" | /usr/bin/sed -n 's/.*Current Container size:.*(\([0-9][0-9]*\) Bytes).*/\1/p')
+maximum=$(printf '%s\n' "$limits" | /usr/bin/sed -n 's/.*Maximum.*(\([0-9][0-9]*\) Bytes).*/\1/p')
+if [[ -z "$current" || -z "$maximum" ]]; then
+  echo "unable to parse APFS resize limits for $physical_store"
+  printf '%s\n' "$limits"
+  exit 1
+fi
+
+if (( maximum <= current + 4194304 )); then
+  echo "no expansion needed: current=$current maximum=$maximum"
+  exit 0
+fi
+
+# Refresh the live partition map before growing the APFS container into the
+# free space added by qemu-img resize.
+/usr/bin/printf 'y\n' | /usr/sbin/diskutil repairDisk "$whole_disk"
+/usr/sbin/diskutil apfs resizeContainer "$physical_store" 0
+/bin/sync
+
+final=$(/usr/sbin/diskutil apfs resizeContainer "$physical_store" limits)
+echo "$final"
+echo "expanded root APFS container on $physical_store"
+SH
+chmod 755 "$VOL/usr/local/sbin/cocoon-resize-system-disk"
+cat > "$VOL/Library/LaunchDaemons/io.cocoon.resize-system-disk.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>io.cocoon.resize-system-disk</string>
+  <key>ProgramArguments</key><array><string>/usr/local/sbin/cocoon-resize-system-disk</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>/var/log/cocoon-resize-system-disk.launchd.log</string>
+  <key>StandardErrorPath</key><string>/var/log/cocoon-resize-system-disk.launchd.log</string>
+</dict></plist>
+PLIST
+chown 0:0 "$VOL/usr/local/sbin/cocoon-resize-system-disk" "$VOL/Library/LaunchDaemons/io.cocoon.resize-system-disk.plist"
+chmod 644 "$VOL/Library/LaunchDaemons/io.cocoon.resize-system-disk.plist"
+echo "OK installed persistent APFS auto-grow daemon"
 echo "=== PROVISION DONE (user=$USER_NAME, SSH on first boot) ==="

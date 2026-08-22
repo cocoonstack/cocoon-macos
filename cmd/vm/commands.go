@@ -123,6 +123,7 @@ func addVMFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("name", "n", "", "VM name (default: generated)")
 	cmd.Flags().Int("cpus", 4, "vCPU count")
 	cmd.Flags().String("memory", "8192", "guest memory in MiB")
+	cmd.Flags().String("storage", "", "system disk size (for example 100Gi); omit to keep the image virtual size, shrinking is rejected")
 	cmd.Flags().Bool("hugepages", false, "back guest RAM with 2 MiB hugepages (needs host hugepages reserved; lower TLB/EPT overhead)")
 	cmd.Flags().Bool("exit-on-reboot", false, "exit QEMU on guest reboot so an external supervisor can relaunch it cold")
 	cmd.Flags().StringArray("data-disk", nil, "attach an extra qcow2 data disk: comma-separated key=value (size= required e.g. size=20G; name= optional, default dataN). Repeatable, max 4. macOS has no in-guest agent, so fstype=/mount= are unsupported — format it in the guest (Disk Utility/diskutil)")

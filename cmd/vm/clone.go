@@ -2,6 +2,7 @@ package vm
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -45,11 +46,23 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	storage := srcRec.Storage
+	if cmd.Flags().Changed("storage") {
+		storage, err = storageFromFlag(cmd)
+		if err != nil {
+			return err
+		}
+	}
 	dir, overlay, ovmfVars, digest, err := scaffoldVM(cmd, name, srcRec.Image, srcRec.OVMFVars, filepath.Base(srcRec.OVMFVars))
 	if err != nil {
 		return err
 	}
 	ctx := cliutil.CommandContext(cmd)
+	storage, err = resizeSystemDisk(ctx, overlay, storage)
+	if err != nil {
+		_ = os.RemoveAll(dir)
+		return err
+	}
 	copied, err := copyDataDisks(dir, srcRec.DataDisks)
 	if err != nil {
 		return err
@@ -60,7 +73,7 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	}
 	r := &record{
 		Name: name, Image: srcRec.Image, ImageDigest: digest, Disk: overlay,
-		OVMFCode: srcRec.OVMFCode, OVMFVars: ovmfVars, CPUs: cpus, Memory: srcRec.Memory,
+		OVMFCode: srcRec.OVMFCode, OVMFVars: ovmfVars, CPUs: cpus, Memory: srcRec.Memory, Storage: storage,
 		DataDisks: append(copied, newDisks...),
 		VMID:      utils.GenerateID(), Created: time.Now().Format(time.RFC3339),
 	}

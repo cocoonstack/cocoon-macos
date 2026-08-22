@@ -20,7 +20,7 @@ See [Images](images.md) for the store layout and the parallel-Range download.
 # clone the golden image into a per-VM overlay and boot it (x86 Linux + /dev/kvm).
 # IMAGE is a store ref or a direct qcow2 path; firmware defaults to the doctor's install.
 cocoon-macos vm run ghcr.io/cocoonstack/cocoon-macos/tahoe:26 \
-  --name m1 --cpus 4 --memory 8192 --ssh-port 2222 --vnc 1 --random-smbios
+  --name m1 --cpus 4 --memory 8192 --storage 100Gi --ssh-port 2222 --vnc 1 --random-smbios
 
 cocoon-macos vm list           # table (NAME STATE CPU MEM NET VNC SSH IMAGE CREATED); -o json for JSON
 cocoon-macos vm inspect m1     # full record as JSON
@@ -33,6 +33,8 @@ cocoon-macos vm rm m1
   boot; `start` boots a created/stopped VM.
 - `run` is atomic: if the boot fails it removes everything it just created (no half-made VM left
   behind).
+- `--storage` expands the new VM's qcow2 system disk before boot. It accepts values such as `100Gi`
+  or a byte count, never shrinks an image, and is inherited by `clone` unless explicitly overridden.
 
 Networking (`--net`) and VNC (`--vnc` / `--vnc-password`) are covered in
 [Networking & VNC](networking.md); snapshot/clone and `--data-disk` in

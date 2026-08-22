@@ -7,6 +7,40 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestStorageFromFlag(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		want    int64
+		wantErr bool
+	}{
+		{name: "unset keeps image size"},
+		{name: "kubernetes gibibytes", value: "100Gi", want: 100 << 30},
+		{name: "surrounding whitespace", value: " 100Gi ", want: 100 << 30},
+		{name: "plain bytes", value: "107374182400", want: 100 << 30},
+		{name: "zero rejected", value: "0", wantErr: true},
+		{name: "invalid rejected", value: "large", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().String("storage", "", "")
+			if tt.value != "" {
+				if err := cmd.Flags().Set("storage", tt.value); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got, err := storageFromFlag(cmd)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("storageFromFlag() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Fatalf("storageFromFlag() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGraceFromFlags(t *testing.T) {
 	tests := []struct {
 		name  string

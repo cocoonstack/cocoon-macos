@@ -12,7 +12,8 @@ Every VM boots the same way on Intel and AMD:
   baked into the macOS qcow2 — the same image boots under a different loader on Intel vs AMD.
 - **CPU:** `Skylake-Client` spoofing `GenuineIntel` with `-hle,-rtm` (TSX off), `+invtsc`, and
   `vmware-cpuid-freq=on`. The TSC flags are load-bearing: without them macOS self-calibrates the TSC
-  and spins pathologically under nested KVM on first boot.
+  and spins pathologically under nested KVM on first boot. QEMU receives an explicit one-thread-per-core
+  topology so odd vCPU counts do not get inferred as unsupported multi-threaded cores.
 - **OpenCore picker:** the shipped `OpenCore.qcow2` template boots the default entry immediately with
   no picker UI (a visible picker can't be driven reliably headlessly — OpenCanopy cancels its
   `Timeout` countdown on stray USB-enumeration input and then waits forever). `--random-smbios`

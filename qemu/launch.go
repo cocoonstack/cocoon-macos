@@ -23,14 +23,15 @@ const (
 type Spec struct {
 	Name string
 
-	CPUs      int
-	Memory    string   // MiB, e.g. "8192"
-	VNCDisp   int      // n => host 127.0.0.1:590n; <0 disables
-	VNCSock   string   // when set, bind VNC to this unix socket instead of 127.0.0.1 (CNI: fronted by vncProxy)
-	VNCPass   string   // set via the monitor post-launch (macOS Screen Sharing needs password auth)
-	SSHPort   int      // host port forwarded to guest :22; 0 disables
-	Hugepages bool     // needs host hugepages reserved; off => default RAM
-	DataDisks []string // extra qcow2 data disks; attached on the AHCI ports MacHDD/OpenCore leave free
+	CPUs         int
+	Memory       string   // MiB, e.g. "8192"
+	VNCDisp      int      // n => host 127.0.0.1:590n; <0 disables
+	VNCSock      string   // when set, bind VNC to this unix socket instead of 127.0.0.1 (CNI: fronted by vncProxy)
+	VNCPass      string   // set via the monitor post-launch (macOS Screen Sharing needs password auth)
+	SSHPort      int      // host port forwarded to guest :22; 0 disables
+	Hugepages    bool     // needs host hugepages reserved; off => default RAM
+	ExitOnReboot bool     // exit QEMU on a guest reboot so an external owner can relaunch it cold
+	DataDisks    []string // extra qcow2 data disks; attached on the AHCI ports MacHDD/OpenCore leave free
 
 	Disk     string
 	OpenCore string
@@ -75,6 +76,11 @@ func (s Spec) Args() []string {
 		"-drive", "id=MacHDD," + ahciDriveOpts + ",file=" + s.Disk,
 		"-device", "ide-hd,bus=sata.4,drive=MacHDD",
 		"-device", "vmware-svga",
+	}
+	if s.ExitOnReboot {
+		// A macOS warm reset can stall indefinitely during early boot under KVM.
+		// Exit QEMU so an external owner can relaunch the guest cold instead.
+		a = append(a, "-no-reboot")
 	}
 	a = append(memBackend, a...) // -object must precede the -machine memory-backend reference
 	// the SATA ports OpenCoreBoot (sata.2) and MacHDD (sata.4) leave free; the count is capped at 4 upstream

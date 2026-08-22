@@ -32,14 +32,15 @@ type record struct {
 	Image       string `json:"image"`
 	ImageDigest string `json:"image_digest,omitempty"`
 
-	CPUs      int      `json:"cpus"`
-	Memory    string   `json:"memory"`
-	VNCDisp   int      `json:"vnc"`
-	VNCPass   string   `json:"-"` // launch-scoped, set from the flag each start; never persisted (would leak at rest)
-	SSHPort   int      `json:"ssh_port"`
-	NetMode   string   `json:"net_mode,omitempty"`
-	Hugepages bool     `json:"hugepages,omitempty"`
-	DataDisks []string `json:"data_disks,omitempty"` // created data-disk qcow2 paths, attached on AHCI ports 0,1,3,5
+	CPUs         int      `json:"cpus"`
+	Memory       string   `json:"memory"`
+	VNCDisp      int      `json:"vnc"`
+	VNCPass      string   `json:"-"` // launch-scoped, set from the flag each start; never persisted (would leak at rest)
+	SSHPort      int      `json:"ssh_port"`
+	NetMode      string   `json:"net_mode,omitempty"`
+	Hugepages    bool     `json:"hugepages,omitempty"`
+	ExitOnReboot bool     `json:"exit_on_reboot,omitempty"`
+	DataDisks    []string `json:"data_disks,omitempty"` // created data-disk qcow2 paths, attached on AHCI ports 0,1,3,5
 
 	Disk         string       `json:"disk"`
 	OpenCore     string       `json:"opencore"`

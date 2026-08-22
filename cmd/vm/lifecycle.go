@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/projecteru2/core/log"
@@ -52,6 +53,9 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			r.VNCDisp, r.VNCPass = vnc, vncPass
+			if cmd.Flags().Changed("exit-on-reboot") {
+				r.ExitOnReboot, _ = cmd.Flags().GetBool("exit-on-reboot")
+			}
 			if err := h.launch(cmd, dir, r); err != nil {
 				return err
 			}
@@ -146,10 +150,12 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	ssh, _ := cmd.Flags().GetInt("ssh-port")
 	tap, _ := cmd.Flags().GetString("tap")
 	huge, _ := cmd.Flags().GetBool("hugepages")
+	exitOnReboot, _ := cmd.Flags().GetBool("exit-on-reboot")
 	r := &record{
 		Name: name, Image: image, ImageDigest: digest, Disk: overlay, OVMFCode: code, OVMFVars: ovmfVars,
 		CPUs: cpus, Memory: mem, VNCDisp: vnc, SSHPort: ssh, VNCPass: vncPass, NetMode: netMode, Tap: tap, Hugepages: huge,
-		VMID: utils.GenerateID(), Created: time.Now().Format(time.RFC3339),
+		ExitOnReboot: exitOnReboot,
+		VMID:         utils.GenerateID(), Created: time.Now().Format(time.RFC3339),
 	}
 	if r.DataDisks, err = createDataDisks(ctx, dir, diskSpecs); err != nil {
 		return nil, err
@@ -180,10 +186,11 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	spec := qemu.Spec{
 		Name: r.Name, Disk: r.Disk, OpenCore: r.OpenCore, OVMFCode: r.OVMFCode, OVMFVars: r.OVMFVars,
 		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, SSHPort: r.SSHPort, MAC: r.MAC, VNCPass: r.VNCPass,
-		Tap:       r.Tap, // set for tap/bridge/cni (a real host TAP); empty => user-mode SLIRP
-		Hugepages: r.Hugepages,
-		DataDisks: r.DataDisks,
-		MonSock:   filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
+		Tap:          r.Tap, // set for tap/bridge/cni (a real host TAP); empty => user-mode SLIRP
+		Hugepages:    r.Hugepages,
+		ExitOnReboot: exitOnRebootEnabled(r),
+		DataDisks:    r.DataDisks,
+		MonSock:      filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
 	}
 	// CNI: a 127.0.0.1 VNC inside the netns is unreachable; use a unix socket fronted by startVNCProxy
 	if r.Netns != "" && r.VNCDisp >= 0 {
@@ -219,6 +226,14 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		}
 	}
 	return saveRec(dir, r)
+}
+
+func exitOnRebootEnabled(r *record) bool {
+	if r.ExitOnReboot {
+		return true
+	}
+	enabled, err := strconv.ParseBool(os.Getenv("COCOON_MACOS_EXIT_ON_REBOOT"))
+	return err == nil && enabled
 }
 
 // prepareOpenCore points r.OpenCore at the shared base, or with randomSMBIOS at a per-VM overlay whose config.plist is patched with a unique identity.

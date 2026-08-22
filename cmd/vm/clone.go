@@ -67,6 +67,10 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	if cmd.Flags().Changed("hugepages") {
 		r.Hugepages, _ = cmd.Flags().GetBool("hugepages")
 	}
+	r.ExitOnReboot = srcRec.ExitOnReboot
+	if cmd.Flags().Changed("exit-on-reboot") {
+		r.ExitOnReboot, _ = cmd.Flags().GetBool("exit-on-reboot")
+	}
 	r.VNCDisp = vnc
 	r.SSHPort, _ = cmd.Flags().GetInt("ssh-port")
 	r.VNCPass = vncPass

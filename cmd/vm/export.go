@@ -29,23 +29,23 @@ func (h *Handler) Export(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("create export temp file: %w", err)
 	}
 	tmpPath := tmp.Name()
-	if err := tmp.Close(); err != nil {
+	if closeErr := tmp.Close(); closeErr != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("close export temp file: %w", err)
+		return fmt.Errorf("close export temp file: %w", closeErr)
 	}
 	defer os.Remove(tmpPath) //nolint:errcheck
 
 	dir := home.VMDir(cmd, vmName)
-	if err := withVMLock(ctx, dir, func() (retErr error) {
-		r, err := loadRec(dir)
-		if err != nil {
-			return err
+	if exportErr := withVMLock(ctx, dir, func() (retErr error) {
+		r, loadErr := loadRec(dir)
+		if loadErr != nil {
+			return loadErr
 		}
 		wasRunning := isRunning(r)
 		restartVNC, restartVNCPass := exportRestartVNC(cmd, r)
 		if wasRunning {
-			if err := requireCNIVNCPassword(r.Netns != "", restartVNC, restartVNCPass); err != nil {
-				return fmt.Errorf("restart settings: %w", err)
+			if validationErr := requireCNIVNCPassword(r.Netns != "", restartVNC, restartVNCPass); validationErr != nil {
+				return fmt.Errorf("restart settings: %w", validationErr)
 			}
 			terminate(ctx, r, stopGracePeriod)
 			if isRunning(r) {
@@ -66,14 +66,14 @@ func (h *Handler) Export(cmd *cobra.Command, args []string) error {
 				}
 				retErr = errors.Join(retErr, restartErr)
 			}()
-			if err := saveRec(dir, r); err != nil {
-				return err
+			if saveErr := saveRec(dir, r); saveErr != nil {
+				return saveErr
 			}
 		}
 
 		return utils.RunQemuImg(ctx, "convert", "-p", "-f", "qcow2", "-O", "qcow2", "-c", r.Disk, tmpPath)
-	}); err != nil {
-		return fmt.Errorf("export VM %s: %w", vmName, err)
+	}); exportErr != nil {
+		return fmt.Errorf("export VM %s: %w", vmName, exportErr)
 	}
 
 	desc, err := cmdimage.PushCloudImage(ctx, destination, tmpPath, map[string]string{

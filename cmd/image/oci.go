@@ -231,11 +231,11 @@ func pushCloudImage(ctx context.Context, target oras.Target, tag, path, title st
 		return ocispec.Descriptor{}, fmt.Errorf("check cloud image blob: %w", err)
 	}
 	if !exists {
-		if _, err := f.Seek(0, io.SeekStart); err != nil {
-			return ocispec.Descriptor{}, fmt.Errorf("seek cloud image: %w", err)
+		if _, seekErr := f.Seek(0, io.SeekStart); seekErr != nil {
+			return ocispec.Descriptor{}, fmt.Errorf("seek cloud image: %w", seekErr)
 		}
-		if err := target.Push(ctx, layer, f); err != nil {
-			return ocispec.Descriptor{}, fmt.Errorf("push cloud image blob: %w", err)
+		if pushErr := target.Push(ctx, layer, f); pushErr != nil {
+			return ocispec.Descriptor{}, fmt.Errorf("push cloud image blob: %w", pushErr)
 		}
 	}
 

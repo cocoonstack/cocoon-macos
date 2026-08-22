@@ -50,8 +50,8 @@ func (h *Handler) Export(cmd *cobra.Command, args []string) error {
 	digestHex := strings.TrimPrefix(image.ID, "sha256:")
 	conf := cloudimg.NewConfig(home.Dir(cmd), 0)
 	var locks images.BlobLocks
-	if err := locks.Lock(conf.BlobLockPath(digestHex)); err != nil {
-		return fmt.Errorf("lock cloud image %s: %w", ref, err)
+	if lockErr := locks.Lock(conf.BlobLockPath(digestHex)); lockErr != nil {
+		return fmt.Errorf("lock cloud image %s: %w", ref, lockErr)
 	}
 	defer locks.Release()
 	stream, err := os.Open(conf.BlobPath(digestHex)) //nolint:gosec

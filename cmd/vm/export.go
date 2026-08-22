@@ -83,7 +83,6 @@ func (h *Handler) Export(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("push cloud image: %w", err)
 	}
-	fmt.Println(desc.Digest)
 	localName, _ := cmd.Flags().GetString("local-name")
 	if localName != "" {
 		_, store, openErr := home.OpenStore(cmd)
@@ -91,9 +90,10 @@ func (h *Handler) Export(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("open local cloud-image store: %w", openErr)
 		}
 		if importErr := store.Import(ctx, localName, progress.Nop, tmpPath); importErr != nil {
-			return fmt.Errorf("retain local cloud image %s: %w", localName, importErr)
+			return fmt.Errorf("pushed %s as %s, but retaining local cloud image %s failed: %w", destination, desc.Digest, localName, importErr)
 		}
 	}
+	fmt.Println(desc.Digest)
 	return nil
 }
 

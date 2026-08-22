@@ -76,7 +76,8 @@ extend VM downtime.
 
 Use `--local-name NAME` to register the flattened qcow2 in the local cloud-image
 store after a successful push. Later runs on the source node can then reuse it
-without downloading it from the registry.
+without downloading it from the registry. A local-retention failure does not roll
+back the already published OCI artifact; the error reports its manifest digest.
 
 The current VNC display is preserved when the VM is restarted. VNC credentials are
 intentionally not persisted, so a CNI VM whose password is no longer available must

@@ -1,13 +1,77 @@
 package qemu
 
 import (
+	"context"
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"slices"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"howett.net/plist"
 )
+
+func TestQemuNBDConnectArgsForkAndTrackServer(t *testing.T) {
+	want := []string{"--fork", "--pid-file=/state/vm/OpenCore.qcow2.nbd.pid", "--connect=/dev/nbd3", "-f", "qcow2", "/state/vm/OpenCore.qcow2"}
+	if got := qemuNBDConnectArgs("/dev/nbd3", "/state/vm/OpenCore.qcow2.nbd.pid", "/state/vm/OpenCore.qcow2"); !slices.Equal(got, want) {
+		t.Fatalf("qemu-nbd args = %v, want %v", got, want)
+	}
+}
+
+func TestWithNBDLeaseSerializesConcurrentInjectors(t *testing.T) {
+	const workers = 50
+	lockPath := filepath.Join(t.TempDir(), "nbd.lock")
+	var active, maxActive atomic.Int32
+	errCh := make(chan error, workers)
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errCh <- withNBDLease(t.Context(), lockPath, func() error {
+				n := active.Add(1)
+				defer active.Add(-1)
+				for old := maxActive.Load(); n > old && !maxActive.CompareAndSwap(old, n); old = maxActive.Load() {
+				}
+				time.Sleep(time.Millisecond)
+				return nil
+			})
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := maxActive.Load(); got != 1 {
+		t.Fatalf("maximum concurrent NBD transactions = %d, want 1", got)
+	}
+}
+
+func TestWithNBDLeaseHonorsCancellation(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "nbd.lock")
+	held := make(chan struct{})
+	release := make(chan struct{})
+	go func() {
+		_ = withNBDLease(t.Context(), lockPath, func() error {
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	<-held
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	if err := withNBDLease(ctx, lockPath, func() error { return nil }); err == nil {
+		t.Fatal("waiting NBD lease ignored context cancellation")
+	}
+	close(release)
+}
 
 // sampleConfig mirrors OSX-KVM's config.plist so patchPlist round-trips a realistic input.
 const sampleConfig = `<?xml version="1.0" encoding="UTF-8"?>

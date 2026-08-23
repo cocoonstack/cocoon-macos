@@ -2,6 +2,7 @@ package vm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,27 +18,39 @@ import (
 )
 
 func (h *Handler) Create(cmd *cobra.Command, args []string) error {
-	r, err := h.create(cmd, args[0])
-	if err != nil {
-		return err
-	}
-	fmt.Println(r.Name)
-	return nil
+	name := requestedVMName(cmd, "macos-"+time.Now().Format("20060102-150405"))
+	return withVMLock(cliutil.CommandContext(cmd), home.VMDir(cmd, name), func() error {
+		r, err := h.create(cmd, args[0], name)
+		if err != nil {
+			return err
+		}
+		fmt.Println(r.Name)
+		return nil
+	})
 }
 
 func (h *Handler) Run(cmd *cobra.Command, args []string) error {
-	r, err := h.create(cmd, args[0])
-	if err != nil {
-		return err
+	name := requestedVMName(cmd, "macos-"+time.Now().Format("20060102-150405"))
+	dir := home.VMDir(cmd, name)
+	return withVMLock(cliutil.CommandContext(cmd), dir, func() error {
+		r, err := h.create(cmd, args[0], name)
+		if err != nil {
+			return err
+		}
+		if err := h.launch(cmd, dir, r); err != nil {
+			return errors.Join(err, cleanupFailedVM(cmd, dir, r))
+		}
+		fmt.Printf("%s (pid %d)\n", r.Name, r.PID)
+		return nil
+	})
+}
+
+func requestedVMName(cmd *cobra.Command, fallback string) string {
+	name, _ := cmd.Flags().GetString("name")
+	if name != "" {
+		return name
 	}
-	if err := h.launch(cmd, home.VMDir(cmd, r.Name), r); err != nil {
-		// atomic create+boot: remove everything on failure or the leftover record bricks retries; start must NOT do this — its network is persisted
-		teardownNet(cmd, r)
-		_ = os.RemoveAll(home.VMDir(cmd, r.Name))
-		return err
-	}
-	fmt.Printf("%s (pid %d)\n", r.Name, r.PID)
-	return nil
+	return fallback
 }
 
 func (h *Handler) Start(cmd *cobra.Command, args []string) error {
@@ -51,8 +64,23 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
-			// An op that held the lock may have restarted qemu; adopt it and only repair a dead VNC proxy.
-			if isRunning(r) {
+			// Another lifecycle operation may have restarted qemu while Start waited,
+			// or the previous CLI may have died after daemonizing QEMU but before
+			// persisting its PID. Adopt that one process instead of launching a second.
+			running := isRunning(r)
+			if !running {
+				var adoptErr error
+				running, adoptErr = adoptRunningQEMU(r)
+				if adoptErr != nil {
+					return adoptErr
+				}
+				if running {
+					if err := saveRec(dir, r); err != nil {
+						return err
+					}
+				}
+			}
+			if running {
 				if r.Netns != "" && r.VNCDisp >= 0 && !vncProxyRunning(dir) {
 					if err := startVNCProxy(ctx, dir, r.VNCDisp); err != nil {
 						return fmt.Errorf("repair vnc proxy: %w", err)
@@ -107,16 +135,26 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 	ctx := cliutil.CommandContext(cmd)
 	for _, n := range args {
 		dir := home.VMDir(cmd, n)
-		if _, err := os.Stat(dir); os.IsNotExist(err) {
-			fmt.Println(n) // nothing to remove (and no dir to hold the flock in)
-			continue
-		}
-		// the flock stops a concurrent start relaunching qemu between terminate and RemoveAll
 		if err := withVMLock(ctx, dir, func() error {
+			if _, err := os.Stat(dir); os.IsNotExist(err) {
+				return nil
+			} else if err != nil {
+				return fmt.Errorf("stat vm dir: %w", err)
+			}
+			// the flock stops a concurrent create/start from changing state between terminate and RemoveAll
 			if r, err := loadRec(dir); err == nil {
 				terminate(ctx, r, grace)
 				stopVNCProxy(ctx, dir)
 				teardownNet(cmd, r)
+			} else {
+				cleanupCtx, cancel := context.WithTimeout(context.Background(), vmCleanupTimeout)
+				defer cancel()
+				if cleanupErr := cleanupQEMUForPath(cleanupCtx, dir); cleanupErr != nil {
+					return cleanupErr
+				}
+				if cleanupErr := qemu.CleanupNBDForPath(cleanupCtx, dir); cleanupErr != nil {
+					return cleanupErr
+				}
 			}
 			if err := os.RemoveAll(dir); err != nil {
 				return fmt.Errorf("remove vm dir: %w", err)
@@ -130,11 +168,7 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
-	name, _ := cmd.Flags().GetString("name")
-	if name == "" {
-		name = "macos-" + time.Now().Format("20060102-150405")
-	}
+func (h *Handler) create(cmd *cobra.Command, image, name string) (r *record, retErr error) {
 	rawDisks, _ := cmd.Flags().GetStringArray("data-disk")
 	diskSpecs, err := parseDataDisks(rawDisks, nil) // fail fast before any scaffolding
 	if err != nil {
@@ -162,6 +196,11 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if retErr != nil {
+			retErr = errors.Join(retErr, cleanupFailedVM(cmd, dir, r))
+		}
+	}()
 	ctx := cliutil.CommandContext(cmd)
 	storage, err = resizeSystemDisk(ctx, overlay, storage)
 	if err != nil {
@@ -173,7 +212,7 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	tap, _ := cmd.Flags().GetString("tap")
 	huge, _ := cmd.Flags().GetBool("hugepages")
 	exitOnReboot, _ := cmd.Flags().GetBool("exit-on-reboot")
-	r := &record{
+	r = &record{
 		Name: name, Image: image, ImageDigest: digest, Disk: overlay, OVMFCode: code, OVMFVars: ovmfVars,
 		CPUs: cpus, Memory: mem, Storage: storage, VNCDisp: vnc, SSHPort: ssh, VNCPass: vncPass, NetMode: netMode, Tap: tap, Hugepages: huge,
 		ExitOnReboot: exitOnReboot,
@@ -198,6 +237,30 @@ func validateMacOSCPUs(cpus int) error {
 		return fmt.Errorf("--cpus must be a positive even number, got %d", cpus)
 	}
 	return nil
+}
+
+// cleanupFailedVM makes create/run transactional. It uses an uncanceled,
+// bounded context so SIGTERM-driven command cancellation still reaps helpers,
+// networking and any QEMU process started before the record was committed.
+func cleanupFailedVM(cmd *cobra.Command, dir string, r *record) error {
+	ctx, cancel := context.WithTimeout(context.Background(), vmCleanupTimeout)
+	defer cancel()
+	var errs []error
+	if r != nil {
+		terminate(ctx, r, 0)
+		stopVNCProxy(ctx, dir)
+		teardownNetContext(ctx, cmd, r)
+	}
+	if err := cleanupQEMUForPath(ctx, dir); err != nil {
+		errs = append(errs, err)
+	}
+	if err := qemu.CleanupNBDForPath(ctx, dir); err != nil {
+		errs = append(errs, err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		errs = append(errs, fmt.Errorf("remove failed vm dir: %w", err))
+	}
+	return errors.Join(errs...)
 }
 
 func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
@@ -238,8 +301,13 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		stopVNCProxy(ctx, dir)
 		return fmt.Errorf("launch qemu: %w", err)
 	}
-	if pid, err := utils.ReadPIDFile(pidfile); err == nil {
-		r.PID = pid
+	pid, err := utils.ReadPIDFile(pidfile)
+	if err != nil {
+		return fmt.Errorf("read qemu pid file: %w", err)
+	}
+	r.PID = pid
+	if !isRunning(r) {
+		return fmt.Errorf("qemu pid %d is not running for disk %s", r.PID, r.Disk)
 	}
 	if r.VNCPass != "" {
 		if err := setVNCPassword(ctx, spec.MonSock, r.VNCPass); err != nil {

@@ -89,10 +89,13 @@ func provisionNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err er
 
 // teardownNet removes an auto-created TAP/netns. Best-effort; never touches a user-supplied --tap.
 func teardownNet(cmd *cobra.Command, r *record) {
+	teardownNetContext(cliutil.CommandContext(cmd), cmd, r)
+}
+
+func teardownNetContext(ctx context.Context, cmd *cobra.Command, r *record) {
 	if !r.TapOwned {
 		return
 	}
-	ctx := cliutil.CommandContext(cmd)
 	logger := log.WithFunc("cmd.vm.teardownNet")
 	// warn instead of failing: rm must proceed, but a leaked TAP/netns should leave a trail
 	if provider, err := newProvider(cmd, r); err != nil {

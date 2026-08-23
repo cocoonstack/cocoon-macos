@@ -126,6 +126,10 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	if err != nil {
 		return nil, err
 	}
+	cpus, _ := cmd.Flags().GetInt("cpus")
+	if cpus < 1 {
+		return nil, fmt.Errorf("--cpus must be at least 1, got %d", cpus)
+	}
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	netMode, _ := cmd.Flags().GetString("net")
@@ -141,7 +145,6 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 		return nil, err
 	}
 	ctx := cliutil.CommandContext(cmd)
-	cpus, _ := cmd.Flags().GetInt("cpus")
 	mem, _ := cmd.Flags().GetString("memory")
 	ssh, _ := cmd.Flags().GetInt("ssh-port")
 	tap, _ := cmd.Flags().GetString("tap")
@@ -188,9 +191,6 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	// CNI: a 127.0.0.1 VNC inside the netns is unreachable; use a unix socket fronted by startVNCProxy
 	if r.Netns != "" && r.VNCDisp >= 0 {
 		spec.VNCSock = filepath.Join(dir, vncSockName)
-	}
-	if err := spec.Validate(); err != nil {
-		return fmt.Errorf("invalid macOS VM resources: %w", err)
 	}
 	pidfile := filepath.Join(dir, "qemu.pid")
 	args := append(spec.Args(), "-daemonize", "-pidfile", pidfile)

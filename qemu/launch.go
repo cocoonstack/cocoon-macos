@@ -43,16 +43,7 @@ type Spec struct {
 	QMPSock string
 }
 
-// Validate rejects invalid CPU counts before QEMU builds the topology.
-func (s Spec) Validate() error {
-	if s.CPUs < 1 {
-		return fmt.Errorf("cpus must be greater than zero: %d", s.CPUs)
-	}
-	return nil
-}
-
 // Args returns the qemu-system-x86_64 argument vector for the macOS guest.
-// Callers must validate the spec before launching QEMU.
 func (s Spec) Args() []string {
 	varsFmt := "raw"
 	if IsQcow2NVRAM(s.OVMFVars) {
@@ -69,9 +60,7 @@ func (s Spec) Args() []string {
 		"-enable-kvm", "-m", s.Memory,
 		"-cpu", macOSCPU,
 		"-machine", machine,
-		// Declare every topology dimension. Leaving threads implicit lets QEMU
-		// derive surprising SMT layouts (for example, 3 threads on one core for
-		// 3 vCPUs), which macOS may boot very slowly or fail to initialize.
+		// Implicit threads lets QEMU infer SMT layouts (3 vCPUs -> 1 core x 3 threads) that macOS boots slowly or not at all.
 		"-smp", fmt.Sprintf("%d,cores=%d,threads=1,sockets=1", s.CPUs, s.CPUs),
 		"-device", "qemu-xhci,id=xhci",
 		"-device", "usb-kbd,bus=xhci.0",

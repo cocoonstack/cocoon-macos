@@ -132,9 +132,6 @@ func TestArgsHugepages(t *testing.T) {
 
 func TestArgsCPU(t *testing.T) {
 	s := Spec{Disk: "/v/d.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/v.fd", CPUs: 4, Memory: "4096", VNCDisp: -1}
-	if err := s.Validate(); err != nil {
-		t.Fatalf("valid CPU topology rejected: %v", err)
-	}
 	cpu := argVals(s.Args(), "-cpu")
 	if len(cpu) != 1 {
 		t.Fatalf("-cpu count: %v", cpu)
@@ -156,16 +153,8 @@ func TestArgsCPU(t *testing.T) {
 	}
 
 	s.CPUs = 3
-	if err := s.Validate(); err != nil {
-		t.Fatalf("odd CPU counts are valid with an explicit single-thread topology: %v", err)
-	}
 	if got := argVals(s.Args(), "-smp"); len(got) != 1 || got[0] != "3,cores=3,threads=1,sockets=1" {
 		t.Fatalf("unexpected odd CPU topology: %v", got)
-	}
-
-	s.CPUs = 0
-	if err := s.Validate(); err == nil || !strings.Contains(err.Error(), "greater than zero") {
-		t.Fatalf("zero CPUs must be rejected, got %v", err)
 	}
 }
 

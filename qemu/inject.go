@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/projecteru2/core/log"
@@ -81,7 +83,6 @@ func waitForPart(ctx context.Context, nbd string) error {
 		if _, err := os.Stat(nbd + "p1"); err == nil {
 			return true, nil
 		}
-		_ = exec.CommandContext(ctx, "partprobe", nbd).Run()
 		return false, nil
 	}); err != nil {
 		return fmt.Errorf("wait for partition on %s: %w", nbd, err)
@@ -187,6 +188,13 @@ func connectFreeNBD(ctx context.Context, ocPath string) (*nbdConnection, error) 
 		if _, err := os.Stat(fmt.Sprintf("/sys/block/nbd%d/pid", i)); !os.IsNotExist(err) {
 			continue
 		}
+		referenced, err := processReferencesBlockDevice("/proc", nbd)
+		if err != nil {
+			return nil, fmt.Errorf("check whether %s is referenced by a process: %w", nbd, err)
+		}
+		if referenced {
+			continue
+		}
 		out, cerr := exec.CommandContext(ctx, "qemu-nbd", qemuNBDConnectArgs(nbd, pidFile, ocPath)...).CombinedOutput()
 		if cerr == nil {
 			pid, err := utils.ReadPIDFile(pidFile)
@@ -211,6 +219,50 @@ func connectFreeNBD(ctx context.Context, ocPath string) (*nbdConnection, error) 
 		return nil, lastErr
 	}
 	return nil, errors.New("no free /dev/nbd device (is the nbd module loaded)")
+}
+
+// processReferencesBlockDevice catches userspace operations that are still
+// blocked on an NBD device after the kernel has already removed its sysfs pid.
+// Reusing such a device can block the next qemu-nbd attach indefinitely.
+func processReferencesBlockDevice(procRoot, device string) (bool, error) {
+	entries, err := os.ReadDir(procRoot)
+	if err != nil {
+		return false, fmt.Errorf("read %s: %w", procRoot, err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, err := strconv.Atoi(entry.Name()); err != nil {
+			continue
+		}
+		cmdlinePath := filepath.Join(procRoot, entry.Name(), "cmdline")
+		cmdline, err := os.ReadFile(cmdlinePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return false, fmt.Errorf("read %s: %w", cmdlinePath, err)
+		}
+		for arg := range strings.SplitSeq(string(cmdline), "\x00") {
+			if nbdArgReferencesDevice(arg, device) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func nbdArgReferencesDevice(arg, device string) bool {
+	if arg == device || arg == "--connect="+device {
+		return true
+	}
+	partition := strings.TrimPrefix(arg, device+"p")
+	if partition == arg || partition == "" {
+		return false
+	}
+	_, err := strconv.Atoi(partition)
+	return err == nil
 }
 
 func qemuNBDConnectArgs(nbd, pidFile, ocPath string) []string {

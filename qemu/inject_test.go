@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -71,6 +72,44 @@ func TestWithNBDLeaseHonorsCancellation(t *testing.T) {
 		t.Fatal("waiting NBD lease ignored context cancellation")
 	}
 	close(release)
+}
+
+func TestProcessReferencesBlockDevice(t *testing.T) {
+	procRoot := t.TempDir()
+	writeCmdline := func(pid, command string, args ...string) {
+		t.Helper()
+		dir := filepath.Join(procRoot, pid)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		argv := append([]string{command}, args...)
+		data := append([]byte(strings.Join(argv, "\x00")), 0)
+		if err := os.WriteFile(filepath.Join(dir, "cmdline"), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeCmdline("101", "partprobe", "/dev/nbd0")
+	writeCmdline("102", "mount", "/dev/nbd1p1", "/mnt")
+	writeCmdline("103", "qemu-nbd", "--connect=/dev/nbd2", "disk.qcow2")
+	writeCmdline("104", "helper", "/dev/nbd01")
+
+	for _, device := range []string{"/dev/nbd0", "/dev/nbd1", "/dev/nbd2"} {
+		busy, err := processReferencesBlockDevice(procRoot, device)
+		if err != nil {
+			t.Fatalf("processReferencesBlockDevice(%s): %v", device, err)
+		}
+		if !busy {
+			t.Errorf("processReferencesBlockDevice(%s) = false, want true", device)
+		}
+	}
+	busy, err := processReferencesBlockDevice(procRoot, "/dev/nbd3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if busy {
+		t.Error("unreferenced /dev/nbd3 reported busy")
+	}
 }
 
 // sampleConfig mirrors OSX-KVM's config.plist so patchPlist round-trips a realistic input.

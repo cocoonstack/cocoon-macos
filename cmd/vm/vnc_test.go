@@ -2,12 +2,13 @@ package vm
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/cocoonstack/cocoon/utils"
 )
 
 func TestRequireCNIVNCPassword(t *testing.T) {
@@ -75,16 +76,14 @@ func TestVNCProxyRunning(t *testing.T) {
 		_ = proxy.Process.Kill()
 		_ = proxy.Wait()
 	})
-	if err := os.WriteFile(filepath.Join(dir, vncProxyPID), []byte(fmt.Sprintf("%d\n", proxy.Process.Pid)), 0o600); err != nil {
+	if err := utils.WritePIDFile(filepath.Join(dir, vncProxyPID), proxy.Process.Pid); err != nil {
 		t.Fatal(err)
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for !vncProxyRunning(dir) && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if !vncProxyRunning(dir) {
-		t.Fatal("matching proxy process reported as stopped")
+	if err := utils.WaitFor(t.Context(), 2*time.Second, 10*time.Millisecond, func() (bool, error) {
+		return vncProxyRunning(dir), nil
+	}); err != nil {
+		t.Fatalf("matching proxy process reported as stopped: %v", err)
 	}
 }
 

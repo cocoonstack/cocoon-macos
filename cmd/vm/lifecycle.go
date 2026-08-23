@@ -52,9 +52,6 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			r.VNCDisp, r.VNCPass = vnc, vncPass
-			if cmd.Flags().Changed("exit-on-reboot") {
-				r.ExitOnReboot, _ = cmd.Flags().GetBool("exit-on-reboot")
-			}
 			if err := h.launch(cmd, dir, r); err != nil {
 				return err
 			}

@@ -49,7 +49,6 @@ func Command(h Actions) *cobra.Command {
 	}
 	startCmd.Flags().Int("vnc", -1, "VNC display number for this start only (n => port 590n); omit to keep VNC off")
 	startCmd.Flags().String("vnc-password", "", "VNC password for this start (≤8 chars, QEMU password auth)")
-	startCmd.Flags().Bool("exit-on-reboot", false, "exit QEMU on guest reboot so an external supervisor can relaunch it cold")
 
 	stopCmd := &cobra.Command{
 		Use:   "stop VM [VM...]",

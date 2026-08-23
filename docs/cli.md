@@ -45,10 +45,11 @@ start — the allocation is not best-effort. On `clone` the flag is only
 applied when passed explicitly; otherwise the source VM's setting carries
 over.
 
-`--exit-on-reboot` is for VMs owned by an external supervisor. It makes QEMU
-exit when the guest requests a reboot, allowing the supervisor to relaunch the
-VM as a cold boot. The setting is explicit, persisted with the VM, and inherited
-by clones; standalone VMs keep QEMU's normal in-process reboot behavior.
+`--exit-on-reboot` on `create` / `run` / `clone` is for VMs owned by an external
+supervisor. It persists with the VM and is inherited by clones. QEMU's
+`-no-reboot` exit skips the normal `vm stop` cleanup, so the supervisor must
+recover the existing record with `vm start`; standalone VMs keep QEMU's normal
+in-process reboot behavior.
 
 ## What `vm run` does
 

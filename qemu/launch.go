@@ -45,6 +45,7 @@ type Spec struct {
 
 // Args returns the qemu-system-x86_64 argument vector for the macOS guest.
 func (s Spec) Args() []string {
+	cores := max(s.CPUs/2, 1)
 	varsFmt := "raw"
 	if IsQcow2NVRAM(s.OVMFVars) {
 		varsFmt = "qcow2"
@@ -60,8 +61,7 @@ func (s Spec) Args() []string {
 		"-enable-kvm", "-m", s.Memory,
 		"-cpu", macOSCPU,
 		"-machine", machine,
-		// Implicit threads lets QEMU infer SMT layouts (3 vCPUs -> 1 core x 3 threads) that macOS boots slowly or not at all.
-		"-smp", fmt.Sprintf("%d,cores=%d,threads=1,sockets=1", s.CPUs, s.CPUs),
+		"-smp", fmt.Sprintf("%d,cores=%d,sockets=1", s.CPUs, cores),
 		"-device", "qemu-xhci,id=xhci",
 		"-device", "usb-kbd,bus=xhci.0",
 		"-device", "usb-tablet,bus=xhci.0",

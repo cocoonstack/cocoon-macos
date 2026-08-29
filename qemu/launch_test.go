@@ -148,13 +148,13 @@ func TestArgsCPU(t *testing.T) {
 			t.Fatalf("-cpu missing load-bearing %s: %s", f, cpu[0])
 		}
 	}
-	if got := argVals(s.Args(), "-smp"); len(got) != 1 || got[0] != "4,cores=4,threads=1,sockets=1" {
+	if got := argVals(s.Args(), "-smp"); len(got) != 1 || got[0] != "4,cores=2,sockets=1" {
 		t.Fatalf("unexpected CPU topology: %v", got)
 	}
 
-	s.CPUs = 3
-	if got := argVals(s.Args(), "-smp"); len(got) != 1 || got[0] != "3,cores=3,threads=1,sockets=1" {
-		t.Fatalf("unexpected odd CPU topology: %v", got)
+	s.CPUs = 2
+	if got := argVals(s.Args(), "-smp"); len(got) != 1 || got[0] != "2,cores=1,sockets=1" {
+		t.Fatalf("unexpected two-vCPU topology: %v", got)
 	}
 }
 

@@ -207,10 +207,8 @@ chown 0:0 "$VOL/Library/LaunchDaemons/com.cocoon.firstboot.plist" "$VOL/usr/loca
 chmod 644 "$VOL/Library/LaunchDaemons/com.cocoon.firstboot.plist"
 ls -la "$VOL/Library/LaunchDaemons/com.cocoon.firstboot.plist"
 
-# 4) Persistent per-VM hostname. Every VM gets a unique SMBIOS UUID when
-# --random-smbios is enabled, while a cloned macOS disk otherwise keeps the
-# source ComputerName (typically "iMac"). Derive all three macOS host names
-# from that UUID on every boot so mDNS never has to rename duplicate guests.
+# 4) Persistent per-VM hostname. With --random-smbios, derive all three names
+# from the unique SMBIOS UUID; without it clones still share the golden UUID.
 mkdir -p "$VOL/usr/local/sbin"
 cat > "$VOL/usr/local/sbin/cocoon-set-hostname" <<'SH'
 #!/bin/zsh

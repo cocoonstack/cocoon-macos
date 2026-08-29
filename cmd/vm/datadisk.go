@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/docker/go-units"
-
 	"github.com/cocoonstack/cocoon/types"
 	"github.com/cocoonstack/cocoon/utils"
 )
@@ -78,7 +76,7 @@ func parseDataDiskSpec(s string) (types.DataDiskSpec, error) {
 		key, val := strings.TrimSpace(rawKey), strings.TrimSpace(rawVal)
 		switch key {
 		case "size":
-			n, err := units.RAMInBytes(val)
+			n, err := parseSize(val)
 			if err != nil {
 				return spec, fmt.Errorf("data disk: invalid size %q: %w", val, err)
 			}

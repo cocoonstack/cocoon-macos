@@ -309,11 +309,11 @@ echo "$final"
 echo "expanded root APFS container on $physical_store"
 SH
 chmod 755 "$VOL/usr/local/sbin/cocoon-resize-system-disk"
-cat > "$VOL/Library/LaunchDaemons/io.cocoon.resize-system-disk.plist" <<'PLIST'
+cat > "$VOL/Library/LaunchDaemons/com.cocoon.resize-system-disk.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>io.cocoon.resize-system-disk</string>
+  <key>Label</key><string>com.cocoon.resize-system-disk</string>
   <key>ProgramArguments</key><array><string>/usr/local/sbin/cocoon-resize-system-disk</string></array>
   <key>RunAtLoad</key><true/>
   <key>ProcessType</key><string>Background</string>
@@ -321,7 +321,7 @@ cat > "$VOL/Library/LaunchDaemons/io.cocoon.resize-system-disk.plist" <<'PLIST'
   <key>StandardErrorPath</key><string>/var/log/cocoon-resize-system-disk.launchd.log</string>
 </dict></plist>
 PLIST
-chown 0:0 "$VOL/usr/local/sbin/cocoon-resize-system-disk" "$VOL/Library/LaunchDaemons/io.cocoon.resize-system-disk.plist"
-chmod 644 "$VOL/Library/LaunchDaemons/io.cocoon.resize-system-disk.plist"
+chown 0:0 "$VOL/usr/local/sbin/cocoon-resize-system-disk" "$VOL/Library/LaunchDaemons/com.cocoon.resize-system-disk.plist"
+chmod 644 "$VOL/Library/LaunchDaemons/com.cocoon.resize-system-disk.plist"
 echo "OK installed persistent APFS auto-grow daemon"
 echo "=== PROVISION DONE (user=$USER_NAME, SSH on first boot) ==="

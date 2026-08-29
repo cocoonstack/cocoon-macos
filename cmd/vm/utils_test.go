@@ -15,7 +15,9 @@ func TestStorageFromFlag(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "unset keeps image size"},
+		{name: "docker gigabytes", value: "100G", want: 100 << 30},
 		{name: "kubernetes gibibytes", value: "100Gi", want: 100 << 30},
+		{name: "explicit gibibytes", value: "100GiB", want: 100 << 30},
 		{name: "surrounding whitespace", value: " 100Gi ", want: 100 << 30},
 		{name: "plain bytes", value: "107374182400", want: 100 << 30},
 		{name: "zero rejected", value: "0", wantErr: true},

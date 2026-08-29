@@ -78,7 +78,7 @@ func (s Spec) Args() []string {
 		"-device", "vmware-svga",
 	}
 	if s.ExitOnReboot {
-		// macOS warm reset can stall in early boot under KVM; exit so the owner relaunches cold.
+		// supervisor-owned guest: a reboot request exits QEMU so the owner relaunches it cold.
 		a = append(a, "-no-reboot")
 	}
 	a = append(memBackend, a...) // -object must precede the -machine memory-backend reference

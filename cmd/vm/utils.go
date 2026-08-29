@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cocoonstack/cocoon-macos/home"
-	"github.com/cocoonstack/cocoon-macos/qemu"
+	"github.com/cocoonstack/cocoon-macos/internal/procutil"
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/images"
 	"github.com/cocoonstack/cocoon/lock/flock"
@@ -41,9 +41,7 @@ func saveRec(dir string, r *record) error {
 	return nil
 }
 
-// withVMLock serializes concurrent lifecycle ops on one VM. The lock lives
-// outside the VM directory so rm/retry cannot unlink the inode while another
-// process is waiting on it and accidentally split mutual exclusion.
+// lock lives outside the VM dir so rm can't unlink the inode a waiter still holds and split mutual exclusion.
 func withVMLock(ctx context.Context, dir string, fn func() error) error {
 	lockPath := filepath.Join(filepath.Dir(dir), ".locks", filepath.Base(dir)+".lock")
 	if err := utils.EnsureDirs(filepath.Dir(lockPath)); err != nil {
@@ -150,9 +148,7 @@ func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir,
 	return dir, overlay, ovmfVars, digest, nil
 }
 
-// resetIncompleteVMDir removes state left before vm.json was committed. It
-// refuses to touch a directory referenced by a live QEMU guest, and reaps any
-// stale qemu-nbd helpers before removing their qcow2 paths.
+// remove pre-commit VM state; refuses a dir a live qemu still references.
 func resetIncompleteVMDir(ctx context.Context, dir string) error {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return nil
@@ -169,27 +165,13 @@ func resetIncompleteVMDir(ctx context.Context, dir string) error {
 	} else if len(pids) > 0 {
 		return fmt.Errorf("refuse to replace incomplete vm dir %s: live qemu pids %v", dir, pids)
 	}
-	if err := qemu.CleanupNBDForPath(ctx, dir); err != nil {
+	if err := procutil.TerminateByCmdline(ctx, "qemu-nbd", dir, time.Second); err != nil {
 		return fmt.Errorf("cleanup stale qemu-nbd for %s: %w", dir, err)
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("remove incomplete vm dir %s: %w", dir, err)
 	}
 	return nil
-}
-
-func cleanupQEMUForPath(ctx context.Context, path string) error {
-	pids, err := utils.FindVMMByCmdline(qemuBinary, path)
-	if err != nil {
-		return fmt.Errorf("scan qemu processes for %s: %w", path, err)
-	}
-	var errs []error
-	for _, pid := range pids {
-		if err := utils.TerminateProcess(ctx, pid, qemuBinary, path, 0); err != nil {
-			errs = append(errs, fmt.Errorf("terminate qemu pid %d: %w", pid, err))
-		}
-	}
-	return errors.Join(errs...)
 }
 
 // prepareNet returns the TAP ifname, netns path (CNI only), and guest MAC; user-mode and a pre-created --tap need no provisioning, every other mode goes through the per-OS provisionNet.
@@ -224,9 +206,7 @@ func isRunning(r *record) bool {
 	return utils.VerifyProcessCmdline(r.PID, qemuBinary, r.Disk)
 }
 
-// adoptRunningQEMU repairs a record whose launch was interrupted after QEMU
-// daemonized but before its PID was saved. More than one match is treated as
-// corruption instead of guessing which process owns the disk.
+// adopt a qemu that daemonized before its pid was saved; >1 match is corruption, not a guess.
 func adoptRunningQEMU(r *record) (bool, error) {
 	pids, err := utils.FindVMMByCmdline(qemuBinary, r.Disk)
 	if err != nil {

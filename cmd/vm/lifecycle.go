@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cocoonstack/cocoon-macos/home"
+	"github.com/cocoonstack/cocoon-macos/internal/procutil"
 	"github.com/cocoonstack/cocoon-macos/qemu"
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/utils"
@@ -45,14 +46,6 @@ func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 	})
 }
 
-func requestedVMName(cmd *cobra.Command, fallback string) string {
-	name, _ := cmd.Flags().GetString("name")
-	if name != "" {
-		return name
-	}
-	return fallback
-}
-
 func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 	ctx := cliutil.CommandContext(cmd)
 	vnc, _ := cmd.Flags().GetInt("vnc")
@@ -64,9 +57,7 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
-			// Another lifecycle operation may have restarted qemu while Start waited,
-			// or the previous CLI may have died after daemonizing QEMU but before
-			// persisting its PID. Adopt that one process instead of launching a second.
+			// an op that held the lock (export, a racing run) may have restarted qemu; adopt it and only repair a dead vnc proxy
 			running := isRunning(r)
 			if !running {
 				var adoptErr error
@@ -149,10 +140,10 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 			} else {
 				cleanupCtx, cancel := context.WithTimeout(context.Background(), vmCleanupTimeout)
 				defer cancel()
-				if cleanupErr := cleanupQEMUForPath(cleanupCtx, dir); cleanupErr != nil {
+				if cleanupErr := procutil.TerminateByCmdline(cleanupCtx, qemuBinary, dir, 0); cleanupErr != nil {
 					return cleanupErr
 				}
-				if cleanupErr := qemu.CleanupNBDForPath(cleanupCtx, dir); cleanupErr != nil {
+				if cleanupErr := procutil.TerminateByCmdline(cleanupCtx, "qemu-nbd", dir, time.Second); cleanupErr != nil {
 					return cleanupErr
 				}
 			}
@@ -232,37 +223,6 @@ func (h *Handler) create(cmd *cobra.Command, image, name string) (r *record, ret
 	return r, saveRec(dir, r)
 }
 
-func validateMacOSCPUs(cpus int) error {
-	if cpus < 1 || cpus%2 != 0 {
-		return fmt.Errorf("--cpus must be a positive even number, got %d", cpus)
-	}
-	return nil
-}
-
-// cleanupFailedVM makes create/run transactional. It uses an uncanceled,
-// bounded context so SIGTERM-driven command cancellation still reaps helpers,
-// networking and any QEMU process started before the record was committed.
-func cleanupFailedVM(cmd *cobra.Command, dir string, r *record) error {
-	ctx, cancel := context.WithTimeout(context.Background(), vmCleanupTimeout)
-	defer cancel()
-	var errs []error
-	if r != nil {
-		terminate(ctx, r, 0)
-		stopVNCProxy(ctx, dir)
-		teardownNetContext(ctx, cmd, r)
-	}
-	if err := cleanupQEMUForPath(ctx, dir); err != nil {
-		errs = append(errs, err)
-	}
-	if err := qemu.CleanupNBDForPath(ctx, dir); err != nil {
-		errs = append(errs, err)
-	}
-	if err := os.RemoveAll(dir); err != nil {
-		errs = append(errs, fmt.Errorf("remove failed vm dir: %w", err))
-	}
-	return errors.Join(errs...)
-}
-
 func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	ctx := cliutil.CommandContext(cmd)
 	logger := log.WithFunc("cmd.vm.launch")
@@ -323,6 +283,43 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		}
 	}
 	return saveRec(dir, r)
+}
+
+func requestedVMName(cmd *cobra.Command, fallback string) string {
+	name, _ := cmd.Flags().GetString("name")
+	if name != "" {
+		return name
+	}
+	return fallback
+}
+
+func validateMacOSCPUs(cpus int) error {
+	if cpus < 1 || cpus%2 != 0 {
+		return fmt.Errorf("--cpus must be a positive even number, got %d", cpus)
+	}
+	return nil
+}
+
+// cleanupFailedVM uses an uncanceled bounded context so cancellation still reaps helpers, networking and QEMU.
+func cleanupFailedVM(cmd *cobra.Command, dir string, r *record) error {
+	ctx, cancel := context.WithTimeout(context.Background(), vmCleanupTimeout)
+	defer cancel()
+	var errs []error
+	if r != nil {
+		terminate(ctx, r, 0)
+		stopVNCProxy(ctx, dir)
+		teardownNetContext(ctx, cmd, r)
+	}
+	if err := procutil.TerminateByCmdline(ctx, qemuBinary, dir, 0); err != nil {
+		errs = append(errs, err)
+	}
+	if err := procutil.TerminateByCmdline(ctx, "qemu-nbd", dir, time.Second); err != nil {
+		errs = append(errs, err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		errs = append(errs, fmt.Errorf("remove failed vm dir: %w", err))
+	}
+	return errors.Join(errs...)
 }
 
 // prepareOpenCore points r.OpenCore at the shared base, or with randomSMBIOS at a per-VM overlay whose config.plist is patched with a unique identity.

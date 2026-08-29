@@ -85,29 +85,6 @@ func TestStartAlreadyRunningIsIdempotent(t *testing.T) {
 	}
 }
 
-func captureStdout(t *testing.T, fn func() error) (string, error) {
-	t.Helper()
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	original := os.Stdout
-	os.Stdout = writer
-	callErr := fn()
-	os.Stdout = original
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	output, err := io.ReadAll(reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := reader.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return string(output), callErr
-}
-
 func TestStartAdoptsQEMUWhenRecordPIDWasNotCommitted(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("process cmdline adoption requires /proc")

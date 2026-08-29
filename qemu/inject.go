@@ -15,6 +15,7 @@ import (
 	"github.com/projecteru2/core/log"
 	"howett.net/plist"
 
+	"github.com/cocoonstack/cocoon-macos/internal/procutil"
 	"github.com/cocoonstack/cocoon/lock/flock"
 	"github.com/cocoonstack/cocoon/utils"
 )
@@ -155,17 +156,7 @@ func isFileHeld(ocPath string) (bool, error) {
 
 // cleanupNBDForPath terminates qemu-nbd holders of path; PID identity is verified so a reused PID is never hit.
 func cleanupNBDForPath(ctx context.Context, path string) error {
-	pids, err := utils.FindVMMByCmdline("qemu-nbd", path)
-	if err != nil {
-		return fmt.Errorf("scan qemu-nbd processes for %s: %w", path, err)
-	}
-	var errs []error
-	for _, pid := range pids {
-		if err := utils.TerminateProcess(ctx, pid, "qemu-nbd", path, time.Second); err != nil {
-			errs = append(errs, fmt.Errorf("terminate qemu-nbd pid %d: %w", pid, err))
-		}
-	}
-	return errors.Join(errs...)
+	return procutil.TerminateByCmdline(ctx, "qemu-nbd", path, time.Second)
 }
 
 // holds the nbd lease; --fork or qemu-nbd stays foreground and the caller never reaches mount/patch.

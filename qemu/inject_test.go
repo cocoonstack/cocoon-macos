@@ -15,6 +15,45 @@ import (
 	"howett.net/plist"
 )
 
+// sampleConfig mirrors OSX-KVM's config.plist so patchPlist round-trips a realistic input.
+const sampleConfig = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Misc</key>
+	<dict>
+		<key>Security</key>
+		<dict>
+			<key>Vault</key>
+			<string>Optional</string>
+		</dict>
+	</dict>
+	<key>PlatformInfo</key>
+	<dict>
+		<key>Automatic</key>
+		<true/>
+		<key>UpdateSMBIOSMode</key>
+		<string>Create</string>
+		<key>Generic</key>
+		<dict>
+			<key>SystemProductName</key>
+			<string>iMac19,1</string>
+			<key>SystemSerialNumber</key>
+			<string>W00000000001</string>
+			<key>MLB</key>
+			<string>M0000000000000001</string>
+			<key>SystemUUID</key>
+			<string>00000000-0000-0000-0000-000000000000</string>
+			<key>ROM</key>
+			<data>ESIzRFVm</data>
+			<key>SpoofVendor</key>
+			<true/>
+		</dict>
+	</dict>
+</dict>
+</plist>
+`
+
 func TestQemuNBDConnectArgsForkAndTrackServer(t *testing.T) {
 	want := []string{"--fork", "--pid-file=/state/vm/OpenCore.qcow2.nbd.pid", "--connect=/dev/nbd3", "-f", "qcow2", "/state/vm/OpenCore.qcow2"}
 	if got := qemuNBDConnectArgs("/dev/nbd3", "/state/vm/OpenCore.qcow2.nbd.pid", "/state/vm/OpenCore.qcow2"); !slices.Equal(got, want) {
@@ -111,45 +150,6 @@ func TestProcessReferencesBlockDevice(t *testing.T) {
 		t.Error("unreferenced /dev/nbd3 reported busy")
 	}
 }
-
-// sampleConfig mirrors OSX-KVM's config.plist so patchPlist round-trips a realistic input.
-const sampleConfig = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>Misc</key>
-	<dict>
-		<key>Security</key>
-		<dict>
-			<key>Vault</key>
-			<string>Optional</string>
-		</dict>
-	</dict>
-	<key>PlatformInfo</key>
-	<dict>
-		<key>Automatic</key>
-		<true/>
-		<key>UpdateSMBIOSMode</key>
-		<string>Create</string>
-		<key>Generic</key>
-		<dict>
-			<key>SystemProductName</key>
-			<string>iMac19,1</string>
-			<key>SystemSerialNumber</key>
-			<string>W00000000001</string>
-			<key>MLB</key>
-			<string>M0000000000000001</string>
-			<key>SystemUUID</key>
-			<string>00000000-0000-0000-0000-000000000000</string>
-			<key>ROM</key>
-			<data>ESIzRFVm</data>
-			<key>SpoofVendor</key>
-			<true/>
-		</dict>
-	</dict>
-</dict>
-</plist>
-`
 
 func TestPatchPlist(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "config.plist")

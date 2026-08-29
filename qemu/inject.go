@@ -33,6 +33,47 @@ type nbdConnection struct {
 	ocPath  string
 }
 
+// fresh context, not the caller's: disconnect must still run when the caller is unwinding after a timeout.
+func (c *nbdConnection) disconnect() error {
+	logger := log.WithFunc("qemu.disconnectNBD")
+	var commandErr error
+	disconnectCtx, disconnectCancel := context.WithTimeout(context.Background(), nbdCommandTimeout)
+	if out, err := exec.CommandContext(disconnectCtx, "qemu-nbd", "--disconnect", c.device).CombinedOutput(); err != nil {
+		logger.Warnf(disconnectCtx, "disconnect %s (output: %s): %v", c.device, out, err)
+		commandErr = fmt.Errorf("disconnect %s (output: %s): %w", c.device, out, err)
+	}
+	disconnectCancel()
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), nbdCleanupTimeout)
+	defer waitCancel()
+	if err := utils.WaitFor(waitCtx, 10*time.Second, 100*time.Millisecond, func() (bool, error) {
+		held, scanErr := isFileHeld(c.ocPath)
+		return !held, scanErr
+	}); err != nil {
+		logger.Warnf(waitCtx, "qcow2 %s still held after nbd disconnect: %v", c.ocPath, err)
+		killCtx, killCancel := context.WithTimeout(context.Background(), nbdCleanupTimeout)
+		defer killCancel()
+		var cleanupErrs []error
+		if cleanupErr := utils.TerminateProcess(killCtx, c.pid, "qemu-nbd", c.ocPath, time.Second); cleanupErr != nil {
+			logger.Warnf(killCtx, "terminate qemu-nbd pid %d for %s: %v", c.pid, c.ocPath, cleanupErr)
+			cleanupErrs = append(cleanupErrs, cleanupErr)
+		}
+		if cleanupErr := cleanupNBDForPath(killCtx, c.ocPath); cleanupErr != nil {
+			logger.Warnf(killCtx, "terminate stale qemu-nbd for %s: %v", c.ocPath, cleanupErr)
+			cleanupErrs = append(cleanupErrs, cleanupErr)
+		}
+		commandErr = errors.Join(commandErr, err, errors.Join(cleanupErrs...))
+	}
+	_ = os.Remove(c.pidFile)
+	held, err := isFileHeld(c.ocPath)
+	if err != nil {
+		return errors.Join(commandErr, err)
+	}
+	if !held {
+		return nil
+	}
+	return commandErr
+}
+
 // InjectConfig mounts the OpenCore qcow2 via qemu-nbd (the only way to edit a FAT partition inside a qcow2; needs root + the nbd module) and patches config.plist with a per-VM identity.
 func InjectConfig(ctx context.Context, ocPath string, sm *SMBIOS) error {
 	return withNBDLease(ctx, nbdLeasePath, func() (retErr error) {
@@ -65,9 +106,7 @@ func InjectConfig(ctx context.Context, ocPath string, sm *SMBIOS) error {
 	})
 }
 
-// withNBDLease serializes the complete connect/mount/patch/unmount/disconnect
-// transaction across cocoon-macos processes. A free-device check followed by
-// qemu-nbd --connect is not atomic, so choosing devices concurrently is unsafe.
+// serialize the whole transaction: a free-device check then qemu-nbd --connect is not atomic across processes.
 func withNBDLease(ctx context.Context, path string, fn func() error) error {
 	l := flock.New(path)
 	if err := l.Lock(ctx); err != nil {
@@ -108,58 +147,14 @@ func cleanupNBDMount(mnt string, mounted bool) error {
 	return nil
 }
 
-// disconnect waits out qemu-nbd's asynchronous release. Cleanup deliberately
-// uses a fresh context because the caller is commonly unwinding after timeout.
-func (c *nbdConnection) disconnect() error {
-	logger := log.WithFunc("qemu.disconnectNBD")
-	var commandErr error
-	disconnectCtx, disconnectCancel := context.WithTimeout(context.Background(), nbdCommandTimeout)
-	if out, err := exec.CommandContext(disconnectCtx, "qemu-nbd", "--disconnect", c.device).CombinedOutput(); err != nil {
-		logger.Warnf(disconnectCtx, "disconnect %s (output: %s): %v", c.device, out, err)
-		commandErr = fmt.Errorf("disconnect %s (output: %s): %w", c.device, out, err)
-	}
-	disconnectCancel()
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), nbdCleanupTimeout)
-	defer waitCancel()
-	if err := utils.WaitFor(waitCtx, 10*time.Second, 100*time.Millisecond, func() (bool, error) {
-		held, scanErr := isFileHeld(c.ocPath)
-		return !held, scanErr
-	}); err != nil {
-		logger.Warnf(waitCtx, "qcow2 %s still held after nbd disconnect: %v", c.ocPath, err)
-		killCtx, killCancel := context.WithTimeout(context.Background(), nbdCleanupTimeout)
-		defer killCancel()
-		var cleanupErrs []error
-		if cleanupErr := utils.TerminateProcess(killCtx, c.pid, "qemu-nbd", c.ocPath, time.Second); cleanupErr != nil {
-			logger.Warnf(killCtx, "terminate qemu-nbd pid %d for %s: %v", c.pid, c.ocPath, cleanupErr)
-			cleanupErrs = append(cleanupErrs, cleanupErr)
-		}
-		if cleanupErr := CleanupNBDForPath(killCtx, c.ocPath); cleanupErr != nil {
-			logger.Warnf(killCtx, "terminate stale qemu-nbd for %s: %v", c.ocPath, cleanupErr)
-			cleanupErrs = append(cleanupErrs, cleanupErr)
-		}
-		commandErr = errors.Join(commandErr, err, errors.Join(cleanupErrs...))
-	}
-	_ = os.Remove(c.pidFile)
-	held, err := isFileHeld(c.ocPath)
-	if err != nil {
-		return errors.Join(commandErr, err)
-	}
-	if !held {
-		return nil
-	}
-	return commandErr
-}
-
 // isFileHeld matches the daemonized qemu-nbd server's cmdline — cheaper than scanning fd tables, and that server is the only holder to wait out.
 func isFileHeld(ocPath string) (bool, error) {
 	pids, err := utils.FindVMMByCmdline("qemu-nbd", ocPath)
 	return len(pids) > 0, err
 }
 
-// CleanupNBDForPath terminates qemu-nbd processes whose command line references
-// path. PID identity is verified before signaling, so an unrelated process is
-// never killed even if a PID was reused.
-func CleanupNBDForPath(ctx context.Context, path string) error {
+// cleanupNBDForPath terminates qemu-nbd holders of path; PID identity is verified so a reused PID is never hit.
+func cleanupNBDForPath(ctx context.Context, path string) error {
 	pids, err := utils.FindVMMByCmdline("qemu-nbd", path)
 	if err != nil {
 		return fmt.Errorf("scan qemu-nbd processes for %s: %w", path, err)
@@ -173,9 +168,7 @@ func CleanupNBDForPath(ctx context.Context, path string) error {
 	return errors.Join(errs...)
 }
 
-// connectFreeNBD is called while holding the host-wide NBD lease. --fork is
-// required: without it qemu-nbd remains in the foreground for the lifetime of
-// the mapping and the invoking CLI never reaches the mount/patch steps.
+// holds the nbd lease; --fork or qemu-nbd stays foreground and the caller never reaches mount/patch.
 func connectFreeNBD(ctx context.Context, ocPath string) (*nbdConnection, error) {
 	var lastErr error
 	pidFile := ocPath + ".nbd.pid"
@@ -203,13 +196,13 @@ func connectFreeNBD(ctx context.Context, ocPath string) (*nbdConnection, error) 
 			}
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), nbdCleanupTimeout)
 			_ = exec.CommandContext(cleanupCtx, "qemu-nbd", "--disconnect", nbd).Run()
-			_ = CleanupNBDForPath(cleanupCtx, ocPath)
+			_ = cleanupNBDForPath(cleanupCtx, ocPath)
 			cancel()
 			return nil, fmt.Errorf("read qemu-nbd pid file %s: %w", pidFile, err)
 		}
 		lastErr = fmt.Errorf("connect qemu-nbd %s (output: %s): %w", nbd, out, cerr)
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), nbdCleanupTimeout)
-		_ = CleanupNBDForPath(cleanupCtx, ocPath)
+		_ = cleanupNBDForPath(cleanupCtx, ocPath)
 		cancel()
 		if ctx.Err() != nil {
 			return nil, errors.Join(lastErr, ctx.Err())
@@ -221,9 +214,7 @@ func connectFreeNBD(ctx context.Context, ocPath string) (*nbdConnection, error) 
 	return nil, errors.New("no free /dev/nbd device (is the nbd module loaded)")
 }
 
-// processReferencesBlockDevice catches userspace operations that are still
-// blocked on an NBD device after the kernel has already removed its sysfs pid.
-// Reusing such a device can block the next qemu-nbd attach indefinitely.
+// a device can stay held by a blocked userspace op after the kernel drops its sysfs pid; reusing it wedges the next attach.
 func processReferencesBlockDevice(procRoot, device string) (bool, error) {
 	entries, err := os.ReadDir(procRoot)
 	if err != nil {

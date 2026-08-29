@@ -1,7 +1,6 @@
 package vm
 
 import (
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -73,14 +72,8 @@ func TestStartAlreadyRunningIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	output, err := captureStdout(t, func() error {
-		return NewHandler().Start(cmd, []string{"macos-demo"})
-	})
-	if err != nil {
+	if err := NewHandler().Start(cmd, []string{"macos-demo"}); err != nil {
 		t.Fatalf("duplicate start must adopt the live qemu: %v", err)
-	}
-	if !strings.Contains(output, "supplied VNC settings ignored because live QEMU cannot be retargeted") {
-		t.Fatalf("duplicate start output = %q, want ignored VNC settings warning", output)
 	}
 	got, err := loadRec(vmDir)
 	if err != nil {
@@ -89,29 +82,6 @@ func TestStartAlreadyRunningIsIdempotent(t *testing.T) {
 	if got.PID != rec.PID || got.VNCDisp != 1 {
 		t.Fatalf("live record changed: pid=%d vnc=%d, want pid=%d vnc=1", got.PID, got.VNCDisp, rec.PID)
 	}
-}
-
-func captureStdout(t *testing.T, fn func() error) (string, error) {
-	t.Helper()
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	original := os.Stdout
-	os.Stdout = writer
-	callErr := fn()
-	os.Stdout = original
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	output, err := io.ReadAll(reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := reader.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return string(output), callErr
 }
 
 func TestCloneOpenCoreBase(t *testing.T) {

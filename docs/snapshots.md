@@ -3,6 +3,7 @@
 ## Snapshot / restore
 
 ```bash
+cocoon-macos vm stop m1
 cocoon-macos vm snapshot m1 --tag clean
 cocoon-macos vm restore  m1 --tag clean   # --force to stop+restore+relaunch a running VM
 ```
@@ -21,7 +22,7 @@ A clone bakes a fresh copy-on-write overlay on the **shared base** (never on SRC
 which would break on `vm rm m1`). It cold-boots a **fresh Apple identity** when `--random-smbios`
 is given to the clone (or inherited automatically when SRC already carries one) — without it, the
 clone reuses SRC's serial and MAC. Clones copy SRC's data disks and can add more; a clone-of-a-clone
-keeps a correct backing chain.
+keeps a correct backing chain. SRC must be stopped while its OVMF variables and data disks are copied.
 
 ## Data disks (`--data-disk`)
 

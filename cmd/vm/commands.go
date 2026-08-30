@@ -107,7 +107,7 @@ func Command(h Actions) *cobra.Command {
 
 	cloneCmd := &cobra.Command{
 		Use:   "clone SRC",
-		Short: "Clone a VM: fresh CoW overlay on the shared base + a unique Apple identity + its own TAP",
+		Short: "Clone a stopped VM: fresh CoW overlay on the shared base + a unique Apple identity + its own TAP",
 		Args:  cobra.ExactArgs(1),
 		RunE:  h.Clone,
 	}

@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -53,6 +54,20 @@ func withVMLock(ctx context.Context, dir string, fn func() error) error {
 	}
 	defer func() { _ = l.Unlock(context.Background()) }()
 	return fn()
+}
+
+func withVMLocks(ctx context.Context, dirs []string, fn func() error) error {
+	dirs = slices.Clone(dirs)
+	slices.Sort(dirs)
+	dirs = slices.Compact(dirs)
+	var lockNext func(int) error
+	lockNext = func(i int) error {
+		if i == len(dirs) {
+			return fn()
+		}
+		return withVMLock(ctx, dirs[i], func() error { return lockNext(i + 1) })
+	}
+	return lockNext(0)
 }
 
 // bakeOverlay creates a per-VM CoW qcow2 overlay on the immutable base (which stays read-only).
@@ -114,7 +129,10 @@ func resizeSystemDisk(ctx context.Context, path string, target int64) (int64, er
 
 // scaffoldVM lays down a new VM dir, disk overlay, and OVMF_VARS copy; it refuses an existing record — a second create/clone under the same name would truncate the live overlay.
 func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir, overlay, ovmfVars, digest string, err error) {
-	dir = home.VMDir(cmd, name)
+	dir, err = home.VMDir(cmd, name)
+	if err != nil {
+		return "", "", "", "", err
+	}
 	if _, statErr := os.Stat(filepath.Join(dir, "vm.json")); statErr == nil {
 		return "", "", "", "", fmt.Errorf("vm %q already exists; rm it first or pick another --name", name)
 	} else if !os.IsNotExist(statErr) {
@@ -221,6 +239,20 @@ func adoptRunningQEMU(r *record) (bool, error) {
 	default:
 		return false, fmt.Errorf("multiple qemu processes use disk %s: %v", r.Disk, pids)
 	}
+}
+
+func reconcileRunningQEMU(dir string, r *record) (bool, error) {
+	if isRunning(r) {
+		return true, nil
+	}
+	running, err := adoptRunningQEMU(r)
+	if err != nil || !running {
+		return running, err
+	}
+	if err := saveRec(dir, r); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // terminate stops the VM's qemu, verifying the cmdline before signaling; grace=0 means immediate SIGKILL.

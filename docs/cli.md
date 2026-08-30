@@ -61,7 +61,7 @@ in-process reboot behavior.
    `config.plist` `PlatformInfo/Generic` via a `qemu-nbd` mount — model stays `iMac19,1` (proven to
    boot Tahoe), only serial/MLB/UUID/ROM are randomized. The identity is recorded and shown by
    `vm inspect`.
-4. Launch `qemu-system-x86_64` daemonized with the boot recipe (a `Skylake-Client-v4` CPU spoofing
+4. Launch `qemu-system-x86_64` daemonized with the boot recipe (a `Skylake-Client` CPU spoofing
    `GenuineIntel`, `isa-applesmc` OSK, OVMF, the LongQT OpenCore loader, and the macOS qcow2). The
    same recipe boots macOS identically on Intel and AMD; on AMD it also sets `kvm.ignore_msrs=1`
    (macOS reads MSRs an AMD host lacks). See [Boot, Firmware & GUI](vm.md).

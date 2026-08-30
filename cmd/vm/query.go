@@ -38,7 +38,11 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 }
 
 func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
-	r, err := loadRec(home.VMDir(cmd, args[0]))
+	dir, err := home.VMDir(cmd, args[0])
+	if err != nil {
+		return err
+	}
+	r, err := loadRec(dir)
 	if err != nil {
 		return err
 	}
@@ -46,7 +50,11 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 }
 
 func (h *Handler) Console(cmd *cobra.Command, args []string) error {
-	r, err := loadRec(home.VMDir(cmd, args[0]))
+	dir, err := home.VMDir(cmd, args[0])
+	if err != nil {
+		return err
+	}
+	r, err := loadRec(dir)
 	if err != nil {
 		return err
 	}

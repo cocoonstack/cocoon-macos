@@ -2,10 +2,33 @@ package vm
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
+
+func TestValidateMacOSCPUs(t *testing.T) {
+	for _, tt := range []struct {
+		cpus    int
+		wantErr bool
+	}{
+		{cpus: -2, wantErr: true},
+		{cpus: 0, wantErr: true},
+		{cpus: 1, wantErr: true},
+		{cpus: 2},
+		{cpus: 3, wantErr: true},
+		{cpus: 4},
+	} {
+		err := validateMacOSCPUs(tt.cpus)
+		if (err != nil) != tt.wantErr {
+			t.Fatalf("validateMacOSCPUs(%d) error = %v, wantErr %v", tt.cpus, err, tt.wantErr)
+		}
+		if err != nil && !strings.Contains(err.Error(), "positive even number") {
+			t.Fatalf("validateMacOSCPUs(%d) error = %v", tt.cpus, err)
+		}
+	}
+}
 
 func TestCloneOpenCoreBase(t *testing.T) {
 	tests := []struct {

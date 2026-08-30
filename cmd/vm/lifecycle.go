@@ -126,6 +126,10 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 	if err != nil {
 		return nil, err
 	}
+	cpus, _ := cmd.Flags().GetInt("cpus")
+	if err = validateMacOSCPUs(cpus); err != nil {
+		return nil, err
+	}
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	netMode, _ := cmd.Flags().GetString("net")
@@ -141,7 +145,6 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 		return nil, err
 	}
 	ctx := cliutil.CommandContext(cmd)
-	cpus, _ := cmd.Flags().GetInt("cpus")
 	mem, _ := cmd.Flags().GetString("memory")
 	ssh, _ := cmd.Flags().GetInt("ssh-port")
 	tap, _ := cmd.Flags().GetString("tap")
@@ -165,6 +168,13 @@ func (h *Handler) create(cmd *cobra.Command, image string) (*record, error) {
 		return nil, err
 	}
 	return r, saveRec(dir, r)
+}
+
+func validateMacOSCPUs(cpus int) error {
+	if cpus < 1 || cpus%2 != 0 {
+		return fmt.Errorf("--cpus must be a positive even number, got %d", cpus)
+	}
+	return nil
 }
 
 func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {

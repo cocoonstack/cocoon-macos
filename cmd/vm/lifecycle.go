@@ -136,7 +136,7 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 			if r, err := loadRec(dir); err == nil {
 				terminate(ctx, r, grace)
 				stopVNCProxy(ctx, dir)
-				teardownNet(cmd, r)
+				teardownNet(ctx, cmd, r)
 			} else {
 				cleanupCtx, cancel := context.WithTimeout(context.Background(), vmCleanupTimeout)
 				defer cancel()
@@ -195,7 +195,6 @@ func (h *Handler) create(cmd *cobra.Command, image, name string) (r *record, ret
 	ctx := cliutil.CommandContext(cmd)
 	storage, err = resizeSystemDisk(ctx, overlay, storage)
 	if err != nil {
-		_ = os.RemoveAll(dir)
 		return nil, err
 	}
 	mem, _ := cmd.Flags().GetString("memory")
@@ -308,7 +307,7 @@ func cleanupFailedVM(cmd *cobra.Command, dir string, r *record) error {
 	if r != nil {
 		terminate(ctx, r, 0)
 		stopVNCProxy(ctx, dir)
-		teardownNetContext(ctx, cmd, r)
+		teardownNet(ctx, cmd, r)
 	}
 	if err := procutil.TerminateByCmdline(ctx, qemuBinary, dir, 0); err != nil {
 		errs = append(errs, err)

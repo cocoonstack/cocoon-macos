@@ -3,7 +3,6 @@ package vm
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -70,7 +69,6 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 	ctx := cliutil.CommandContext(cmd)
 	storage, err = resizeSystemDisk(ctx, overlay, storage)
 	if err != nil {
-		_ = os.RemoveAll(dir)
 		return err
 	}
 	copied, err := copyDataDisks(dir, srcRec.DataDisks)

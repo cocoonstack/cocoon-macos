@@ -15,9 +15,7 @@ func provisionNet(_ *cobra.Command, _ *record) (tap, netns, mac string, err erro
 	return "", "", "", fmt.Errorf("auto-create TAP / CNI / bridge networking requires Linux (running on %s); pass a pre-created --tap or use --net user", runtime.GOOS)
 }
 
-func teardownNet(_ *cobra.Command, _ *record) {}
-
-func teardownNetContext(_ context.Context, _ *cobra.Command, _ *record) {}
+func teardownNet(_ context.Context, _ *cobra.Command, _ *record) {}
 
 func quiesceNet(_ *cobra.Command, _ *record) {}
 

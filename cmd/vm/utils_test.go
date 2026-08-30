@@ -1,6 +1,9 @@
 package vm
 
 import (
+	"os"
+	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,6 +43,75 @@ func TestStorageFromFlag(t *testing.T) {
 				t.Fatalf("storageFromFlag() = %d, want %d", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestWithVMLockSurvivesVMDirRemoval(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "vms", "demo")
+	acquired := make(chan struct{})
+	release := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := withVMLock(t.Context(), dir, func() error {
+			close(acquired)
+			<-release
+			return nil
+		}); err != nil {
+			t.Errorf("first lock: %v", err)
+		}
+	}()
+	<-acquired
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	second := make(chan struct{})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := withVMLock(t.Context(), dir, func() error {
+			close(second)
+			return nil
+		}); err != nil {
+			t.Errorf("second lock: %v", err)
+		}
+	}()
+	select {
+	case <-second:
+		t.Fatal("second operation acquired while first still held the VM lock")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+	wg.Wait()
+}
+
+func TestResetIncompleteVMDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "vms", "demo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "OpenCore.qcow2"), []byte("partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := resetIncompleteVMDir(t.Context(), dir); err != nil {
+		t.Fatalf("reset incomplete dir: %v", err)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("incomplete directory still exists: %v", err)
+	}
+}
+
+func TestResetIncompleteVMDirRefusesCommittedRecord(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "vms", "demo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "vm.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := resetIncompleteVMDir(t.Context(), dir); err == nil {
+		t.Fatal("committed VM directory was accepted as incomplete")
 	}
 }
 

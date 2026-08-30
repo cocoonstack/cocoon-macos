@@ -17,6 +17,8 @@ func provisionNet(_ *cobra.Command, _ *record) (tap, netns, mac string, err erro
 
 func teardownNet(_ *cobra.Command, _ *record) {}
 
+func teardownNetContext(_ context.Context, _ *cobra.Command, _ *record) {}
+
 func quiesceNet(_ *cobra.Command, _ *record) {}
 
 func unquiesceNet(_ *cobra.Command, _ *record) {}

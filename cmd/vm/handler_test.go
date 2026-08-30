@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -46,7 +47,7 @@ func TestStartAlreadyRunningIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	disk := filepath.Join(vmDir, "disk.qcow2")
-	process := exec.Command(fakeQEMU, "-c", "sleep 60", disk)
+	process := exec.Command(fakeQEMU, "-c", "while :; do sleep 1; done", disk)
 	if err := process.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -81,6 +82,48 @@ func TestStartAlreadyRunningIsIdempotent(t *testing.T) {
 	}
 	if got.PID != rec.PID || got.VNCDisp != 1 {
 		t.Fatalf("live record changed: pid=%d vnc=%d, want pid=%d vnc=1", got.PID, got.VNCDisp, rec.PID)
+	}
+}
+
+func TestStartAdoptsQEMUWhenRecordPIDWasNotCommitted(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process cmdline adoption requires /proc")
+	}
+	stateDir := t.TempDir()
+	vmDir := filepath.Join(stateDir, "vms", "macos-demo")
+	if err := os.MkdirAll(vmDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakeQEMU := filepath.Join(t.TempDir(), qemuBinary)
+	if err := os.Symlink("/bin/sh", fakeQEMU); err != nil {
+		t.Fatal(err)
+	}
+	disk := filepath.Join(vmDir, "disk.qcow2")
+	process := exec.Command(fakeQEMU, "-c", "while :; do sleep 1; done", disk)
+	if err := process.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = process.Process.Kill()
+		_ = process.Wait()
+	})
+	if err := saveRec(vmDir, &record{Name: "macos-demo", Disk: disk, VNCDisp: -1}); err != nil {
+		t.Fatal(err)
+	}
+	cmd := &cobra.Command{}
+	cmd.SetContext(t.Context())
+	cmd.Flags().String("state-dir", stateDir, "")
+	cmd.Flags().Int("vnc", -1, "")
+	cmd.Flags().String("vnc-password", "", "")
+	if err := NewHandler().Start(cmd, []string{"macos-demo"}); err != nil {
+		t.Fatalf("Start must adopt the already-running QEMU: %v", err)
+	}
+	got, err := loadRec(vmDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PID != process.Process.Pid {
+		t.Fatalf("adopted PID = %d, want %d", got.PID, process.Process.Pid)
 	}
 }
 

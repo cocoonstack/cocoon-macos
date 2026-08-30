@@ -1,6 +1,9 @@
 package vm
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -27,6 +30,57 @@ func TestValidateMacOSCPUs(t *testing.T) {
 		if err != nil && !strings.Contains(err.Error(), "positive even number") {
 			t.Fatalf("validateMacOSCPUs(%d) error = %v", tt.cpus, err)
 		}
+	}
+}
+
+func TestStartAlreadyRunningIsIdempotent(t *testing.T) {
+	stateDir := t.TempDir()
+	vmDir := filepath.Join(stateDir, "vms", "macos-demo")
+	if err := os.MkdirAll(vmDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// A real process whose argv0+args satisfy isRunning without qemu/KVM.
+	fakeQEMU := filepath.Join(t.TempDir(), qemuBinary)
+	if err := os.Symlink("/bin/sh", fakeQEMU); err != nil {
+		t.Fatal(err)
+	}
+	disk := filepath.Join(vmDir, "disk.qcow2")
+	process := exec.Command(fakeQEMU, "-c", "sleep 60", disk)
+	if err := process.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = process.Process.Kill()
+		_ = process.Wait()
+	})
+
+	rec := &record{Name: "macos-demo", Disk: disk, PID: process.Process.Pid, VNCDisp: 1}
+	if err := saveRec(vmDir, rec); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	cmd.SetContext(t.Context())
+	cmd.Flags().String("state-dir", stateDir, "")
+	cmd.Flags().Int("vnc", -1, "")
+	cmd.Flags().String("vnc-password", "", "")
+	if err := cmd.Flags().Set("vnc", "2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("vnc-password", "newpass"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := NewHandler().Start(cmd, []string{"macos-demo"}); err != nil {
+		t.Fatalf("duplicate start must adopt the live qemu: %v", err)
+	}
+	got, err := loadRec(vmDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PID != rec.PID || got.VNCDisp != 1 {
+		t.Fatalf("live record changed: pid=%d vnc=%d, want pid=%d vnc=1", got.PID, got.VNCDisp, rec.PID)
 	}
 }
 

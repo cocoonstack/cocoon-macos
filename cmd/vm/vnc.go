@@ -94,11 +94,16 @@ func startVNCProxy(ctx context.Context, dir string, disp int) error {
 	return nil
 }
 
+func vncProxyRunning(dir string) bool {
+	pid, err := utils.ReadPIDFile(filepath.Join(dir, vncProxyPID))
+	return err == nil && utils.VerifyProcessCmdline(pid, filepath.Base(os.Args[0]), filepath.Join(dir, vncSockName))
+}
+
 // stopVNCProxy kills a running proxy (best-effort). Zero grace: the proxy traps SIGTERM via the root NotifyContext and would keep accepting, and SIGKILL loses nothing on a stateless pipe.
 func stopVNCProxy(ctx context.Context, dir string) {
 	pidPath := filepath.Join(dir, vncProxyPID)
 	if pid, err := utils.ReadPIDFile(pidPath); err == nil {
-		_ = utils.TerminateProcess(ctx, pid, filepath.Base(os.Args[0]), vncProxyOp, 0)
+		_ = utils.TerminateProcess(ctx, pid, filepath.Base(os.Args[0]), filepath.Join(dir, vncSockName), 0)
 	}
 	_ = os.Remove(pidPath)
 }

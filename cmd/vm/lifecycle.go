@@ -51,6 +51,20 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
+			// An op that held the lock may have restarted qemu; adopt it and only repair a dead VNC proxy.
+			if isRunning(r) {
+				if r.Netns != "" && r.VNCDisp >= 0 && !vncProxyRunning(dir) {
+					if err := startVNCProxy(ctx, dir, r.VNCDisp); err != nil {
+						return fmt.Errorf("repair vnc proxy: %w", err)
+					}
+				}
+				if cmd.Flags().Changed("vnc") || cmd.Flags().Changed("vnc-password") {
+					fmt.Printf("%s (pid %d, already running; supplied VNC settings ignored because live QEMU cannot be retargeted)\n", n, r.PID)
+				} else {
+					fmt.Printf("%s (pid %d, already running)\n", n, r.PID)
+				}
+				return nil
+			}
 			r.VNCDisp, r.VNCPass = vnc, vncPass
 			if err := h.launch(cmd, dir, r); err != nil {
 				return err

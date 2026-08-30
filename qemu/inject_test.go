@@ -1,10 +1,16 @@
 package qemu
 
 import (
+	"context"
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"howett.net/plist"
 )
@@ -47,6 +53,103 @@ const sampleConfig = `<?xml version="1.0" encoding="UTF-8"?>
 </dict>
 </plist>
 `
+
+func TestQemuNBDConnectArgsForkAndTrackServer(t *testing.T) {
+	want := []string{"--fork", "--pid-file=/state/vm/OpenCore.qcow2.nbd.pid", "--connect=/dev/nbd3", "-f", "qcow2", "/state/vm/OpenCore.qcow2"}
+	if got := qemuNBDConnectArgs("/dev/nbd3", "/state/vm/OpenCore.qcow2.nbd.pid", "/state/vm/OpenCore.qcow2"); !slices.Equal(got, want) {
+		t.Fatalf("qemu-nbd args = %v, want %v", got, want)
+	}
+}
+
+func TestWithNBDLeaseSerializesConcurrentInjectors(t *testing.T) {
+	const workers = 50
+	lockPath := filepath.Join(t.TempDir(), "nbd.lock")
+	var active, maxActive atomic.Int32
+	errCh := make(chan error, workers)
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errCh <- withNBDLease(t.Context(), lockPath, func() error {
+				n := active.Add(1)
+				defer active.Add(-1)
+				for old := maxActive.Load(); n > old && !maxActive.CompareAndSwap(old, n); old = maxActive.Load() {
+				}
+				time.Sleep(time.Millisecond)
+				return nil
+			})
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := maxActive.Load(); got != 1 {
+		t.Fatalf("maximum concurrent NBD transactions = %d, want 1", got)
+	}
+}
+
+func TestWithNBDLeaseHonorsCancellation(t *testing.T) {
+	lockPath := filepath.Join(t.TempDir(), "nbd.lock")
+	held := make(chan struct{})
+	release := make(chan struct{})
+	go func() {
+		_ = withNBDLease(t.Context(), lockPath, func() error {
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	<-held
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	if err := withNBDLease(ctx, lockPath, func() error { return nil }); err == nil {
+		t.Fatal("waiting NBD lease ignored context cancellation")
+	}
+	close(release)
+}
+
+func TestProcessReferencesBlockDevice(t *testing.T) {
+	procRoot := t.TempDir()
+	writeCmdline := func(pid, command string, args ...string) {
+		t.Helper()
+		dir := filepath.Join(procRoot, pid)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		argv := append([]string{command}, args...)
+		data := append([]byte(strings.Join(argv, "\x00")), 0)
+		if err := os.WriteFile(filepath.Join(dir, "cmdline"), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeCmdline("101", "partprobe", "/dev/nbd0")
+	writeCmdline("102", "mount", "/dev/nbd1p1", "/mnt")
+	writeCmdline("103", "qemu-nbd", "--connect=/dev/nbd2", "disk.qcow2")
+	writeCmdline("104", "helper", "/dev/nbd01")
+
+	for _, device := range []string{"/dev/nbd0", "/dev/nbd1", "/dev/nbd2"} {
+		busy, err := processReferencesBlockDevice(procRoot, device)
+		if err != nil {
+			t.Fatalf("processReferencesBlockDevice(%s): %v", device, err)
+		}
+		if !busy {
+			t.Errorf("processReferencesBlockDevice(%s) = false, want true", device)
+		}
+	}
+	busy, err := processReferencesBlockDevice(procRoot, "/dev/nbd3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if busy {
+		t.Error("unreferenced /dev/nbd3 reported busy")
+	}
+}
 
 func TestPatchPlist(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "config.plist")

@@ -9,7 +9,8 @@ Every VM boots the same way on Intel and AMD:
 
 - **Firmware:** the shared LongQT OpenCore loader (`OpenCore.qcow2`) + 4 MB OVMF `CODE`/`VARS`,
   provisioned once by `doctor.sh` and reused by every VM. Firmware is external (an `-drive`), never
-  baked into the macOS qcow2 — the same image boots under a different loader on Intel vs AMD.
+  baked into the macOS qcow2, so one image boots on both Intel and AMD hosts and the loader can be
+  upgraded without rebuilding it.
 - **CPU:** `Skylake-Client` spoofing `GenuineIntel` with `-hle,-rtm` (TSX off), `+invtsc`, and
   `vmware-cpuid-freq=on`. The TSC flags are load-bearing: without them macOS self-calibrates the TSC
   and spins pathologically under nested KVM on first boot. `--cpus` must be a positive even number;

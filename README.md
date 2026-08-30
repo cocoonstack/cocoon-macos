@@ -14,7 +14,7 @@ macOS VM engine for x86 Linux/KVM, built on [cocoon](https://github.com/cocoonst
 - **Snapshot, clone & data disks** — offline qcow2-internal snapshots, CoW clones that cold-boot a fresh Apple identity, and up to 4 extra AHCI data disks
 - **Intel & AMD, built on cocoon** — one boot recipe boots both hosts; imports cocoon's `cloudimg` store, `network` plane, and copy-on-write conventions
 
-## Quick Start
+## Quick start
 
 ```bash
 # Build, then provision the host (checks /dev/kvm + deps, installs the OpenCore + OVMF firmware)
@@ -28,7 +28,7 @@ cocoon-macos vm run ghcr.io/cocoonstack/cocoon-macos/tahoe:26 \
 
 # Interact
 ssh -p 2222 cocoon@localhost      # password: cocoon
-cocoon-macos vm console m1
+cocoon-macos vm console m1        # prints the VNC address + ssh command
 
 # Snapshot and clone
 cocoon-macos vm stop m1
@@ -50,6 +50,13 @@ make lint     # Run golangci-lint (GOOS=linux + darwin)
 make fmt      # Format code with gofumpt + goimports
 make all      # Full pipeline: deps + fmt + lint + test + build
 ```
+
+## Related projects
+
+| Project | Role |
+|---|---|
+| [cocoon](https://github.com/cocoonstack/cocoon) | MicroVM engine; cocoon-macos imports its `cloudimg` store and `network` plane |
+| [vk-cocoon](https://github.com/cocoonstack/vk-cocoon) | Virtual kubelet provider; dispatches `os=macos` pods to this binary |
 
 ## License
 

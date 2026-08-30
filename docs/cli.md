@@ -45,6 +45,12 @@ start — the allocation is not best-effort. On `clone` the flag is only
 applied when passed explicitly; otherwise the source VM's setting carries
 over.
 
+`--exit-on-reboot` on `create` / `run` / `clone` is for VMs owned by an external
+supervisor. It persists with the VM and is inherited by clones. QEMU's
+`-no-reboot` exit skips the normal `vm stop` cleanup, so the supervisor must
+recover the existing record with `vm start`; standalone VMs keep QEMU's normal
+in-process reboot behavior.
+
 ## What `vm run` does
 
 1. `qemu-img create -b <golden> overlay.qcow2` — instant copy-on-write clone of the golden image.

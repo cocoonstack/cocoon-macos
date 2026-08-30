@@ -150,6 +150,17 @@ func TestArgsCPU(t *testing.T) {
 	}
 }
 
+func TestArgsGuestRebootExitsQEMU(t *testing.T) {
+	s := Spec{Disk: "/v/d.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/v.fd", CPUs: 4, Memory: "4096", VNCDisp: -1}
+	if slices.Contains(s.Args(), "-no-reboot") {
+		t.Fatalf("standalone VMs must keep QEMU's normal reboot behavior: %v", s.Args())
+	}
+	s.ExitOnReboot = true
+	if !slices.Contains(s.Args(), "-no-reboot") {
+		t.Fatalf("externally managed VM must exit QEMU for a cold relaunch: %v", s.Args())
+	}
+}
+
 // argVals returns each token immediately following flag in args.
 func argVals(args []string, flag string) []string {
 	var out []string

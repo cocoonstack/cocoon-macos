@@ -34,6 +34,7 @@ type record struct {
 
 	CPUs         int      `json:"cpus"`
 	Memory       string   `json:"memory"`
+	Storage      int64    `json:"storage,omitempty"` // system-disk virtual size in bytes
 	VNCDisp      int      `json:"vnc"`
 	VNCPass      string   `json:"-"` // launch-scoped, set from the flag each start; never persisted (would leak at rest)
 	SSHPort      int      `json:"ssh_port"`

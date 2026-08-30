@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/docker/go-units"
 	"github.com/spf13/cobra"
 
 	"github.com/cocoonstack/cocoon-macos/home"
@@ -53,6 +54,55 @@ func bakeOverlay(ctx context.Context, base, dst string) error {
 		return fmt.Errorf("bake overlay on %s: %w", base, err)
 	}
 	return nil
+}
+
+func storageFromFlag(cmd *cobra.Command) (int64, error) {
+	raw, _ := cmd.Flags().GetString("storage")
+	if strings.TrimSpace(raw) == "" {
+		return 0, nil
+	}
+	n, err := parseSize(raw)
+	if err != nil {
+		return 0, fmt.Errorf("invalid --storage %q: %w", raw, err)
+	}
+	return n, nil
+}
+
+// parseSize accepts Docker and Kubernetes quantity spellings such as 20G, 20Gi and 20GiB.
+func parseSize(raw string) (int64, error) {
+	parsed := strings.TrimSpace(raw)
+	if strings.HasSuffix(strings.ToLower(parsed), "i") {
+		parsed += "B"
+	}
+	n, err := units.RAMInBytes(parsed)
+	if err != nil {
+		return 0, err
+	}
+	if n <= 0 {
+		return 0, errors.New("size must be positive")
+	}
+	return n, nil
+}
+
+// resizeSystemDisk grows a new overlay to target bytes (0 = keep image size); shrinking is rejected because qemu-img cannot prove the guest filesystem survives.
+func resizeSystemDisk(ctx context.Context, path string, target int64) (int64, error) {
+	hdr, ok, err := utils.ReadQcow2Header(path)
+	if err != nil {
+		return 0, fmt.Errorf("read system disk %s: %w", path, err)
+	}
+	if !ok {
+		return 0, fmt.Errorf("system disk %s is not qcow2", path)
+	}
+	if target == 0 || target == hdr.VirtualSize {
+		return hdr.VirtualSize, nil
+	}
+	if target < hdr.VirtualSize {
+		return 0, fmt.Errorf("--storage %d bytes is smaller than image virtual size %d bytes; shrinking is not supported", target, hdr.VirtualSize)
+	}
+	if err := utils.RunQemuImg(ctx, "resize", path, fmt.Sprintf("%d", target)); err != nil {
+		return 0, fmt.Errorf("resize system disk %s to %d bytes: %w", path, target, err)
+	}
+	return target, nil
 }
 
 // scaffoldVM lays down a new VM dir, disk overlay, and OVMF_VARS copy; it refuses an existing record — a second create/clone under the same name would truncate the live overlay.

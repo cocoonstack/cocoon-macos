@@ -4,6 +4,7 @@
 #   - skip Setup Assistant (.AppleSetupDone)
 #   - create a local admin user offline (dscl -f on the volume's dslocal)
 #   - drop a first-boot LaunchDaemon that enables Remote Login (SSH), then self-removes
+#   - install a persistent LaunchDaemon that assigns a per-VM hostname
 # Diagnostics are printed so a VNC screenshot shows progress/errors.
 set -x
 USER_NAME="${USER_NAME:-cocoon}"
@@ -205,4 +206,47 @@ PLIST
 chown 0:0 "$VOL/Library/LaunchDaemons/com.cocoon.firstboot.plist" "$VOL/usr/local/bin/cocoon-firstboot.sh"
 chmod 644 "$VOL/Library/LaunchDaemons/com.cocoon.firstboot.plist"
 ls -la "$VOL/Library/LaunchDaemons/com.cocoon.firstboot.plist"
+
+# 4) Persistent per-VM hostname. With --random-smbios, derive all three names
+# from the unique SMBIOS UUID; without it clones still share the golden UUID.
+mkdir -p "$VOL/usr/local/sbin"
+cat > "$VOL/usr/local/sbin/cocoon-set-hostname" <<'SH'
+#!/bin/zsh
+
+set -eu
+
+log=/var/log/cocoon-set-hostname.log
+exec >>"$log" 2>&1
+
+uuid=$(/usr/sbin/ioreg -rd1 -c IOPlatformExpertDevice | /usr/bin/awk -F '"' '/IOPlatformUUID/ {print $(NF-1); exit}')
+suffix=$(printf '%s' "$uuid" | /usr/bin/tr '[:upper:]' '[:lower:]' | /usr/bin/tr -cd 'a-f0-9' | /usr/bin/cut -c1-8)
+if [[ ${#suffix} -ne 8 ]]; then
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) unable to derive hostname from IOPlatformUUID=$uuid"
+  exit 1
+fi
+
+name="cocoon-mac-$suffix"
+for key in ComputerName LocalHostName HostName; do
+  current=$(/usr/sbin/scutil --get "$key" 2>/dev/null || true)
+  if [[ "$current" != "$name" ]]; then
+    /usr/sbin/scutil --set "$key" "$name"
+  fi
+done
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) hostname=$name uuid=$uuid"
+SH
+chmod 755 "$VOL/usr/local/sbin/cocoon-set-hostname"
+cat > "$VOL/Library/LaunchDaemons/com.cocoon.set-hostname.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.cocoon.set-hostname</string>
+  <key>ProgramArguments</key><array><string>/usr/local/sbin/cocoon-set-hostname</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/var/log/cocoon-set-hostname.launchd.log</string>
+  <key>StandardErrorPath</key><string>/var/log/cocoon-set-hostname.launchd.err</string>
+</dict></plist>
+PLIST
+chown 0:0 "$VOL/Library/LaunchDaemons/com.cocoon.set-hostname.plist" "$VOL/usr/local/sbin/cocoon-set-hostname"
+chmod 644 "$VOL/Library/LaunchDaemons/com.cocoon.set-hostname.plist"
+ls -la "$VOL/Library/LaunchDaemons/com.cocoon.set-hostname.plist"
 echo "=== PROVISION DONE (user=$USER_NAME, SSH on first boot) ==="

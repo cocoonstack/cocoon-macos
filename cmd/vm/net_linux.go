@@ -87,28 +87,31 @@ func provisionNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err er
 	return cfgs[0].TAP, nsPath, mac, nil
 }
 
-// teardownNet removes an auto-created TAP/netns. Best-effort; never touches a user-supplied --tap.
-func teardownNet(ctx context.Context, cmd *cobra.Command, r *record) {
+// teardownNet removes an auto-created TAP/netns and never touches a user-supplied --tap.
+func teardownNet(ctx context.Context, cmd *cobra.Command, r *record) error {
 	if !r.TapOwned {
-		return
+		return nil
+	}
+	bridgeMode := r.NetMode == netTAP || r.NetMode == netBridge
+	if bridgeMode {
+		defer bridge.CleanupTAPs(netConf(cmd).BridgeTAPPrefix(), []string{r.VMID})
 	}
 	logger := log.WithFunc("cmd.vm.teardownNet")
-	// warn instead of failing: rm must proceed, but a leaked TAP/netns should leave a trail
-	if provider, err := newProvider(cmd, r); err != nil {
-		logger.Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
-	} else {
-		// quiesce first: covers the idle-TAP softirq gap between the VMM dying and Delete dropping the redirect
-		if err := provider.Quiesce(ctx, r.VMID); err != nil {
-			logger.Warnf(ctx, "quiesce network for %s: %v", r.VMID, err)
+	provider, err := newProvider(cmd, r)
+	if err != nil {
+		if bridgeMode {
+			return nil
 		}
-		if _, err := provider.Delete(ctx, []string{r.VMID}); err != nil {
-			logger.Warnf(ctx, "teardown network for %s: %v", r.VMID, err)
-		}
+		return fmt.Errorf("teardown network for %s: %w", r.VMID, err)
 	}
-	// not gated on newProvider succeeding (rm has no --bridge flag), or an auto-created TAP would leak
-	if r.NetMode == netTAP || r.NetMode == netBridge {
-		bridge.CleanupTAPs(netConf(cmd).BridgeTAPPrefix(), []string{r.VMID})
+	// quiesce first: covers the idle-TAP softirq gap between the VMM dying and Delete dropping the redirect
+	if err := provider.Quiesce(ctx, r.VMID); err != nil {
+		logger.Warnf(ctx, "quiesce network for %s: %v", r.VMID, err)
 	}
+	if _, err := provider.Delete(ctx, []string{r.VMID}); err != nil {
+		return fmt.Errorf("teardown network for %s: %w", r.VMID, err)
+	}
+	return nil
 }
 
 // quiesceNet downs a stopped VM's owned NICs so a dead VMM's carrier-less TAP can't storm host softirqs via the tc mirred redirect; unquiesceNet reverses it on start.

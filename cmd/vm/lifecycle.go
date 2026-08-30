@@ -20,7 +20,11 @@ import (
 
 func (h *Handler) Create(cmd *cobra.Command, args []string) error {
 	name := requestedVMName(cmd, "macos-"+time.Now().Format("20060102-150405"))
-	return withVMLock(cliutil.CommandContext(cmd), home.VMDir(cmd, name), func() error {
+	dir, err := home.VMDir(cmd, name)
+	if err != nil {
+		return err
+	}
+	return withVMLock(cliutil.CommandContext(cmd), dir, func() error {
 		r, err := h.create(cmd, args[0], name)
 		if err != nil {
 			return err
@@ -32,7 +36,10 @@ func (h *Handler) Create(cmd *cobra.Command, args []string) error {
 
 func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 	name := requestedVMName(cmd, "macos-"+time.Now().Format("20060102-150405"))
-	dir := home.VMDir(cmd, name)
+	dir, err := home.VMDir(cmd, name)
+	if err != nil {
+		return err
+	}
 	return withVMLock(cliutil.CommandContext(cmd), dir, func() error {
 		r, err := h.create(cmd, args[0], name)
 		if err != nil {
@@ -51,25 +58,19 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	for _, n := range args {
-		dir := home.VMDir(cmd, n)
+		dir, err := home.VMDir(cmd, n)
+		if err != nil {
+			return err
+		}
 		if err := withVMLock(ctx, dir, func() error {
 			r, err := loadRec(dir)
 			if err != nil {
 				return err
 			}
 			// an op that held the lock (export, a racing run) may have restarted qemu; adopt it and only repair a dead vnc proxy
-			running := isRunning(r)
-			if !running {
-				var adoptErr error
-				running, adoptErr = adoptRunningQEMU(r)
-				if adoptErr != nil {
-					return adoptErr
-				}
-				if running {
-					if err := saveRec(dir, r); err != nil {
-						return err
-					}
-				}
+			running, err := reconcileRunningQEMU(dir, r)
+			if err != nil {
+				return err
 			}
 			if running {
 				if r.Netns != "" && r.VNCDisp >= 0 && !vncProxyRunning(dir) {
@@ -102,10 +103,16 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 	grace := graceFromFlags(cmd)
 	ctx := cliutil.CommandContext(cmd)
 	for _, n := range args {
-		dir := home.VMDir(cmd, n)
+		dir, err := home.VMDir(cmd, n)
+		if err != nil {
+			return err
+		}
 		if err := withVMLock(ctx, dir, func() error {
 			r, err := loadRec(dir)
 			if err != nil {
+				return err
+			}
+			if _, err := reconcileRunningQEMU(dir, r); err != nil {
 				return err
 			}
 			terminate(ctx, r, grace)
@@ -125,7 +132,10 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 	grace := graceFromFlags(cmd)
 	ctx := cliutil.CommandContext(cmd)
 	for _, n := range args {
-		dir := home.VMDir(cmd, n)
+		dir, err := home.VMDir(cmd, n)
+		if err != nil {
+			return err
+		}
 		if err := withVMLock(ctx, dir, func() error {
 			if _, err := os.Stat(dir); os.IsNotExist(err) {
 				return nil
@@ -134,9 +144,14 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 			}
 			// the flock stops a concurrent create/start from changing state between terminate and RemoveAll
 			if r, err := loadRec(dir); err == nil {
+				if _, err := reconcileRunningQEMU(dir, r); err != nil {
+					return err
+				}
 				terminate(ctx, r, grace)
 				stopVNCProxy(ctx, dir)
-				teardownNet(ctx, cmd, r)
+				if err := teardownNet(ctx, cmd, r); err != nil {
+					return err
+				}
 			} else {
 				cleanupCtx, cancel := context.WithTimeout(context.Background(), vmCleanupTimeout)
 				defer cancel()
@@ -307,7 +322,9 @@ func cleanupFailedVM(cmd *cobra.Command, dir string, r *record) error {
 	if r != nil {
 		terminate(ctx, r, 0)
 		stopVNCProxy(ctx, dir)
-		teardownNet(ctx, cmd, r)
+		if err := teardownNet(ctx, cmd, r); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	if err := procutil.TerminateByCmdline(ctx, qemuBinary, dir, 0); err != nil {
 		errs = append(errs, err)

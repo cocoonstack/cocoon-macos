@@ -14,7 +14,10 @@ import (
 )
 
 func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {
-	dir := home.VMDir(cmd, args[0])
+	dir, err := home.VMDir(cmd, args[0])
+	if err != nil {
+		return err
+	}
 	ctx := cliutil.CommandContext(cmd)
 	tag, _ := cmd.Flags().GetString("tag")
 	if tag == "" {
@@ -25,7 +28,11 @@ func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		if isRunning(r) {
+		running, err := reconcileRunningQEMU(dir, r)
+		if err != nil {
+			return err
+		}
+		if running {
 			return fmt.Errorf("vm %q is running (pid %d); stop it first (qemu-img snapshot on a live image corrupts it)", r.Name, r.PID)
 		}
 		if err := snapshotAllOrNothing(ctx, imagesToSnapshot(r), tag); err != nil {
@@ -41,7 +48,10 @@ func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {
 }
 
 func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
-	dir := home.VMDir(cmd, args[0])
+	dir, err := home.VMDir(cmd, args[0])
+	if err != nil {
+		return err
+	}
 	ctx := cliutil.CommandContext(cmd)
 	var tag string
 	if err := withVMLock(ctx, dir, func() error {
@@ -49,7 +59,10 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		wasRunning := isRunning(r)
+		wasRunning, err := reconcileRunningQEMU(dir, r)
+		if err != nil {
+			return err
+		}
 		if wasRunning {
 			if force, _ := cmd.Flags().GetBool("force"); !force {
 				return fmt.Errorf("vm %q is running; stop it first or pass --force to stop+restore", r.Name)

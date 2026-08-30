@@ -15,12 +15,27 @@ import (
 
 func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 	src := args[0]
-	srcRec, err := loadRec(home.VMDir(cmd, src))
+	srcDir, err := home.VMDir(cmd, src)
 	if err != nil {
 		return err
 	}
 	name := requestedVMName(cmd, src+"-clone-"+time.Now().Format("150405"))
-	return withVMLock(cliutil.CommandContext(cmd), home.VMDir(cmd, name), func() error {
+	dir, err := home.VMDir(cmd, name)
+	if err != nil {
+		return err
+	}
+	return withVMLocks(cliutil.CommandContext(cmd), []string{srcDir, dir}, func() error {
+		srcRec, err := loadRec(srcDir)
+		if err != nil {
+			return err
+		}
+		running, err := reconcileRunningQEMU(srcDir, srcRec)
+		if err != nil {
+			return err
+		}
+		if running {
+			return fmt.Errorf("vm %q is running; stop it before cloning", src)
+		}
 		return h.clone(cmd, srcRec, name)
 	})
 }

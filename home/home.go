@@ -34,9 +34,12 @@ func VMsDir(cmd *cobra.Command) string {
 	return filepath.Join(Dir(cmd), "vms")
 }
 
-// VMDir is the per-VM state directory under VMsDir.
-func VMDir(cmd *cobra.Command, name string) string {
-	return filepath.Join(VMsDir(cmd), name)
+// VMDir returns the per-VM state directory under VMsDir.
+func VMDir(cmd *cobra.Command, name string) (string, error) {
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
+		return "", fmt.Errorf("invalid vm name %q: must be one path component", name)
+	}
+	return filepath.Join(VMsDir(cmd), name), nil
 }
 
 // OpenStore opens the cloudimg store at the resolved state dir, returning the command context with it.

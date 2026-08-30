@@ -31,6 +31,7 @@ ssh -p 2222 cocoon@localhost      # password: cocoon
 cocoon-macos vm console m1
 
 # Snapshot and clone
+cocoon-macos vm stop m1
 cocoon-macos vm snapshot m1 --tag clean
 cocoon-macos vm clone m1 -n m2 --ssh-port 2223 --random-smbios
 

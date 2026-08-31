@@ -36,7 +36,7 @@ jobs:
       STAGE: ${{ github.event.inputs.stage }}
       DISK_SIZE: ${{ github.event.inputs.disk_size }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Resolve macOS target (shortname + ghcr repo/tag + qcow2 name)
         run: |
@@ -73,7 +73,7 @@ jobs:
 
       - name: Log in to ghcr
         if: ${{ github.event.inputs.stage != 'boot' }}
-        uses: docker/login-action@v4
+        uses: docker/login-action@v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -92,7 +92,7 @@ jobs:
 
       - name: Upload artifacts (screenshots / logs)
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: macos-build-${{ github.event.inputs.macos }}-${{ github.event.inputs.stage }}
           path: work/qemu-build/artifacts/

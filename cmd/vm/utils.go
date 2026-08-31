@@ -284,7 +284,7 @@ func resolveBase(cmd *cobra.Command, image, name string) (string, string, error)
 	if err != nil {
 		return "", "", err
 	}
-	vm := &types.VMConfig{Config: types.Config{Image: image}, Name: name}
+	vm := &types.VMConfig{Image: image, Name: name}
 	sc, _, err := store.Config(ctx, []*types.VMConfig{vm})
 	if err != nil {
 		return "", "", fmt.Errorf("resolve image %q (not a file, not in the store): %w", image, err)

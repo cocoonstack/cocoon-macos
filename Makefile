@@ -21,12 +21,17 @@ $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
 ## Tool versions
-GOLANGCILINT_VERSION ?= v2.12.2
+GOLANGCILINT_VERSION ?= v2.13.2
 GOLANGCILINT_ROOT := $(LOCALBIN)/golangci-lint-$(GOLANGCILINT_VERSION)
 GOLANGCILINT := $(GOLANGCILINT_ROOT)/golangci-lint
 
-GOFMT := $(LOCALBIN)/gofumpt
-GOIMPORTS := $(LOCALBIN)/goimports
+GOFUMPT_VERSION ?= v0.11.0
+GOFUMPT_ROOT := $(LOCALBIN)/gofumpt-$(GOFUMPT_VERSION)
+GOFMT := $(GOFUMPT_ROOT)/gofumpt
+
+GOIMPORTS_VERSION ?= v0.49.0
+GOIMPORTS_ROOT := $(LOCALBIN)/goimports-$(GOIMPORTS_VERSION)
+GOIMPORTS := $(GOIMPORTS_ROOT)/goimports
 
 ## Tool download targets
 .PHONY: golangci-lint
@@ -37,12 +42,12 @@ $(GOLANGCILINT):
 .PHONY: gofumpt
 gofumpt: $(GOFMT)
 $(GOFMT): | $(LOCALBIN)
-	GOBIN=$(LOCALBIN) go install mvdan.cc/gofumpt@latest
+	GOBIN=$(GOFUMPT_ROOT) go install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
 
 .PHONY: goimports
 goimports: $(GOIMPORTS)
 $(GOIMPORTS): | $(LOCALBIN)
-	GOBIN=$(LOCALBIN) go install golang.org/x/tools/cmd/goimports@latest
+	GOBIN=$(GOIMPORTS_ROOT) go install golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION)
 
 # --- Primary targets ---
 

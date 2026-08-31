@@ -68,7 +68,7 @@ func provisionNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err er
 	}
 	ctx := cliutil.CommandContext(cmd)
 	// CPU=1 => NetNumQueues yields a single-queue TAP matching QEMU's single-queue -netdev tap,ifname=
-	vmCfg := &types.VMConfig{Config: types.Config{CPU: 1}, Name: r.Name}
+	vmCfg := &types.VMConfig{CPU: 1, Name: r.Name}
 	nsPath, err := provider.Prepare(ctx, r.VMID, vmCfg)
 	if err != nil {
 		return "", "", "", fmt.Errorf("prepare network: %w", err)

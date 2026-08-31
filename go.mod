@@ -1,6 +1,6 @@
 module github.com/cocoonstack/cocoon-macos
 
-go 1.26.5
+go 1.27.0
 
 require (
 	github.com/cocoonstack/cocoon v0.5.10-0.20260817090435-cde2318b40d9

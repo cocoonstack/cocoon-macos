@@ -3,7 +3,7 @@ module github.com/cocoonstack/cocoon-macos
 go 1.27.0
 
 require (
-	github.com/cocoonstack/cocoon v0.5.10-0.20260817090435-cde2318b40d9
+	github.com/cocoonstack/cocoon v0.6.1
 	github.com/docker/go-units v0.5.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/projecteru2/core v0.1.3
@@ -24,7 +24,6 @@ require (
 	github.com/getsentry/sentry-go v0.48.0 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
@@ -41,8 +40,7 @@ require (
 	github.com/vishvananda/netns v0.0.5 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
-	golang.org/x/tools v0.49.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
 	google.golang.org/grpc v1.83.1 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect

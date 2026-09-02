@@ -51,6 +51,30 @@ func TestRMAdoptsQEMUWhenRecordPIDWasNotCommitted(t *testing.T) {
 	}
 }
 
+func TestRestoreRefusesRunningPasswordedVNC(t *testing.T) {
+	stateDir := t.TempDir()
+	vmDir, pid := startUnrecordedQEMU(t, stateDir, "macos-demo")
+	r, err := loadRec(vmDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.VNCDisp, r.VNCPassSet = 7, true
+	if err := saveRec(vmDir, r); err != nil {
+		t.Fatal(err)
+	}
+	cmd := newLifecycleTestCommand(t, stateDir)
+	cmd.Flags().String("tag", "", "")
+	cmd.Flags().Bool("force", true, "")
+
+	err = NewHandler().Restore(cmd, []string{"macos-demo"})
+	if err == nil || !strings.Contains(err.Error(), "password-gated VNC") {
+		t.Fatalf("Restore error = %v, want the password-gated VNC refusal", err)
+	}
+	if !utils.VerifyProcessCmdline(pid, qemuBinary, filepath.Join(vmDir, "disk.qcow2")) {
+		t.Error("qemu was terminated by a refused restore")
+	}
+}
+
 func TestCloneRejectsRunningSource(t *testing.T) {
 	stateDir := t.TempDir()
 	startUnrecordedQEMU(t, stateDir, "macos-src")

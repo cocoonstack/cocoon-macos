@@ -117,7 +117,9 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 			}
 			terminate(ctx, r, grace)
 			quiesceNet(cmd, r)
-			return saveStopped(ctx, dir, r)
+			stopVNCProxy(ctx, dir)
+			r.PID, r.VNCDisp, r.VNCPass, r.VNCPassSet = 0, -1, "", false // VNC is launch-scoped: gone with the qemu it belonged to
+			return saveRec(dir, r)
 		}); err != nil {
 			return err
 		}
@@ -268,6 +270,10 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		logger.Debugf(ctx, "running qemu in netns %s via `ip netns exec`", filepath.Base(r.Netns))
 	}
 	logger.Debug(ctx, "booting macOS guest via qemu-system-x86_64 (authoritative VMM; no Go equivalent)")
+	r.VNCPassSet = r.VNCPass != ""
+	if err := saveRec(dir, r); err != nil {
+		return err
+	}
 	c := launchCmd(r, args) // CNI: wraps in `ip netns exec` so -netdev tap finds the in-netns TAP
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
 	if err := c.Run(); err != nil {

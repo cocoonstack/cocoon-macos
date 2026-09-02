@@ -117,7 +117,9 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 			}
 			terminate(ctx, r, grace)
 			quiesceNet(cmd, r)
-			return saveStopped(ctx, dir, r)
+			stopVNCProxy(ctx, dir)
+			r.PID, r.VNCDisp, r.VNCPass = 0, -1, "" // VNC is launch-scoped: gone with the qemu it belonged to
+			return saveRec(dir, r)
 		}); err != nil {
 			return err
 		}

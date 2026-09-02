@@ -68,9 +68,7 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("vm %q is running; stop it first or pass --force to stop+restore", r.Name)
 			}
 			terminate(ctx, r, stopGracePeriod)
-			stopVNCProxy(ctx, dir)
-			r.PID, r.VNCDisp, r.VNCPass = 0, -1, ""
-			if err := saveRec(dir, r); err != nil {
+			if err := saveStopped(ctx, dir, r); err != nil {
 				return err
 			}
 		}

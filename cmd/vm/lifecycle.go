@@ -117,9 +117,7 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 			}
 			terminate(ctx, r, grace)
 			quiesceNet(cmd, r)
-			stopVNCProxy(ctx, dir)
-			r.PID, r.VNCDisp, r.VNCPass = 0, -1, "" // VNC is launch-scoped: gone with the qemu it belonged to
-			return saveRec(dir, r)
+			return saveStopped(ctx, dir, r)
 		}); err != nil {
 			return err
 		}
@@ -273,7 +271,6 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	c := launchCmd(r, args) // CNI: wraps in `ip netns exec` so -netdev tap finds the in-netns TAP
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
 	if err := c.Run(); err != nil {
-		stopVNCProxy(ctx, dir)
 		return fmt.Errorf("launch qemu: %w", err)
 	}
 	pid, err := utils.ReadPIDFile(pidfile)

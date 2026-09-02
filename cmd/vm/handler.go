@@ -37,6 +37,7 @@ type record struct {
 	Storage      int64    `json:"storage,omitempty"` // system-disk virtual size in bytes
 	VNCDisp      int      `json:"vnc"`
 	VNCPass      string   `json:"-"` // launch-scoped, set from the flag each start; never persisted (would leak at rest)
+	VNCPassSet   bool     `json:"vnc_password_set,omitempty"`
 	SSHPort      int      `json:"ssh_port"`
 	NetMode      string   `json:"net_mode,omitempty"`
 	Hugepages    bool     `json:"hugepages,omitempty"`

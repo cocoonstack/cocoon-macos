@@ -118,7 +118,7 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 			terminate(ctx, r, grace)
 			quiesceNet(cmd, r)
 			stopVNCProxy(ctx, dir)
-			r.PID, r.VNCDisp, r.VNCPass = 0, -1, "" // VNC is launch-scoped: gone with the qemu it belonged to
+			r.PID, r.VNCDisp, r.VNCPass, r.VNCPassSet = 0, -1, "", false // VNC is launch-scoped: gone with the qemu it belonged to
 			return saveRec(dir, r)
 		}); err != nil {
 			return err
@@ -296,6 +296,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 			return fmt.Errorf("start vnc proxy: %w", err)
 		}
 	}
+	r.VNCPassSet = r.VNCPass != ""
 	return saveRec(dir, r)
 }
 

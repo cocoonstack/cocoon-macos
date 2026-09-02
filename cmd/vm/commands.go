@@ -6,23 +6,8 @@ import (
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 )
 
-// Actions mirrors cocoon's cmd/vm Actions, re-declared rather than imported because cocoon's commands.go drags in the Linux-only CH/netlink backend.
-type Actions interface {
-	Create(cmd *cobra.Command, args []string) error
-	Run(cmd *cobra.Command, args []string) error
-	Start(cmd *cobra.Command, args []string) error
-	Stop(cmd *cobra.Command, args []string) error
-	List(cmd *cobra.Command, args []string) error
-	Inspect(cmd *cobra.Command, args []string) error
-	Console(cmd *cobra.Command, args []string) error
-	RM(cmd *cobra.Command, args []string) error
-	Snapshot(cmd *cobra.Command, args []string) error
-	Restore(cmd *cobra.Command, args []string) error
-	Clone(cmd *cobra.Command, args []string) error
-}
-
 // Command builds the `vm` subcommand tree against the given handler.
-func Command(h Actions) *cobra.Command {
+func Command(h *Handler) *cobra.Command {
 	vmCmd := &cobra.Command{Use: "vm", Short: "Manage macOS VMs"} // --state-dir is a root persistent flag
 
 	createCmd := &cobra.Command{

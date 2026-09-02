@@ -6,16 +6,8 @@ import (
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 )
 
-// Actions is the image-subcommand surface, backed by cocoon's cloudimg store.
-type Actions interface {
-	Pull(cmd *cobra.Command, args []string) error
-	List(cmd *cobra.Command, args []string) error
-	Inspect(cmd *cobra.Command, args []string) error
-	RM(cmd *cobra.Command, args []string) error
-}
-
 // Command builds the `image` subcommand tree against the given handler.
-func Command(h Actions) *cobra.Command {
+func Command(h *Handler) *cobra.Command {
 	imageCmd := &cobra.Command{Use: "image", Short: "Manage macOS disk images (reuses cocoon's cloudimg store)"} // --state-dir is a root persistent flag
 
 	pull := &cobra.Command{

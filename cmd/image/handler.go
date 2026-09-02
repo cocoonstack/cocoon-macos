@@ -16,9 +16,7 @@ import (
 
 const maxPullAttempts = 3
 
-var _ Actions = (*Handler)(nil)
-
-// Handler implements Actions on cocoon's cloudimg store.
+// Handler is the image command surface on cocoon's cloudimg store.
 type Handler struct{}
 
 // NewHandler returns a Handler backed by the cloudimg store.

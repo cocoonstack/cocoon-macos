@@ -67,9 +67,14 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 			if force, _ := cmd.Flags().GetBool("force"); !force {
 				return fmt.Errorf("vm %q is running; stop it first or pass --force to stop+restore", r.Name)
 			}
-			if r.VNCDisp >= 0 && (r.VNCPassSet || r.Netns != "") {
-				return fmt.Errorf("vm %q serves a password-gated VNC display and a relaunch cannot carry the password; stop it, restore, then start --vnc %d --vnc-password", r.Name, r.VNCDisp)
+			vncPass, _ := cmd.Flags().GetString("vnc-password")
+			if err := validateVNCPassword(vncPass); err != nil {
+				return err
 			}
+			if vncPass == "" && r.VNCDisp >= 0 && (r.VNCPassSet || r.Netns != "") {
+				return fmt.Errorf("vm %q serves a password-gated VNC display; pass --vnc-password to relaunch it, or stop, restore, then start --vnc %d --vnc-password", r.Name, r.VNCDisp)
+			}
+			r.VNCPass = vncPass
 			terminate(ctx, r, stopGracePeriod)
 			r.PID = 0
 			if err := saveRec(dir, r); err != nil {

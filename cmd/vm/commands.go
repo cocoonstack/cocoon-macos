@@ -89,6 +89,7 @@ func Command(h *Handler) *cobra.Command {
 	}
 	restoreCmd.Flags().String("tag", "", "snapshot tag to restore (default: newest)")
 	restoreCmd.Flags().Bool("force", false, "stop the VM, restore, then relaunch if it was running")
+	restoreCmd.Flags().String("vnc-password", "", "VNC password for the relaunch of a running VM whose display is password-gated (≤8 chars)")
 
 	cloneCmd := &cobra.Command{
 		Use:   "clone SRC",

@@ -68,7 +68,9 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("vm %q is running; stop it first or pass --force to stop+restore", r.Name)
 			}
 			terminate(ctx, r, stopGracePeriod)
-			r.PID = 0
+			if err := saveStopped(ctx, dir, r); err != nil {
+				return err
+			}
 		}
 		tag, _ = cmd.Flags().GetString("tag")
 		if tag == "" {

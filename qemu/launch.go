@@ -1,4 +1,4 @@
-// Package qemu builds and launches the qemu-system-x86_64 command that boots macOS (Sequoia 15 / Tahoe 26) via OpenCore on an x86 Linux/KVM host, spoofing a GenuineIntel Skylake-Client (TSX off, invariant TSC via CPUID) plus isa-applesmc OSK, OVMF and an OpenCore boot disk; the LongQT OpenCore EFI makes it boot identically on Intel and AMD.
+// Package qemu builds and launches the qemu-system-x86_64 command that boots macOS (Sequoia 15 / Tahoe 26) via OpenCore on an x86 Linux/KVM host, spoofing a GenuineIntel Skylake-Client (TSX off, invariant TSC via CPUID) plus isa-applesmc osk, OVMF and an OpenCore boot disk; the LongQT OpenCore EFI makes it boot identically on Intel and AMD.
 package qemu
 
 import (
@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	// OSK is the Apple SMC key required for macOS guests (public, from OSX-KVM).
-	OSK = "ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
+	// osk is the Apple SMC key required for macOS guests (public, from OSX-KVM).
+	osk = "ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"
 
 	// macOSCPU is the -cpu for macOS Sequoia/Tahoe; every token is load-bearing — a stripped "Skylake-Client-v4" makes a fresh image's first boot spin forever (regression dacf35c): -hle,-rtm drop TSX (macOS spins on it under nested KVM); +invtsc,vmware-cpuid-freq=on feed the TSC frequency via CPUID so macOS skips self-calibration; vendor=GenuineIntel is mandatory; the +perf flags are affirmed with check= so a base-model bump can't drop them. AMD support comes from the LongQT OpenCore EFI, not the -cpu.
 	macOSCPU = "Skylake-Client,-hle,-rtm,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on," +
@@ -66,7 +66,7 @@ func (s Spec) Args() []string {
 		"-device", "qemu-xhci,id=xhci",
 		"-device", "usb-kbd,bus=xhci.0",
 		"-device", "usb-tablet,bus=xhci.0",
-		"-device", "isa-applesmc,osk=" + OSK,
+		"-device", "isa-applesmc,osk=" + osk,
 		"-drive", "if=pflash,format=raw,readonly=on,file=" + s.OVMFCode,
 		"-drive", "if=pflash,format=" + varsFmt + ",file=" + s.OVMFVars,
 		"-smbios", "type=2",
@@ -85,9 +85,6 @@ func (s Spec) Args() []string {
 	// the SATA ports OpenCoreBoot (sata.2) and MacHDD (sata.4) leave free; the count is capped at 4 upstream
 	dataDiskPorts := []int{0, 1, 3, 5}
 	for i, path := range s.DataDisks {
-		if i >= len(dataDiskPorts) {
-			break
-		}
 		id := fmt.Sprintf("DataDisk%d", i)
 		a = append(a,
 			"-drive", fmt.Sprintf("id=%s,%s,file=%s", id, ahciDriveOpts, path),

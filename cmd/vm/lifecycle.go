@@ -19,38 +19,11 @@ import (
 )
 
 func (h *Handler) Create(cmd *cobra.Command, args []string) error {
-	name := requestedVMName(cmd, "macos-"+time.Now().Format("20060102-150405"))
-	dir, err := home.VMDir(cmd, name)
-	if err != nil {
-		return err
-	}
-	return withVMLock(cliutil.CommandContext(cmd), dir, func() error {
-		r, err := h.create(cmd, args[0], name)
-		if err != nil {
-			return err
-		}
-		fmt.Println(r.Name)
-		return nil
-	})
+	return h.createVM(cmd, args[0], false)
 }
 
 func (h *Handler) Run(cmd *cobra.Command, args []string) error {
-	name := requestedVMName(cmd, "macos-"+time.Now().Format("20060102-150405"))
-	dir, err := home.VMDir(cmd, name)
-	if err != nil {
-		return err
-	}
-	return withVMLock(cliutil.CommandContext(cmd), dir, func() error {
-		r, err := h.create(cmd, args[0], name)
-		if err != nil {
-			return err
-		}
-		if err := h.launch(cmd, dir, r); err != nil {
-			return errors.Join(err, cleanupFailedVM(cmd, dir, r))
-		}
-		fmt.Printf("%s (pid %d)\n", r.Name, r.PID)
-		return nil
-	})
+	return h.createVM(cmd, args[0], true)
 }
 
 func (h *Handler) Start(cmd *cobra.Command, args []string) error {
@@ -89,7 +62,7 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 			if err := h.launch(cmd, dir, r); err != nil {
 				return err
 			}
-			unquiesceNet(cmd, r)
+			toggleNet(cmd, r, true)
 			fmt.Printf("%s (pid %d)\n", n, r.PID)
 			return nil
 		}); err != nil {
@@ -116,7 +89,7 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			terminate(ctx, r, grace)
-			quiesceNet(cmd, r)
+			toggleNet(cmd, r, false)
 			stopVNCProxy(ctx, dir)
 			r.PID, r.VNCDisp, r.VNCPass, r.VNCPassSet = 0, -1, "", false // VNC is launch-scoped: gone with the qemu it belonged to
 			return saveRec(dir, r)
@@ -155,10 +128,7 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 			} else {
 				cleanupCtx, cancel := context.WithTimeout(context.Background(), vmCleanupTimeout)
 				defer cancel()
-				if cleanupErr := procutil.TerminateByCmdline(cleanupCtx, qemuBinary, dir, 0); cleanupErr != nil {
-					return cleanupErr
-				}
-				if cleanupErr := procutil.TerminateByCmdline(cleanupCtx, "qemu-nbd", dir, time.Second); cleanupErr != nil {
+				if cleanupErr := reapStrayHelpers(cleanupCtx, dir); cleanupErr != nil {
 					return cleanupErr
 				}
 			}
@@ -172,6 +142,29 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 		fmt.Println(n)
 	}
 	return nil
+}
+
+func (h *Handler) createVM(cmd *cobra.Command, image string, launch bool) error {
+	name := requestedVMName(cmd, "macos-"+time.Now().Format("20060102-150405"))
+	dir, err := home.VMDir(cmd, name)
+	if err != nil {
+		return err
+	}
+	return withVMLock(cliutil.CommandContext(cmd), dir, func() error {
+		r, err := h.create(cmd, image, name)
+		if err != nil {
+			return err
+		}
+		if !launch {
+			fmt.Println(r.Name)
+			return nil
+		}
+		if err := h.launch(cmd, dir, r); err != nil {
+			return errors.Join(err, cleanupFailedVM(cmd, dir, r))
+		}
+		fmt.Printf("%s (pid %d)\n", r.Name, r.PID)
+		return nil
+	})
 }
 
 func (h *Handler) create(cmd *cobra.Command, image, name string) (r *record, retErr error) {
@@ -330,16 +323,21 @@ func cleanupFailedVM(cmd *cobra.Command, dir string, r *record) error {
 			errs = append(errs, err)
 		}
 	}
-	if err := procutil.TerminateByCmdline(ctx, qemuBinary, dir, 0); err != nil {
-		errs = append(errs, err)
-	}
-	if err := procutil.TerminateByCmdline(ctx, "qemu-nbd", dir, time.Second); err != nil {
+	if err := reapStrayHelpers(ctx, dir); err != nil {
 		errs = append(errs, err)
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		errs = append(errs, fmt.Errorf("remove failed vm dir: %w", err))
 	}
 	return errors.Join(errs...)
+}
+
+// reapStrayHelpers kills the QEMU and qemu-nbd processes still referencing dir.
+func reapStrayHelpers(ctx context.Context, dir string) error {
+	return errors.Join(
+		procutil.TerminateByCmdline(ctx, qemuBinary, dir, 0),
+		procutil.TerminateByCmdline(ctx, "qemu-nbd", dir, time.Second),
+	)
 }
 
 // prepareOpenCore points r.OpenCore at the shared base, or with randomSMBIOS at a per-VM overlay whose config.plist is patched with a unique identity.

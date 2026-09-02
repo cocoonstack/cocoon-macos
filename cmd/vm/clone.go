@@ -41,7 +41,10 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 }
 
 func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr error) {
-	netMode, _ := cmd.Flags().GetString("net")
+	netMode := srcRec.NetMode
+	if cmd.Flags().Changed("net") {
+		netMode, _ = cmd.Flags().GetString("net")
+	}
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	if err := requireCNIVNCPassword(netMode == netCNI, vnc, vncPass); err != nil {
@@ -86,7 +89,7 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 	if err != nil {
 		return err
 	}
-	copied, err := copyDataDisks(dir, srcRec.DataDisks)
+	copied, err := copyDataDisks(ctx, dir, srcRec.DataDisks)
 	if err != nil {
 		return err
 	}

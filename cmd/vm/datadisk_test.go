@@ -36,7 +36,6 @@ func TestParseDataDisks(t *testing.T) {
 		{name: "directio rejected on macOS", raw: []string{"size=1G,directio=on"}, wantErr: true},
 		{name: "over the four-disk cap", raw: []string{"size=1G", "size=1G", "size=1G", "size=1G", "size=1G"}, wantErr: true},
 
-		// clone reserves the copied disks' names: collisions error and reserved count against the cap
 		{name: "collides with a reserved name", raw: []string{"name=data1,size=1G"}, reserved: []string{"data1"}, wantErr: true},
 		{name: "auto name skips reserved", raw: []string{"size=1G"}, reserved: []string{"data1"}, wantNames: []string{"data2"}, wantSizes: []int64{gib}},
 		{name: "reserved fills the cap", raw: []string{"size=1G", "size=1G"}, reserved: []string{"data1", "data2", "data3"}, wantErr: true},
@@ -69,7 +68,6 @@ func TestParseDataDisks(t *testing.T) {
 }
 
 func TestDataDiskNameRoundTrip(t *testing.T) {
-	// clone recovers reserved names from the copied disks' paths, so this must invert dataDiskPath
 	for _, name := range []string{"data1", "logs", "a-b_c"} {
 		if got := dataDiskName(dataDiskPath("/vm/dir", name)); got != name {
 			t.Errorf("dataDiskName(dataDiskPath(%q)) = %q", name, got)

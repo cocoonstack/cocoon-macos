@@ -23,7 +23,8 @@ type Handler struct{}
 func NewHandler() *Handler { return &Handler{} }
 
 func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
-	ctx, s, err := home.OpenStore(cmd)
+	ctx := cliutil.CommandContext(cmd)
+	s, err := home.OpenStore(ctx, cmd)
 	if err != nil {
 		return err
 	}
@@ -68,7 +69,8 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 }
 
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {
-	ctx, s, err := home.OpenStore(cmd)
+	ctx := cliutil.CommandContext(cmd)
+	s, err := home.OpenStore(ctx, cmd)
 	if err != nil {
 		return err
 	}
@@ -77,9 +79,9 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	return cliutil.OutputFormatted(cmd, imgs, func(w *tabwriter.Writer) {
-		fmt.Fprintln(w, "NAME\tTYPE\tSIZE\tDIGEST\tCREATED") //nolint:errcheck
+		fmt.Fprintln(w, "NAME\tTYPE\tSIZE\tDIGEST\tCREATED") //nolint:errcheck // the tabwriter flush reports the write error
 		for _, img := range imgs {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck // the tabwriter flush reports the write error
 				img.Name, img.Type, cliutil.FormatSize(img.Size),
 				shortDigest(img.ID), img.CreatedAt.Local().Format(time.DateTime))
 		}
@@ -87,7 +89,8 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 }
 
 func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
-	ctx, s, err := home.OpenStore(cmd)
+	ctx := cliutil.CommandContext(cmd)
+	s, err := home.OpenStore(ctx, cmd)
 	if err != nil {
 		return err
 	}
@@ -102,7 +105,8 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 }
 
 func (h *Handler) RM(cmd *cobra.Command, args []string) error {
-	ctx, s, err := home.OpenStore(cmd)
+	ctx := cliutil.CommandContext(cmd)
+	s, err := home.OpenStore(ctx, cmd)
 	if err != nil {
 		return err
 	}

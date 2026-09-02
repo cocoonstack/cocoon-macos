@@ -17,9 +17,7 @@ func provisionNet(_ *cobra.Command, _ *record) (tap, netns, mac string, err erro
 
 func teardownNet(_ context.Context, _ *cobra.Command, _ *record) error { return nil }
 
-func quiesceNet(_ *cobra.Command, _ *record) {}
-
-func unquiesceNet(_ *cobra.Command, _ *record) {}
+func toggleNet(_ *cobra.Command, _ *record, _ bool) {}
 
 func launchCmd(_ *record, args []string) *exec.Cmd {
 	return exec.Command(qemuBinary, args...)

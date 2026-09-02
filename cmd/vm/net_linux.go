@@ -74,11 +74,17 @@ func provisionNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err er
 		return "", "", "", fmt.Errorf("prepare network: %w", err)
 	}
 	cfgs, err := provider.Add(ctx, r.VMID, vmCfg, network.AddRange(0, 1)...)
-	if err != nil {
-		return "", "", "", fmt.Errorf("add network: %w", err)
+	if err == nil && len(cfgs) == 0 {
+		err = errors.New("network add returned no NIC")
 	}
-	if len(cfgs) == 0 {
-		return "", "", "", errors.New("network add returned no NIC")
+	if err != nil {
+		// Add rolls back only what it created itself; the netns from Prepare is ours to drop
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), vmCleanupTimeout)
+		defer cancel()
+		if delErr := provider.Delete(rctx, r.VMID); delErr != nil {
+			log.WithFunc("cmd.vm.provisionNet").Warnf(rctx, "rollback network for %s: %v", r.VMID, delErr)
+		}
+		return "", "", "", fmt.Errorf("add network: %w", err)
 	}
 	mac = cfgs[0].MAC
 	if r.NetMode != netCNI {
@@ -108,39 +114,29 @@ func teardownNet(ctx context.Context, cmd *cobra.Command, r *record) error {
 	if err := provider.Quiesce(ctx, r.VMID); err != nil {
 		logger.Warnf(ctx, "quiesce network for %s: %v", r.VMID, err)
 	}
-	if _, err := provider.Delete(ctx, []string{r.VMID}); err != nil {
+	if err := provider.Delete(ctx, r.VMID); err != nil {
 		return fmt.Errorf("teardown network for %s: %w", r.VMID, err)
 	}
 	return nil
 }
 
-// quiesceNet downs a stopped VM's owned NICs so a dead VMM's carrier-less TAP can't storm host softirqs via the tc mirred redirect; unquiesceNet reverses it on start.
-func quiesceNet(cmd *cobra.Command, r *record) {
+// toggleNet downs a stopped VM's owned NICs so a dead VMM's carrier-less TAP can't storm host softirqs via the tc mirred redirect, and brings them back up on start.
+func toggleNet(cmd *cobra.Command, r *record, up bool) {
 	if !r.TapOwned {
 		return
 	}
 	ctx := cliutil.CommandContext(cmd)
-	logger := log.WithFunc("cmd.vm.quiesceNet")
+	logger := log.WithFunc("cmd.vm.toggleNet")
+	verb, toggle := "quiesce", network.Network.Quiesce
+	if up {
+		verb, toggle = "unquiesce", network.Network.Unquiesce
+	}
 	if provider, err := newProvider(cmd, r); err != nil {
-		logger.Warnf(ctx, "quiesce network for %s: %v", r.VMID, err)
-	} else if err := provider.Quiesce(ctx, r.VMID); err != nil {
-		logger.Warnf(ctx, "quiesce network for %s: %v", r.VMID, err)
+		logger.Warnf(ctx, "%s network for %s: %v", verb, r.VMID, err)
+	} else if err := toggle(provider, ctx, r.VMID); err != nil {
+		logger.Warnf(ctx, "%s network for %s: %v", verb, r.VMID, err)
 	}
-	setTapLink(ctx, r, false)
-}
-
-func unquiesceNet(cmd *cobra.Command, r *record) {
-	if !r.TapOwned {
-		return
-	}
-	ctx := cliutil.CommandContext(cmd)
-	logger := log.WithFunc("cmd.vm.unquiesceNet")
-	if provider, err := newProvider(cmd, r); err != nil {
-		logger.Warnf(ctx, "unquiesce network for %s: %v", r.VMID, err)
-	} else if err := provider.Unquiesce(ctx, r.VMID); err != nil {
-		logger.Warnf(ctx, "unquiesce network for %s: %v", r.VMID, err)
-	}
-	setTapLink(ctx, r, true)
+	setTapLink(ctx, r, up)
 }
 
 // setTapLink flips a host-netns TAP's admin state: cocoon's bridge backend no-ops Quiesce, so the toggle lives here; a CNI TAP is inside a netns and is the provider's job.

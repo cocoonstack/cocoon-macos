@@ -37,13 +37,13 @@ func requireCNIVNCPassword(isCNI bool, vncDisp int, vncPass string) error {
 	return validateVNCPassword(vncPass)
 }
 
-// validateVNCPassword rejects control characters (a newline would inject a second HMP command) and enforces QEMU's 8-char VNC limit.
+// validateVNCPassword enforces QEMU's 8-byte VNC limit and keeps the password a single HMP token: a space ends it, a newline starts a second command.
 func validateVNCPassword(pw string) error {
 	if len(pw) > 8 {
-		return fmt.Errorf("--vnc-password must be at most 8 characters, got %d", len(pw))
+		return fmt.Errorf("--vnc-password must be at most 8 bytes, got %d", len(pw))
 	}
-	if strings.ContainsFunc(pw, unicode.IsControl) {
-		return errors.New("--vnc-password must not contain control characters")
+	if strings.ContainsFunc(pw, func(r rune) bool { return unicode.IsControl(r) || unicode.IsSpace(r) }) {
+		return errors.New("--vnc-password must not contain whitespace or control characters")
 	}
 	return nil
 }
@@ -96,14 +96,22 @@ func startVNCProxy(ctx context.Context, dir string, disp int) error {
 
 func vncProxyRunning(dir string) bool {
 	pid, err := utils.ReadPIDFile(filepath.Join(dir, vncProxyPID))
-	return err == nil && utils.VerifyProcessCmdline(pid, filepath.Base(os.Args[0]), filepath.Join(dir, vncSockName))
+	return err == nil && utils.VerifyProcessCmdline(pid, proxyBinaryName(), filepath.Join(dir, vncSockName))
+}
+
+// proxyBinaryName matches how startVNCProxy spawns the proxy: by the resolved executable, not argv[0].
+func proxyBinaryName() string {
+	if self, err := os.Executable(); err == nil {
+		return filepath.Base(self)
+	}
+	return filepath.Base(os.Args[0])
 }
 
 // stopVNCProxy kills a running proxy (best-effort). Zero grace: the proxy traps SIGTERM via the root NotifyContext and would keep accepting, and SIGKILL loses nothing on a stateless pipe.
 func stopVNCProxy(ctx context.Context, dir string) {
 	pidPath := filepath.Join(dir, vncProxyPID)
 	if pid, err := utils.ReadPIDFile(pidPath); err == nil {
-		_ = utils.TerminateProcess(ctx, pid, filepath.Base(os.Args[0]), filepath.Join(dir, vncSockName), 0)
+		_ = utils.TerminateProcess(ctx, pid, proxyBinaryName(), filepath.Join(dir, vncSockName), 0)
 	}
 	_ = os.Remove(pidPath)
 }

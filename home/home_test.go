@@ -9,7 +9,8 @@ import (
 
 func TestOpenStoreEmpty(t *testing.T) {
 	cmd := newTestCmd(t)
-	ctx, store, err := OpenStore(cmd)
+	ctx := t.Context()
+	store, err := OpenStore(ctx, cmd)
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}

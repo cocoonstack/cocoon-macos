@@ -38,11 +38,9 @@ func TestArgsMACAndVNC(t *testing.T) {
 	}) {
 		t.Fatalf("nic mac not on virtio-net-pci: %v", nics)
 	}
-	// Screen Sharing rejects bare None auth, so a password forces password=on
 	if got := argVals(args, "-vnc"); len(got) != 1 || got[0] != "127.0.0.1:9,password=on" {
 		t.Fatalf("vnc: %v", got)
 	}
-	// VNC enabled => -k en-us so the guacamole keyboard's shifted keysyms map correctly
 	if got := argVals(args, "-k"); len(got) != 1 || got[0] != "en-us" {
 		t.Errorf("keymap: got %v, want [en-us]", got)
 	}
@@ -54,7 +52,6 @@ func TestArgsMACAndVNC(t *testing.T) {
 }
 
 func TestArgsOVMFVarsFormat(t *testing.T) {
-	// qcow2 NVRAM needs format=qcow2 so qemu-img snapshot can roll it back; a raw .fd stays raw
 	s := Spec{Disk: "/v/d.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/vars.qcow2", CPUs: 1, Memory: "2048", VNCDisp: -1}
 	if !slices.ContainsFunc(s.Args(), func(a string) bool { return strings.Contains(a, "if=pflash,format=qcow2,file=/v/vars.qcow2") }) {
 		t.Fatalf("qcow2 NVRAM not format=qcow2: %v", s.Args())
@@ -78,7 +75,6 @@ func TestArgsDiskTuning(t *testing.T) {
 }
 
 func TestArgsDataDisks(t *testing.T) {
-	// four disks exercise the full free-port set; ports skip sata.2 (OpenCoreBoot) and sata.4 (MacHDD)
 	files := []string{"/v/data-a.qcow2", "/v/data-b.qcow2", "/v/data-c.qcow2", "/v/data-d.qcow2"}
 	wantPorts := []int{0, 1, 3, 5}
 	s := Spec{Disk: "/v/d.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/v.fd", CPUs: 2, Memory: "4096", VNCDisp: -1, DataDisks: files}
@@ -86,7 +82,6 @@ func TestArgsDataDisks(t *testing.T) {
 	devices := argVals(s.Args(), "-device")
 	for i, f := range files {
 		id := fmt.Sprintf("DataDisk%d", i)
-		// -drive: id/if=none pairing, the file, and the same perf tuning as MacHDD
 		if !slices.ContainsFunc(drives, func(d string) bool {
 			return strings.Contains(d, "id="+id) && strings.Contains(d, "if=none") &&
 				strings.Contains(d, "format=qcow2") && strings.Contains(d, "cache=writeback") &&

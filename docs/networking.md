@@ -35,7 +35,7 @@ the other net modes.
 
 ## Clones
 
-`vm clone` inherits the source's `--net` mode, and for `bridge` its bridge, unless `--net` or `--bridge` is given; every clone gets its own TAP (and netns under `cni`) and, with a fresh identity, its own MAC. A `tap` source names a host TAP that cannot be shared, so a clone of it needs its own `--tap`.
+`vm clone` inherits the source's `--net` mode, and for `bridge` its bridge, unless `--net` or `--bridge` is given; every clone gets its own TAP (and netns under `cni`) and, with a fresh identity, its own MAC. A source attached to a pre-created host TAP (`--tap tap0`) cannot share it, so its clone needs its own `--tap`; a `tap` source that auto-created its TAP on a bridge clones like `bridge`.
 
 ## VNC exposure
 

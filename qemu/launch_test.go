@@ -164,7 +164,6 @@ func TestArgsGuestRebootExitsQEMU(t *testing.T) {
 	}
 }
 
-// argVals returns each token immediately following flag in args.
 func argVals(args []string, flag string) []string {
 	var out []string
 	for i, a := range args {

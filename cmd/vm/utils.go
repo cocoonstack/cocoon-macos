@@ -179,12 +179,12 @@ func resetIncompleteVMDir(ctx context.Context, dir string) error {
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("stat vm record: %w", err)
 	}
-	if pids, err := utils.FindVMMByCmdline(qemuBinary, dir); err != nil {
+	if pids, err := utils.FindVMMByCmdline(qemuBinary, vmDirPrefix(dir)); err != nil {
 		return fmt.Errorf("scan qemu processes for %s: %w", dir, err)
 	} else if len(pids) > 0 {
 		return fmt.Errorf("refuse to replace incomplete vm dir %s: live qemu pids %v", dir, pids)
 	}
-	if err := procutil.TerminateByCmdline(ctx, "qemu-nbd", dir, time.Second); err != nil {
+	if err := procutil.TerminateByCmdline(ctx, "qemu-nbd", vmDirPrefix(dir), time.Second); err != nil {
 		return fmt.Errorf("cleanup stale qemu-nbd for %s: %w", dir, err)
 	}
 	if err := os.RemoveAll(dir); err != nil {
@@ -192,6 +192,9 @@ func resetIncompleteVMDir(ctx context.Context, dir string) error {
 	}
 	return nil
 }
+
+// vmDirPrefix is the cmdline needle for a VM dir: the separator keeps foo from matching foo-clone.
+func vmDirPrefix(dir string) string { return dir + "/" }
 
 // prepareNet returns the TAP ifname, netns path (CNI only), and guest MAC; user-mode and a pre-created --tap need no provisioning, every other mode goes through the per-OS provisionNet.
 func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err error) {

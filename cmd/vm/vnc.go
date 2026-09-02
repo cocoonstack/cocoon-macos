@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unicode"
@@ -27,7 +28,17 @@ const (
 	vncBasePort = 5900
 )
 
-var errCNIVNCPassRequired = errors.New("--vnc with --net cni serves VNC on a host port reachable off-box; --vnc-password is required")
+var (
+	errCNIVNCPassRequired = errors.New("--vnc with --net cni serves VNC on a host port reachable off-box; --vnc-password is required")
+
+	// proxyBinaryName matches how startVNCProxy spawns the proxy: by the resolved executable, not argv[0].
+	proxyBinaryName = sync.OnceValue(func() string {
+		if self, err := os.Executable(); err == nil {
+			return filepath.Base(self)
+		}
+		return filepath.Base(os.Args[0])
+	})
+)
 
 // requireCNIVNCPassword rejects an unauthenticated VNC display on a CNI VM (the proxy listens on 0.0.0.0); isCNI is the flag intent at create/clone or the resolved Netns at launch.
 func requireCNIVNCPassword(isCNI bool, vncDisp int, vncPass string) error {
@@ -97,14 +108,6 @@ func startVNCProxy(ctx context.Context, dir string, disp int) error {
 func vncProxyRunning(dir string) bool {
 	pid, err := utils.ReadPIDFile(filepath.Join(dir, vncProxyPID))
 	return err == nil && utils.VerifyProcessCmdline(pid, proxyBinaryName(), filepath.Join(dir, vncSockName))
-}
-
-// proxyBinaryName matches how startVNCProxy spawns the proxy: by the resolved executable, not argv[0].
-func proxyBinaryName() string {
-	if self, err := os.Executable(); err == nil {
-		return filepath.Base(self)
-	}
-	return filepath.Base(os.Args[0])
 }
 
 // stopVNCProxy kills a running proxy (best-effort). Zero grace: the proxy traps SIGTERM via the root NotifyContext and would keep accepting, and SIGKILL loses nothing on a stateless pipe.

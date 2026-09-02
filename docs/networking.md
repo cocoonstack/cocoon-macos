@@ -33,6 +33,10 @@ goes straight to that IP (no port-forward).
 `/opt/cni/bin`) point at a non-standard CNI installation; both are ignored by
 the other net modes.
 
+## Clones
+
+`vm clone` inherits the source's `--net` mode, and for `bridge` its bridge, unless `--net` or `--bridge` is given; every clone gets its own TAP (and netns under `cni`) and, with a fresh identity, its own MAC. A `tap` source names a host TAP that cannot be shared, so a clone of it needs its own `--tap`.
+
 ## VNC exposure
 
 VNC exposure depends on the net mode:

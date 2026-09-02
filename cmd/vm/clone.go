@@ -131,6 +131,11 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 		r.MAC = srcRec.MAC // prepareOpenCore only sets a fresh MAC for fresh identities
 	}
 	r.NetMode = netMode
+	if bridge, _ := cmd.Flags().GetString("bridge"); bridge != "" {
+		r.BridgeDev = bridge
+	} else if !cmd.Flags().Changed("net") {
+		r.BridgeDev = srcRec.BridgeDev
+	}
 	tapFlag, _ := cmd.Flags().GetString("tap")
 	r.Tap = tapFlag
 	if err = applyNet(cmd, r); err != nil {

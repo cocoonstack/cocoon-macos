@@ -3,6 +3,7 @@ package vm
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -137,5 +138,15 @@ func TestGraceFromFlags(t *testing.T) {
 				t.Errorf("graceFromFlags(force=%v): got %v, want %v", tt.force, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestVMDirPrefixSeparatesSiblingNames(t *testing.T) {
+	needle := vmDirPrefix("/state/vms/foo")
+	if !strings.Contains("qemu\x00-drive\x00file=/state/vms/foo/disk.qcow2", needle) {
+		t.Fatal("own disk path not matched")
+	}
+	if strings.Contains("qemu\x00-drive\x00file=/state/vms/foo-clone/disk.qcow2", needle) {
+		t.Fatal("sibling foo-clone matched")
 	}
 }

@@ -332,11 +332,10 @@ func cleanupFailedVM(cmd *cobra.Command, dir string, r *record) error {
 	return errors.Join(errs...)
 }
 
-// reapStrayHelpers kills the QEMU and qemu-nbd processes still referencing dir.
 func reapStrayHelpers(ctx context.Context, dir string) error {
 	return errors.Join(
-		procutil.TerminateByCmdline(ctx, qemuBinary, dir, 0),
-		procutil.TerminateByCmdline(ctx, "qemu-nbd", dir, time.Second),
+		procutil.TerminateByCmdline(ctx, qemuBinary, vmDirPrefix(dir), 0),
+		procutil.TerminateByCmdline(ctx, "qemu-nbd", vmDirPrefix(dir), time.Second),
 	)
 }
 

@@ -262,7 +262,7 @@ func terminate(ctx context.Context, r *record, grace time.Duration) {
 	}
 }
 
-// saveStopped persists a VM with no qemu behind it; VNC is launch-scoped, so its proxy and display go with the process.
+// VNC is launch-scoped: the proxy and display go with the qemu process.
 func saveStopped(ctx context.Context, dir string, r *record) error {
 	stopVNCProxy(ctx, dir)
 	r.PID, r.VNCDisp, r.VNCPass = 0, -1, ""

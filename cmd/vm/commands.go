@@ -33,7 +33,7 @@ func Command(h *Handler) *cobra.Command {
 		RunE:  h.Start,
 	}
 	startCmd.Flags().Int("vnc", -1, "VNC display number for this start only (n => port 590n); omit to keep VNC off")
-	startCmd.Flags().String("vnc-password", "", "VNC password for this start (≤8 chars, QEMU password auth)")
+	startCmd.Flags().String("vnc-password", "", "VNC password for this start (≤8 bytes, QEMU password auth)")
 
 	stopCmd := &cobra.Command{
 		Use:   "stop VM [VM...]",
@@ -89,11 +89,11 @@ func Command(h *Handler) *cobra.Command {
 	}
 	restoreCmd.Flags().String("tag", "", "snapshot tag to restore (default: newest)")
 	restoreCmd.Flags().Bool("force", false, "stop the VM, restore, then relaunch if it was running")
-	restoreCmd.Flags().String("vnc-password", "", "VNC password for the relaunch of a running VM whose display is password-gated (≤8 chars)")
+	restoreCmd.Flags().String("vnc-password", "", "VNC password for the relaunch of a running VM whose display is password-gated (≤8 bytes)")
 
 	cloneCmd := &cobra.Command{
 		Use:   "clone SRC",
-		Short: "Clone a stopped VM: fresh CoW overlay on the shared base + a unique Apple identity + its own TAP",
+		Short: "Clone a stopped VM: fresh CoW overlay on the shared base + a unique Apple identity + its own network endpoint (--net inherited from the source)",
 		Args:  cobra.ExactArgs(1),
 		RunE:  h.Clone,
 	}
@@ -119,7 +119,7 @@ func addVMFlags(cmd *cobra.Command) {
 	cmd.Flags().String("ovmf-code", "", "OVMF_CODE firmware (default: <state-dir>/firmware/OVMF_CODE.fd)")
 	cmd.Flags().String("ovmf-vars", "", "OVMF_VARS template, copied per-VM (default: <state-dir>/firmware/OVMF_VARS.fd)")
 	cmd.Flags().Bool("random-smbios", false, "inject a unique Apple SMBIOS identity per VM (serial/MLB/UUID/ROM)")
-	cmd.Flags().String("vnc-password", "", "set a VNC password (≤8 chars) so macOS Screen Sharing can connect (QEMU password auth)")
+	cmd.Flags().String("vnc-password", "", "set a VNC password (≤8 bytes) so macOS Screen Sharing can connect (QEMU password auth)")
 	cmd.Flags().String("net", "user", "network mode: user (SLIRP + --ssh-port hostfwd) | tap | cni | bridge (cocoon auto-creates the TAP, Linux only)")
 	cmd.Flags().String("tap", "", "pre-created host TAP ifname (skips auto-create; e.g. an existing bridge port / cocoon CNI tap)")
 	cmd.Flags().String("bridge", "", "existing Linux bridge to enslave the auto-created TAP to (--net tap|bridge)")

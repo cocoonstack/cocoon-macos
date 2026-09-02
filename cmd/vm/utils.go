@@ -143,7 +143,8 @@ func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir,
 	if err = resetIncompleteVMDir(cleanupCtx, dir); err != nil {
 		return "", "", "", "", err
 	}
-	base, digest, err := resolveBase(cmd, image, name)
+	ctx := cliutil.CommandContext(cmd)
+	base, digest, err := resolveBase(ctx, cmd, image, name)
 	if err != nil {
 		return "", "", "", "", err
 	}
@@ -156,11 +157,11 @@ func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir,
 		}
 	}()
 	overlay = filepath.Join(dir, "disk.qcow2")
-	if err = bakeOverlay(cliutil.CommandContext(cmd), base, overlay); err != nil {
+	if err = bakeOverlay(ctx, base, overlay); err != nil {
 		return "", "", "", "", err
 	}
 	ovmfVars = filepath.Join(dir, varsName)
-	if err = utils.ReflinkCopy(ovmfVars, varsSrc, utils.Sync); err != nil {
+	if err = utils.ReflinkCopy(ctx, ovmfVars, varsSrc, utils.Sync); err != nil {
 		return "", "", "", "", fmt.Errorf("copy OVMF_VARS: %w", err)
 	}
 	return dir, overlay, ovmfVars, digest, nil
@@ -178,12 +179,12 @@ func resetIncompleteVMDir(ctx context.Context, dir string) error {
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("stat vm record: %w", err)
 	}
-	if pids, err := utils.FindVMMByCmdline(qemuBinary, dir); err != nil {
+	if pids, err := utils.FindVMMByCmdline(qemuBinary, vmDirPrefix(dir)); err != nil {
 		return fmt.Errorf("scan qemu processes for %s: %w", dir, err)
 	} else if len(pids) > 0 {
 		return fmt.Errorf("refuse to replace incomplete vm dir %s: live qemu pids %v", dir, pids)
 	}
-	if err := procutil.TerminateByCmdline(ctx, "qemu-nbd", dir, time.Second); err != nil {
+	if err := procutil.TerminateByCmdline(ctx, "qemu-nbd", vmDirPrefix(dir), time.Second); err != nil {
 		return fmt.Errorf("cleanup stale qemu-nbd for %s: %w", dir, err)
 	}
 	if err := os.RemoveAll(dir); err != nil {
@@ -191,6 +192,9 @@ func resetIncompleteVMDir(ctx context.Context, dir string) error {
 	}
 	return nil
 }
+
+// vmDirPrefix is the cmdline needle for a VM dir: the separator keeps foo from matching foo-clone.
+func vmDirPrefix(dir string) string { return dir + "/" }
 
 // prepareNet returns the TAP ifname, netns path (CNI only), and guest MAC; user-mode and a pre-created --tap need no provisioning, every other mode goes through the per-OS provisionNet.
 func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err error) {
@@ -275,12 +279,12 @@ func hostIsAMD() bool {
 }
 
 // resolveBase returns the immutable base qcow2 (+ digest): a direct filesystem path, else an image ref resolved through cocoon's cloudimg store.
-func resolveBase(cmd *cobra.Command, image, name string) (string, string, error) {
+func resolveBase(ctx context.Context, cmd *cobra.Command, image, name string) (string, string, error) {
 	if _, err := os.Stat(image); err == nil {
 		return image, "", nil
 	}
 	ensureCloudimgFirmware(cmd)
-	ctx, store, err := home.OpenStore(cmd)
+	store, err := home.OpenStore(ctx, cmd)
 	if err != nil {
 		return "", "", err
 	}

@@ -113,11 +113,11 @@ func createDataDisks(ctx context.Context, dir string, specs []types.DataDiskSpec
 	return paths, nil
 }
 
-func copyDataDisks(dir string, src []string) ([]string, error) {
+func copyDataDisks(ctx context.Context, dir string, src []string) ([]string, error) {
 	paths := make([]string, 0, len(src))
 	for _, srcPath := range src {
 		dst := filepath.Join(dir, filepath.Base(srcPath))
-		if err := utils.ReflinkCopy(dst, srcPath, utils.Sync); err != nil {
+		if err := utils.ReflinkCopy(ctx, dst, srcPath, utils.Sync); err != nil {
 			return nil, fmt.Errorf("copy data disk %s: %w", filepath.Base(srcPath), err)
 		}
 		paths = append(paths, dst)

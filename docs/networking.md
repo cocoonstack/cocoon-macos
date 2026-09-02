@@ -33,6 +33,10 @@ goes straight to that IP (no port-forward).
 `/opt/cni/bin`) point at a non-standard CNI installation; both are ignored by
 the other net modes.
 
+## Clones
+
+`vm clone` inherits the source's `--net` mode, and for `bridge` its bridge, unless `--net` or `--bridge` is given; every clone gets its own TAP (and netns under `cni`) and, with a fresh identity, its own MAC. A source attached to a pre-created host TAP (`--tap tap0`) cannot share it, so its clone needs its own `--tap`; a `tap` source that auto-created its TAP on a bridge clones like `bridge`.
+
 ## VNC exposure
 
 VNC exposure depends on the net mode:
@@ -56,9 +60,9 @@ The VNC password is never written to disk — it is read from the flag on each s
 
 ### macOS Screen Sharing
 
-QEMU's default `None` auth **hangs macOS Screen Sharing**. Pass `--vnc-password <≤8 chars>` (applied
+QEMU's default `None` auth **hangs macOS Screen Sharing**. Pass `--vnc-password <≤8 bytes>` (applied
 via the QEMU monitor post-launch) so Screen Sharing prompts and connects. The launch is **rejected**
-(not truncated) if the password exceeds 8 characters or contains control characters — QEMU's VNC DES
+(not truncated) if the password exceeds 8 bytes or contains whitespace or control characters — QEMU's VNC DES
 auth only supports 8-byte passwords. Plain VNC clients (RealVNC/TigerVNC) work without a password on
 the loopback modes.
 

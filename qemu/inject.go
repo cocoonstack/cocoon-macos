@@ -36,7 +36,7 @@ type nbdConnection struct {
 
 // fresh context, not the caller's: disconnect must still run when the caller is unwinding after a timeout.
 func (c *nbdConnection) disconnect() error {
-	logger := log.WithFunc("qemu.disconnectNBD")
+	logger := log.WithFunc("qemu.nbdConnection.disconnect")
 	var commandErr error
 	disconnectCtx, disconnectCancel := context.WithTimeout(context.Background(), nbdCommandTimeout)
 	if out, err := exec.CommandContext(disconnectCtx, "qemu-nbd", "--disconnect", c.device).CombinedOutput(); err != nil {
@@ -164,6 +164,10 @@ func connectFreeNBD(ctx context.Context, ocPath string) (*nbdConnection, error) 
 	var lastErr error
 	pidFile := ocPath + ".nbd.pid"
 	_ = os.Remove(pidFile)
+	cmdlines, err := readProcCmdlines("/proc")
+	if err != nil {
+		return nil, err
+	}
 	for i := range nbdDeviceCount {
 		nbd := fmt.Sprintf("/dev/nbd%d", i)
 		if _, err := os.Stat(nbd); err != nil {
@@ -172,11 +176,7 @@ func connectFreeNBD(ctx context.Context, ocPath string) (*nbdConnection, error) 
 		if _, err := os.Stat(fmt.Sprintf("/sys/block/nbd%d/pid", i)); !os.IsNotExist(err) {
 			continue
 		}
-		referenced, err := processReferencesBlockDevice("/proc", nbd)
-		if err != nil {
-			return nil, fmt.Errorf("check whether %s is referenced by a process: %w", nbd, err)
-		}
-		if referenced {
+		if processReferencesBlockDevice(cmdlines, nbd) {
 			continue
 		}
 		out, cerr := exec.CommandContext(ctx, "qemu-nbd", qemuNBDConnectArgs(nbd, pidFile, ocPath)...).CombinedOutput()
@@ -205,12 +205,12 @@ func connectFreeNBD(ctx context.Context, ocPath string) (*nbdConnection, error) 
 	return nil, errors.New("no free /dev/nbd device (is the nbd module loaded)")
 }
 
-// a device can stay held by a blocked userspace op after the kernel drops its sysfs pid; reusing it wedges the next attach.
-func processReferencesBlockDevice(procRoot, device string) (bool, error) {
+func readProcCmdlines(procRoot string) ([]string, error) {
 	entries, err := os.ReadDir(procRoot)
 	if err != nil {
-		return false, fmt.Errorf("read %s: %w", procRoot, err)
+		return nil, fmt.Errorf("read %s: %w", procRoot, err)
 	}
+	var cmdlines []string
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -224,15 +224,23 @@ func processReferencesBlockDevice(procRoot, device string) (bool, error) {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return false, fmt.Errorf("read %s: %w", cmdlinePath, err)
+			return nil, fmt.Errorf("read %s: %w", cmdlinePath, err)
 		}
-		for arg := range strings.SplitSeq(string(cmdline), "\x00") {
+		cmdlines = append(cmdlines, string(cmdline))
+	}
+	return cmdlines, nil
+}
+
+// a device can stay held by a blocked userspace op after the kernel drops its sysfs pid; reusing it wedges the next attach.
+func processReferencesBlockDevice(cmdlines []string, device string) bool {
+	for _, cmdline := range cmdlines {
+		for arg := range strings.SplitSeq(cmdline, "\x00") {
 			if nbdArgReferencesDevice(arg, device) {
-				return true, nil
+				return true
 			}
 		}
 	}
-	return false, nil
+	return false
 }
 
 func nbdArgReferencesDevice(arg, device string) bool {

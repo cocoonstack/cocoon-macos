@@ -38,11 +38,9 @@ func TestArgsMACAndVNC(t *testing.T) {
 	}) {
 		t.Fatalf("nic mac not on virtio-net-pci: %v", nics)
 	}
-	// Screen Sharing rejects bare None auth, so a password forces password=on
 	if got := argVals(args, "-vnc"); len(got) != 1 || got[0] != "127.0.0.1:9,password=on" {
 		t.Fatalf("vnc: %v", got)
 	}
-	// VNC enabled => -k en-us so the guacamole keyboard's shifted keysyms map correctly
 	if got := argVals(args, "-k"); len(got) != 1 || got[0] != "en-us" {
 		t.Errorf("keymap: got %v, want [en-us]", got)
 	}
@@ -54,7 +52,6 @@ func TestArgsMACAndVNC(t *testing.T) {
 }
 
 func TestArgsOVMFVarsFormat(t *testing.T) {
-	// qcow2 NVRAM needs format=qcow2 so qemu-img snapshot can roll it back; a raw .fd stays raw
 	s := Spec{Disk: "/v/d.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/vars.qcow2", CPUs: 1, Memory: "2048", VNCDisp: -1}
 	if !slices.ContainsFunc(s.Args(), func(a string) bool { return strings.Contains(a, "if=pflash,format=qcow2,file=/v/vars.qcow2") }) {
 		t.Fatalf("qcow2 NVRAM not format=qcow2: %v", s.Args())
@@ -78,7 +75,6 @@ func TestArgsDiskTuning(t *testing.T) {
 }
 
 func TestArgsDataDisks(t *testing.T) {
-	// four disks exercise the full free-port set; ports skip sata.2 (OpenCoreBoot) and sata.4 (MacHDD)
 	files := []string{"/v/data-a.qcow2", "/v/data-b.qcow2", "/v/data-c.qcow2", "/v/data-d.qcow2"}
 	wantPorts := []int{0, 1, 3, 5}
 	s := Spec{Disk: "/v/d.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/v.fd", CPUs: 2, Memory: "4096", VNCDisp: -1, DataDisks: files}
@@ -86,7 +82,6 @@ func TestArgsDataDisks(t *testing.T) {
 	devices := argVals(s.Args(), "-device")
 	for i, f := range files {
 		id := fmt.Sprintf("DataDisk%d", i)
-		// -drive: id/if=none pairing, the file, and the same perf tuning as MacHDD
 		if !slices.ContainsFunc(drives, func(d string) bool {
 			return strings.Contains(d, "id="+id) && strings.Contains(d, "if=none") &&
 				strings.Contains(d, "format=qcow2") && strings.Contains(d, "cache=writeback") &&
@@ -95,13 +90,13 @@ func TestArgsDataDisks(t *testing.T) {
 		}) {
 			t.Errorf("data disk %d drive missing/mistuned: %v", i, drives)
 		}
-		// -device: ide-hd on the expected free SATA port, bound to the matching drive id
+
 		want := fmt.Sprintf("ide-hd,bus=sata.%d,drive=%s", wantPorts[i], id)
 		if !slices.Contains(devices, want) {
 			t.Errorf("data disk %d device: want %q in %v", i, want, devices)
 		}
 	}
-	// no data disks => no DataDisk drives at all
+
 	s.DataDisks = nil
 	if slices.ContainsFunc(argVals(s.Args(), "-drive"), func(d string) bool { return strings.Contains(d, "DataDisk") }) {
 		t.Errorf("no data disks must not emit DataDisk drives")
@@ -110,14 +105,14 @@ func TestArgsDataDisks(t *testing.T) {
 
 func TestArgsHugepages(t *testing.T) {
 	base := Spec{Disk: "/v/d.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/v.fd", CPUs: 2, Memory: "4096", VNCDisp: -1}
-	// off by default
+
 	if slices.ContainsFunc(base.Args(), func(a string) bool { return strings.Contains(a, "memory-backend") }) {
 		t.Fatalf("hugepages off must not add a memory-backend: %v", base.Args())
 	}
 	if got := argVals(base.Args(), "-machine"); len(got) != 1 || got[0] != "q35" {
 		t.Fatalf("machine without hugepages: %v", got)
 	}
-	// on: memfd hugetlb backend sized to the guest RAM, and -machine references it
+
 	h := base
 	h.Hugepages = true
 	if !slices.ContainsFunc(h.Args(), func(a string) bool {
@@ -139,7 +134,7 @@ func TestArgsCPU(t *testing.T) {
 	if !strings.HasPrefix(cpu[0], "Skylake-Client,") {
 		t.Fatalf("-cpu base must be Skylake-Client (v4 enables TSX -> macOS first-boot spins): %s", cpu[0])
 	}
-	// guard every load-bearing token so a "simplification" can't reintroduce regression dacf35c
+
 	for _, f := range []string{
 		"vendor=GenuineIntel", "kvm=on", "-hle", "-rtm", "+invtsc", "vmware-cpuid-freq=on",
 		"+pcid", "+invpcid", "+tsc-deadline", "+rdtscp",
@@ -169,7 +164,6 @@ func TestArgsGuestRebootExitsQEMU(t *testing.T) {
 	}
 }
 
-// argVals returns each token immediately following flag in args.
 func argVals(args []string, flag string) []string {
 	var out []string
 	for i, a := range args {

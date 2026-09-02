@@ -15,7 +15,6 @@ import (
 	"howett.net/plist"
 )
 
-// sampleConfig mirrors OSX-KVM's config.plist so patchPlist round-trips a realistic input.
 const sampleConfig = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -134,18 +133,20 @@ func TestProcessReferencesBlockDevice(t *testing.T) {
 	writeCmdline("104", "helper", "/dev/nbd01")
 
 	for _, device := range []string{"/dev/nbd0", "/dev/nbd1", "/dev/nbd2"} {
-		busy, err := processReferencesBlockDevice(procRoot, device)
+		cmdlines, err := readProcCmdlines(procRoot)
 		if err != nil {
-			t.Fatalf("processReferencesBlockDevice(%s): %v", device, err)
+			t.Fatalf("readProcCmdlines: %v", err)
 		}
+		busy := processReferencesBlockDevice(cmdlines, device)
 		if !busy {
 			t.Errorf("processReferencesBlockDevice(%s) = false, want true", device)
 		}
 	}
-	busy, err := processReferencesBlockDevice(procRoot, "/dev/nbd3")
+	cmdlines, err := readProcCmdlines(procRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
+	busy := processReferencesBlockDevice(cmdlines, "/dev/nbd3")
 	if busy {
 		t.Error("unreferenced /dev/nbd3 reported busy")
 	}

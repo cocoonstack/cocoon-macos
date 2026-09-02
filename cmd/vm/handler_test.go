@@ -41,7 +41,6 @@ func TestStartAlreadyRunningIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A real process whose argv0+args satisfy isRunning without qemu/KVM.
 	fakeQEMU := filepath.Join(t.TempDir(), qemuBinary)
 	if err := os.Symlink("/bin/sh", fakeQEMU); err != nil {
 		t.Fatal(err)
@@ -155,9 +154,7 @@ func TestImagesToSnapshot(t *testing.T) {
 		rec  *record
 		want []string
 	}{
-		// raw .fd NVRAM can't hold internal snapshots, so only the disk is captured
 		{"raw nvram captures disk only", &record{Disk: "/v/disk.qcow2", OVMFVars: "/v/OVMF_VARS.fd"}, []string{"/v/disk.qcow2"}},
-		// a qcow2 NVRAM rolls back too
 		{"qcow2 nvram captures both", &record{Disk: "/v/disk.qcow2", OVMFVars: "/v/OVMF_VARS.qcow2"}, []string{"/v/disk.qcow2", "/v/OVMF_VARS.qcow2"}},
 	}
 	for _, tt := range tests {
@@ -169,7 +166,6 @@ func TestImagesToSnapshot(t *testing.T) {
 	}
 }
 
-// auto-create/CNI/bridge need Linux + CAP_NET_ADMIN; they are smoke-tested on the testbed.
 func TestPrepareNetNoProvision(t *testing.T) {
 	tests := []struct {
 		name                        string

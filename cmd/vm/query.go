@@ -28,9 +28,9 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	return cliutil.OutputFormatted(cmd, recs, func(w *tabwriter.Writer) {
-		fmt.Fprintln(w, "NAME\tSTATE\tCPU\tMEM\tNET\tVNC\tSSH\tIMAGE\tCREATED") //nolint:errcheck
+		fmt.Fprintln(w, "NAME\tSTATE\tCPU\tMEM\tNET\tVNC\tSSH\tIMAGE\tCREATED") //nolint:errcheck // the tabwriter flush reports the write error
 		for _, r := range recs {
-			fmt.Fprintf(w, "%s\t%s\t%d\t%sM\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck
+			fmt.Fprintf(w, "%s\t%s\t%d\t%sM\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck // the tabwriter flush reports the write error
 				r.Name, vmState(r), r.CPUs, r.Memory, cmp.Or(r.NetMode, netUser),
 				vncCol(r), sshCol(r), r.Image, formatTime(r.Created))
 		}

@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cocoonstack/cocoon/cmd/cliutil"
+	"github.com/cocoonstack/cocoon/cmd/core"
 	"github.com/cocoonstack/cocoon/images/cloudimg"
 	metajson "github.com/cocoonstack/cocoon/meta/json"
 )
@@ -42,16 +42,15 @@ func VMDir(cmd *cobra.Command, name string) (string, error) {
 	return filepath.Join(VMsDir(cmd), name), nil
 }
 
-// OpenStore opens the cloudimg store at the resolved state dir, returning the command context with it.
-func OpenStore(cmd *cobra.Command) (context.Context, *cloudimg.CloudImg, error) {
-	ctx := cliutil.CommandContext(cmd)
-	metaStore, err := metajson.Open(cloudimg.NewConfig(Dir(cmd), 0).JSONNamespace())
+// OpenStore opens the cloudimg store at the resolved state dir.
+func OpenStore(ctx context.Context, cmd *cobra.Command) (*cloudimg.CloudImg, error) {
+	metaStore, err := metajson.Open(core.ImageJSONNamespace(&cloudimg.NewConfig(Dir(cmd), 0).BaseConfig))
 	if err != nil {
-		return ctx, nil, fmt.Errorf("open meta store: %w", err)
+		return nil, fmt.Errorf("open meta store: %w", err)
 	}
 	s, err := cloudimg.New(ctx, Dir(cmd), 0, metaStore) // 0 = cloudimg's default pull connections
 	if err != nil {
-		return ctx, nil, fmt.Errorf("init cloudimg store: %w", err)
+		return nil, fmt.Errorf("init cloudimg store: %w", err)
 	}
-	return ctx, s, nil
+	return s, nil
 }

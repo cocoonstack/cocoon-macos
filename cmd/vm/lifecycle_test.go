@@ -65,6 +65,7 @@ func TestRestoreRefusesRunningPasswordedVNC(t *testing.T) {
 	cmd := newLifecycleTestCommand(t, stateDir)
 	cmd.Flags().String("tag", "", "")
 	cmd.Flags().Bool("force", true, "")
+	cmd.Flags().String("vnc-password", "", "")
 
 	err = NewHandler().Restore(cmd, []string{"macos-demo"})
 	if err == nil || !strings.Contains(err.Error(), "password-gated VNC") {

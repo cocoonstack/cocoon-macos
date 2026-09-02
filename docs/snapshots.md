@@ -8,6 +8,14 @@ cocoon-macos vm snapshot m1 --tag clean
 cocoon-macos vm restore  m1 --tag clean   # --force to stop+restore+relaunch a running VM
 ```
 
+`--force` on a running VM keeps its VNC display across the relaunch. A display
+that was started with `--vnc-password` (every CNI display, optionally others)
+needs the password again: pass `--vnc-password` to `restore`, or stop, restore
+and `start --vnc N --vnc-password`; without it the restore is refused before
+any disk is touched. VMs launched by a cocoon-macos older than this rule with a
+passworded non-CNI display are not recognised as password-gated until their
+next stop or start.
+
 Snapshots are **offline qcow2-internal** (`qemu-img snapshot`, VM stopped) and capture **disk state
 only**. Live RAM snapshot is intentionally impossible here: `-cpu +invtsc` makes the macOS guest
 non-migratable, so resume-from-RAM can't work. This is by design (see [Roadmap](roadmap.md)).

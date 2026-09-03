@@ -31,7 +31,8 @@ goes straight to that IP (no port-forward).
 
 `--cni-conf-dir` (default `/etc/cni/net.d`) and `--cni-bin-dir` (default
 `/opt/cni/bin`) point at a non-standard CNI installation; both are ignored by
-the other net modes.
+the other net modes and are remembered in the VM record, so `rm` tears the
+NIC down without repeating them.
 
 ## Clones
 

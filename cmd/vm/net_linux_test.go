@@ -14,7 +14,7 @@ import (
 )
 
 func TestNetConfScope(t *testing.T) {
-	conf := netConf(&cobra.Command{})
+	conf := netConf(&cobra.Command{}, &record{})
 	if got, want := conf.NetScope, "cm"; got != want {
 		t.Errorf("NetScope = %q, want %q", got, want)
 	}

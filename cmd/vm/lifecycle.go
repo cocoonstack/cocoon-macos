@@ -207,11 +207,13 @@ func (h *Handler) create(cmd *cobra.Command, image, name string) (r *record, ret
 	tap, _ := cmd.Flags().GetString("tap")
 	huge, _ := cmd.Flags().GetBool("hugepages")
 	exitOnReboot, _ := cmd.Flags().GetBool("exit-on-reboot")
+	cniConfDir, _ := cmd.Flags().GetString("cni-conf-dir")
+	cniBinDir, _ := cmd.Flags().GetString("cni-bin-dir")
 	r = &record{
 		Name: name, Image: image, ImageDigest: digest, Disk: overlay, OVMFCode: code, OVMFVars: ovmfVars,
 		CPUs: cpus, Memory: mem, Storage: storage, VNCDisp: vnc, SSHPort: ssh, VNCPass: vncPass, NetMode: netMode, Tap: tap, Hugepages: huge,
-		ExitOnReboot: exitOnReboot,
-		VMID:         utils.GenerateID(), Created: time.Now().Format(time.RFC3339),
+		ExitOnReboot: exitOnReboot, CNIConfDir: cniConfDir, CNIBinDir: cniBinDir,
+		VMID: utils.GenerateID(), Created: time.Now().Format(time.RFC3339),
 	}
 	if r.DataDisks, err = createDataDisks(ctx, dir, diskSpecs); err != nil {
 		return nil, err

@@ -54,9 +54,7 @@ func TestWithVMLockSurvivesVMDirRemoval(t *testing.T) {
 	acquired := make(chan struct{})
 	release := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := withVMLock(t.Context(), dir, func() error {
 			close(acquired)
 			<-release
@@ -64,22 +62,20 @@ func TestWithVMLockSurvivesVMDirRemoval(t *testing.T) {
 		}); err != nil {
 			t.Errorf("first lock: %v", err)
 		}
-	}()
+	})
 	<-acquired
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
 	second := make(chan struct{})
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := withVMLock(t.Context(), dir, func() error {
 			close(second)
 			return nil
 		}); err != nil {
 			t.Errorf("second lock: %v", err)
 		}
-	}()
+	})
 	select {
 	case <-second:
 		t.Fatal("second operation acquired while first still held the VM lock")

@@ -53,6 +53,8 @@ type record struct {
 	TapOwned     bool         `json:"tap_owned,omitempty"`  // cocoon auto-created the TAP (tear down on rm); false for user --tap
 	BridgeDev    string       `json:"bridge_dev,omitempty"` // bridge to enslave the TAP to; persisted so rm can tear down without --bridge
 	Netns        string       `json:"netns,omitempty"`      // netns path the qemu process runs in (CNI); "" otherwise
+	CNIConfDir   string       `json:"cni_conf_dir,omitempty"`
+	CNIBinDir    string       `json:"cni_bin_dir,omitempty"`
 
 	PID int `json:"pid"`
 

@@ -28,19 +28,19 @@ import (
 const netScope = "cm"
 
 // netConf is the cocoon network config: bridge/CNI provisioning shares cocoon's forwarding plane, keyed under our own device family.
-func netConf(cmd *cobra.Command) *config.Config {
+func netConf(cmd *cobra.Command, r *record) *config.Config {
 	return &config.Config{
 		RootDir:    home.Dir(cmd),
 		DNS:        "8.8.8.8,1.1.1.1",
-		CNIConfDir: flagOr(cmd, "cni-conf-dir", "/etc/cni/net.d"),
-		CNIBinDir:  flagOr(cmd, "cni-bin-dir", "/opt/cni/bin"),
+		CNIConfDir: cmp.Or(flagOr(cmd, "cni-conf-dir", ""), r.CNIConfDir, "/etc/cni/net.d"),
+		CNIBinDir:  cmp.Or(flagOr(cmd, "cni-bin-dir", ""), r.CNIBinDir, "/opt/cni/bin"),
 		NetScope:   netScope,
 	}
 }
 
 // newProvider builds the cocoon network provider: tap/bridge both use the bridge backend (QEMU opens the TAP in the host netns, so it must be a host-side bridge port); cni's TAP lives in a netns.
 func newProvider(cmd *cobra.Command, r *record) (network.Network, error) {
-	conf := netConf(cmd)
+	conf := netConf(cmd, r)
 	switch r.NetMode {
 	case netCNI:
 		store, err := metajson.Open(cni.NewConfig(conf).JSONNamespace())
@@ -100,7 +100,7 @@ func teardownNet(ctx context.Context, cmd *cobra.Command, r *record) error {
 	}
 	bridgeMode := r.NetMode == netTAP || r.NetMode == netBridge
 	if bridgeMode {
-		defer bridge.CleanupTAPs(netConf(cmd).BridgeTAPPrefix(), []string{r.VMID})
+		defer bridge.CleanupTAPs(netConf(cmd, r).BridgeTAPPrefix(), []string{r.VMID})
 	}
 	logger := log.WithFunc("cmd.vm.teardownNet")
 	provider, err := newProvider(cmd, r)

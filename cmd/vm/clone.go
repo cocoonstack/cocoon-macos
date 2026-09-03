@@ -138,6 +138,8 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 	}
 	tapFlag, _ := cmd.Flags().GetString("tap")
 	r.Tap = tapFlag
+	r.CNIConfDir = flagOr(cmd, "cni-conf-dir", srcRec.CNIConfDir)
+	r.CNIBinDir = flagOr(cmd, "cni-bin-dir", srcRec.CNIBinDir)
 	if err = applyNet(cmd, r); err != nil {
 		return err
 	}

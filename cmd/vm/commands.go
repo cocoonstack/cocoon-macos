@@ -72,6 +72,8 @@ func Command(h *Handler) *cobra.Command {
 		RunE:  h.RM,
 	}
 	rmCmd.Flags().Bool("force", false, "force kill (immediate SIGKILL, skip the ACPI grace window)")
+	rmCmd.Flags().String("cni-conf-dir", "", "CNI config dir for a VM created before the record remembered it")
+	rmCmd.Flags().String("cni-bin-dir", "", "CNI plugin dir for a VM created before the record remembered it")
 
 	snapshotCmd := &cobra.Command{
 		Use:   "snapshot VM",

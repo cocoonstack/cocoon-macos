@@ -168,6 +168,9 @@ func TestHMPRepliedFlagsAnyMessage(t *testing.T) {
 		{"echo and prompt only", " set_password vnc abcd\r\n(qemu) ", false},
 		{"invalid parameter", " set_password vnc ab cd\r\nError: invalid parameter value: cd\r\n(qemu) ", true},
 		{"display inactive", " set_password vnc abcd\r\nCould not set password\r\n(qemu) ", true},
+		{"unterminated quote", " set_password vnc \"abc\r\nset_password: string expected\r\nTry \"help set_password\" for more information\r\n(qemu) ", true},
+		{"readline redraw echo", "s\x1b[K\x1b[Dse\x1b[K\x1b[D\x1b[Dset_password vnc abcd\r\n(qemu) ", false},
+		{"readline redraw then rejection", "s\x1b[K\x1b[Dset_password vnc \"abc\r\nset_password: string expected\r\n(qemu) ", true},
 	} {
 		if got := hmpReplied(tc.out); got != tc.want {
 			t.Errorf("%s: hmpReplied = %v, want %v", tc.name, got, tc.want)

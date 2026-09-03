@@ -365,9 +365,14 @@ func setVNCPassword(ctx context.Context, monSock, pw string) error {
 }
 
 func hmpReplied(out string) bool {
+	echoed := false
 	for line := range strings.SplitSeq(out, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, strings.TrimSpace(hmpPrompt)) || strings.Contains(line, "set_password") {
+		if line == "" || strings.HasPrefix(line, strings.TrimSpace(hmpPrompt)) {
+			continue
+		}
+		if !echoed && strings.Contains(line, "set_password ") {
+			echoed = true
 			continue
 		}
 		return true

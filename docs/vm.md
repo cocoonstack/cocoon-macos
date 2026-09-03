@@ -15,11 +15,13 @@ Every VM boots the same way on Intel and AMD:
   `vmware-cpuid-freq=on`. The TSC flags are load-bearing: without them macOS self-calibrates the TSC
   and spins pathologically under nested KVM on first boot. `--cpus` must be a positive even number;
   create/run/clone reject odd counts before VM state is created because this macOS stack does not boot them.
-- **OpenCore picker:** the shipped `OpenCore.qcow2` template boots the default entry immediately with
-  no picker UI (a visible picker can't be driven reliably headlessly — OpenCanopy cancels its
-  `Timeout` countdown on stray USB-enumeration input and then waits forever). `--random-smbios`
-  additionally patches `config.plist` in place to inject a per-VM SMBIOS identity; the default
-  `vm create` / `vm run` path leaves the template's config untouched.
+- **OpenCore picker:** `--random-smbios` patches `config.plist` in place — not just to inject a
+  per-VM SMBIOS identity, but also to set `Misc/Boot` `ShowPicker=false`, `HideAuxiliary=true`,
+  `Timeout=5` and `UEFI/Quirks` `RequestBootVarRouting=true` (a visible picker can't be driven
+  reliably headlessly — OpenCanopy cancels its `Timeout` countdown on stray USB-enumeration input
+  and then waits forever). The default `vm create` / `vm run` path leaves `config.plist` untouched
+  (`doctor.sh` copies the stock LongQT EFI as-is), so this picker suppression only happens with
+  `--random-smbios`.
 - **AMD:** `kvm.ignore_msrs=1` is set host-wide (macOS reads MSRs an AMD host lacks).
 
 ## GUI renders; Setup-Assistant skip is WIP

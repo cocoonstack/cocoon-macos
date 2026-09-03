@@ -5,7 +5,7 @@
 | Mode | What it does |
 |------|--------------|
 | `user` (default) | User-mode SLIRP. Combine with `--ssh-port N` to forward `localhost:N → guest:22`. Works everywhere. |
-| `tap` | Attach to a pre-created host TAP verbatim (`--tap tap0`) — the bridge/plane owns IP + forwarding. |
+| `tap` | Attach to a pre-created host TAP verbatim (`--tap tap0`) — the bridge/plane owns IP + forwarding. Without `--tap`, `tap` mode auto-creates like `bridge` and so also requires `--bridge <dev>`. |
 | `bridge` | Auto-create a TAP on an existing Linux bridge (`--bridge br0`) via cocoon's `network/bridge`. |
 | `cni` | Auto-create a TAP inside a per-VM netns via cocoon's `network/cni` (TC-redirect plane). |
 
@@ -37,6 +37,9 @@ the other net modes.
 
 `vm clone` inherits the source's `--net` mode, and for `bridge` its bridge, unless `--net` or `--bridge` is given; every clone gets its own TAP (and netns under `cni`) and, with a fresh identity, its own MAC. A source attached to a pre-created host TAP (`--tap tap0`) cannot share it, so its clone needs its own `--tap`; a `tap` source that auto-created its TAP on a bridge clones like `bridge`.
 
+`vm stop` leaves an auto-created TAP in place but admin-DOWN, for a fast restart; `vm rm` (and a
+failed `create`) deletes it; `vm start` brings it back up.
+
 ## VNC exposure
 
 VNC exposure depends on the net mode:
@@ -58,6 +61,9 @@ cocoon-macos vm stop  m1                                 # VNC gone with the qem
 
 The VNC password is never written to disk — it is read from the flag on each start.
 
+`vm start --vnc` / `--vnc-password` on an already-running VM is a no-op: live QEMU can't be
+retargeted, so the CLI prints that the supplied VNC settings were ignored and changes nothing.
+
 ### macOS Screen Sharing
 
 QEMU's default `None` auth **hangs macOS Screen Sharing**. Pass `--vnc-password <≤8 bytes>` (applied
@@ -74,6 +80,6 @@ the loopback modes.
 macOS only repaints the emulated framebuffer while the display is **awake**; once it sleeps (~idle),
 VNC shows a blank white/black screen with just the cursor even though the guest is healthy (SSH works,
 WindowServer is up). It is *not* a GPU/driver problem — a mouse move repaints it. The golden image's
-first-boot daemon runs `pmset -a displaysleep 0 disablesleep 1` system-wide (covering the pre-login
-loginwindow) to keep the framebuffer painted; older images need a `setup`-stage rebuild. See also the
-GPU/video note in [Boot, Firmware & GUI](vm.md).
+first-boot daemon runs `pmset -a displaysleep 0 sleep 0 disablesleep 1` system-wide (covering the
+pre-login loginwindow and disabling system sleep too) to keep the framebuffer painted; older images
+need a `setup`-stage rebuild. See also the GPU/video note in [Boot, Firmware & GUI](vm.md).

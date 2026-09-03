@@ -30,6 +30,10 @@ sudo scripts/doctor.sh
 `vm run` fails with a "run scripts/doctor.sh" message when the firmware is absent. You can override
 any piece with `--opencore` / `--ovmf-code` / `--ovmf-vars` on the VM commands.
 
+`doctor.sh` is a bash script, not the Go CLI: it reads `$COCOON_MACOS_HOME` only (there is no
+`--state-dir` flag), and the LongQT OpenCore release it fetches is pinned by `$LONGQT_VER` (default
+`v0.7`).
+
 ## State directory
 
 All persistent state lives under `--state-dir` / `$COCOON_MACOS_HOME`, default
@@ -39,5 +43,8 @@ All persistent state lives under `--state-dir` / `$COCOON_MACOS_HOME`, default
 /var/lib/cocoon-macos/
 ├── firmware/     # shared OpenCore.qcow2 + OVMF_CODE/VARS (from doctor.sh)
 ├── cloudimg/     # content-addressed golden-image store (image pull)
-└── vms/<name>/   # per-VM: disk.qcow2 overlay, OVMF_VARS, OpenCore overlay, vm.json, sockets
+└── vms/
+    ├── .locks/<name>.lock   # per-VM lock, held across create/start/stop/rm
+    └── <name>/              # disk.qcow2 overlay, OVMF_VARS, OpenCore overlay, vm.json, sockets,
+                              # data-<name>.qcow2 per --data-disk
 ```

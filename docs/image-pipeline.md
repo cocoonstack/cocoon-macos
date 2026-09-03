@@ -3,9 +3,10 @@
 The golden images are built entirely by CI:
 `.github/workflows/build-macos-image.yml` + `scripts/build-qemu-macos.sh`.
 
-It is a `workflow_dispatch` with a `macos` version and a `stage`. This pipeline is **image-only**
-(no Go); the CLI end-to-end (`vm run` + `--random-smbios`) is exercised separately on a KVM testbed,
-keeping image and Go CI apart.
+It is a `workflow_dispatch` with a `macos` version and a `stage`, plus `version_tag` (overrides the
+ghcr tag; blank defaults to `26` for tahoe, `15` for sequoia) and `disk_size` (default `80G`). This
+pipeline is **image-only** (no Go); the CLI end-to-end (`vm run` + `--random-smbios`) is exercised
+separately on a KVM testbed, keeping image and Go CI apart.
 
 ## `macos` — which OS
 

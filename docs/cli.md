@@ -12,6 +12,9 @@ cocoon-macos image inspect <ref>
 cocoon-macos image rm <ref>
 ```
 
+`image pull` also accepts a plain http(s) URL in place of a ref, handled by the `cloudimg` backend
+directly. A ref already present in the store is a no-op unless `--force` re-pulls it.
+
 See [Images](images.md) for the store layout and the parallel-Range download.
 
 ## VMs
@@ -33,6 +36,8 @@ cocoon-macos vm rm m1
   boot; `start` boots a created/stopped VM.
 - `run` is atomic: if the boot fails it removes everything it just created (no half-made VM left
   behind).
+- `vm stop` / `vm rm` give QEMU a 10 s ACPI-shutdown grace window before killing it; `--force` skips
+  that window for an immediate SIGKILL.
 - `--storage` expands the new VM's qcow2 system disk before boot. It accepts values such as `100Gi`
   or a byte count, never shrinks an image, and is inherited by `clone` unless explicitly overridden.
 

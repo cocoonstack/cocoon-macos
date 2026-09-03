@@ -16,7 +16,9 @@ qcow2 blob — **qcow2-only**, no OCI layer filesystem.
 
 `image pull` imports the golden qcow2 into a **content-addressed store** under
 `<state-dir>/cloudimg` (cocoon's `cloudimg` backend, imported directly). `vm run <ref>` then bakes a
-copy-on-write overlay on the immutable shared base, so many VMs share one on-disk copy.
+copy-on-write overlay on the immutable shared base, so many VMs share one on-disk copy. `pull`
+accepts either a registry ref or a plain http(s) URL; if the ref is already present it skips the
+download unless `--force` is given.
 
 ```bash
 cocoon-macos image pull ghcr.io/cocoonstack/cocoon-macos/tahoe:26

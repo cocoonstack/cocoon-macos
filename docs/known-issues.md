@@ -21,8 +21,9 @@ advances**. Safari has no software-rendering fallback.
 macOS only repaints the emulated framebuffer while the display is **awake**; once it sleeps (~idle),
 VNC shows a blank white/black screen with just the cursor even though the guest is healthy (SSH works,
 WindowServer is up). A mouse move repaints it — it is *not* a GPU/driver problem. The golden image's
-first-boot daemon runs `pmset -a displaysleep 0 disablesleep 1` system-wide (covering the pre-login
-loginwindow) to keep the framebuffer painted; older images need a `setup`-stage rebuild.
+first-boot daemon runs `pmset -a displaysleep 0 sleep 0 disablesleep 1` system-wide (covering the
+pre-login loginwindow and disabling system sleep too) to keep the framebuffer painted; older images
+need a `setup`-stage rebuild.
 
 ## GUI lands at the Setup Assistant
 

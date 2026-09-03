@@ -16,9 +16,11 @@ any disk is touched. VMs launched by a cocoon-macos older than this rule with a
 passworded non-CNI display are not recognised as password-gated until their
 next stop or start.
 
-Snapshots are **offline qcow2-internal** (`qemu-img snapshot`, VM stopped) and capture **disk state
-only**. Live RAM snapshot is intentionally impossible here: `-cpu +invtsc` makes the macOS guest
-non-migratable, so resume-from-RAM can't work. This is by design (see [Roadmap](roadmap.md)).
+Snapshots are **offline qcow2-internal** (`qemu-img snapshot`, VM stopped) and cover the system disk,
+every data disk, and `OVMF_VARS` when it is qcow2 (a raw `.fd` NVRAM has no internal-snapshot
+support, so with raw NVRAM only guest disk state rolls back). Live RAM snapshot is intentionally
+impossible here: `-cpu +invtsc` makes the macOS guest non-migratable, so resume-from-RAM can't work.
+This is by design (see [Roadmap](roadmap.md)).
 
 ## Clone
 
@@ -42,7 +44,8 @@ cocoon-macos vm run <IMAGE> --data-disk size=20G --data-disk name=scratch,size=5
 ```
 
 - **Keys:** `size=` (required, `units.RAMInBytes` syntax e.g. `20G`, min 16 MiB) and `name=`
-  (optional, `[a-z][a-z0-9_-]{0,19}`, default `data1`, `data2`, …; duplicates error).
+  (optional, `[a-z][a-z0-9_-]{0,19}` and not starting with `cocoon-`, default `data1`, `data2`, …;
+  duplicates error).
 - **At most 4 disks.** macOS has no virtio-blk driver (the OS disk rides AHCI), so data disks take the
   `ich9-ahci` controller's free SATA ports — `OpenCoreBoot` (sata.2) and `MacHDD` (sata.4) leave
   ports 0, 1, 3, 5.

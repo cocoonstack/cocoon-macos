@@ -32,7 +32,9 @@ goes straight to that IP (no port-forward).
 `--cni-conf-dir` (default `/etc/cni/net.d`) and `--cni-bin-dir` (default
 `/opt/cni/bin`) point at a non-standard CNI installation; both are ignored by
 the other net modes and are remembered in the VM record, so `rm` tears the
-NIC down without repeating them.
+NIC down without repeating them; a clone inherits them from its source. A VM
+created before the record carried them takes `rm --cni-conf-dir` and
+`rm --cni-bin-dir` once.
 
 ## Clones
 

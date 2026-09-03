@@ -27,7 +27,7 @@ import (
 // netScope keys cocoon-macos's host TAP/netns families apart from a co-hosted cocoon's, so neither GC reclaims the other's live guests.
 const netScope = "cm"
 
-// netConf is the cocoon network config: bridge/CNI provisioning shares cocoon's forwarding plane, keyed under our own device family; the CNI dirs resolve flag, then record, then default.
+// netConf is the cocoon network config: bridge/CNI provisioning shares cocoon's forwarding plane, keyed under our own device family.
 func netConf(cmd *cobra.Command, r *record) *config.Config {
 	return &config.Config{
 		RootDir:    home.Dir(cmd),

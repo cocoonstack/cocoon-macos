@@ -351,11 +351,22 @@ func setVNCPassword(ctx context.Context, monSock, pw string) error {
 	// wait for the next prompt so QEMU has executed the line before we close (HMP echoes char-by-char)
 	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	out, _ := readUntil(conn, "(qemu)")
-	if strings.Contains(out, "Could not") {
-		// out echoes the typed "set_password vnc <pw>" line — never surface it
+	if hmpReplied(out) {
+		// HMP reports failure only by printing; out echoes the typed password, so never surface it
 		return errors.New("qemu rejected set_password (vnc display not active?)")
 	}
 	return nil
+}
+
+func hmpReplied(out string) bool {
+	for line := range strings.SplitSeq(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "(qemu)") || strings.Contains(line, "set_password") {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func readUntil(conn net.Conn, marker string) (string, bool) {

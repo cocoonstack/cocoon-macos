@@ -150,3 +150,19 @@ func TestVMDirPrefixSeparatesSiblingNames(t *testing.T) {
 		t.Fatal("sibling foo-clone matched")
 	}
 }
+
+func TestHMPRepliedFlagsAnyMessage(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		out  string
+		want bool
+	}{
+		{"echo and prompt only", " set_password vnc abcd\r\n(qemu) ", false},
+		{"invalid parameter", " set_password vnc ab cd\r\nError: invalid parameter value: cd\r\n(qemu) ", true},
+		{"display inactive", " set_password vnc abcd\r\nCould not set password\r\n(qemu) ", true},
+	} {
+		if got := hmpReplied(tc.out); got != tc.want {
+			t.Errorf("%s: hmpReplied = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

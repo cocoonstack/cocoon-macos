@@ -15,12 +15,10 @@ func SnapCreate(ctx context.Context, img, tag string) error {
 	return utils.RunQemuImg(ctx, "snapshot", "-c", tag, img)
 }
 
-// SnapApply reverts the qcow2 img to the snapshot tag.
 func SnapApply(ctx context.Context, img, tag string) error {
 	return utils.RunQemuImg(ctx, "snapshot", "-a", tag, img)
 }
 
-// SnapDelete removes the snapshot tag from img.
 func SnapDelete(ctx context.Context, img, tag string) error {
 	return utils.RunQemuImg(ctx, "snapshot", "-d", tag, img)
 }

@@ -242,7 +242,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 		}
 	}
 	spec := qemu.Spec{
-		Name: r.Name, Disk: r.Disk, OpenCore: r.OpenCore, OVMFCode: r.OVMFCode, OVMFVars: r.OVMFVars,
+		Disk: r.Disk, OpenCore: r.OpenCore, OVMFCode: r.OVMFCode, OVMFVars: r.OVMFVars,
 		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, SSHPort: r.SSHPort, MAC: r.MAC, VNCPass: r.VNCPass,
 		Tap:          r.Tap, // set for tap/bridge/cni (a real host TAP); empty => user-mode SLIRP
 		Hugepages:    r.Hugepages,

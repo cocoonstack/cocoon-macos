@@ -21,8 +21,6 @@ const (
 
 // Spec is the per-VM input for launching a macOS guest from a golden qcow2.
 type Spec struct {
-	Name string
-
 	CPUs         int
 	Memory       string   // MiB, e.g. "8192"
 	VNCDisp      int      // n => host 127.0.0.1:590n; <0 disables
@@ -44,7 +42,6 @@ type Spec struct {
 	QMPSock string
 }
 
-// Args returns the qemu-system-x86_64 argument vector for the macOS guest.
 func (s Spec) Args() []string {
 	cores := max(s.CPUs/2, 1)
 	varsFmt := "raw"

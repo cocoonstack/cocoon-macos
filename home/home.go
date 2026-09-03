@@ -29,7 +29,6 @@ func FirmwareDir(cmd *cobra.Command) string {
 	return filepath.Join(Dir(cmd), "firmware")
 }
 
-// VMsDir is the directory holding every per-VM state directory.
 func VMsDir(cmd *cobra.Command) string {
 	return filepath.Join(Dir(cmd), "vms")
 }

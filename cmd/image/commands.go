@@ -6,7 +6,6 @@ import (
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 )
 
-// Command builds the `image` subcommand tree against the given handler.
 func Command(h *Handler) *cobra.Command {
 	imageCmd := &cobra.Command{Use: "image", Short: "Manage macOS disk images (reuses cocoon's cloudimg store)"} // --state-dir is a root persistent flag
 

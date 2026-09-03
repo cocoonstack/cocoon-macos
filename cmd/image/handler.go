@@ -19,7 +19,6 @@ const maxPullAttempts = 3
 // Handler is the image command surface on cocoon's cloudimg store.
 type Handler struct{}
 
-// NewHandler returns a Handler backed by the cloudimg store.
 func NewHandler() *Handler { return &Handler{} }
 
 func (h *Handler) Pull(cmd *cobra.Command, args []string) error {

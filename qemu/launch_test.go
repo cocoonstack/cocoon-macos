@@ -8,7 +8,7 @@ import (
 )
 
 func TestArgsNetModes(t *testing.T) {
-	base := Spec{Name: "m", Disk: "/v/disk.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/code.fd", OVMFVars: "/v/vars.fd", CPUs: 4, Memory: "8192"}
+	base := Spec{Disk: "/v/disk.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/code.fd", OVMFVars: "/v/vars.fd", CPUs: 4, Memory: "8192"}
 	tests := []struct {
 		name   string
 		mutate func(s *Spec)

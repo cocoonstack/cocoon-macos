@@ -6,7 +6,6 @@ import (
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 )
 
-// Command builds the `vm` subcommand tree against the given handler.
 func Command(h *Handler) *cobra.Command {
 	vmCmd := &cobra.Command{Use: "vm", Short: "Manage macOS VMs"} // --state-dir is a root persistent flag
 

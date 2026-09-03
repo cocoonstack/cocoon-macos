@@ -20,7 +20,6 @@ const (
 // Handler is the vm command surface: per-VM CoW overlays on a golden macOS qcow2, booted by qemu-system-x86_64 on an x86 Linux/KVM host.
 type Handler struct{}
 
-// NewHandler returns a Handler ready to serve the vm subcommands.
 func NewHandler() *Handler { return &Handler{} }
 
 // record is the persisted per-VM state, stored as <state-dir>/vms/<name>/vm.json.

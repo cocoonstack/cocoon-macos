@@ -258,7 +258,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	pidfile := filepath.Join(dir, "qemu.pid")
 	args := append(spec.Args(), "-daemonize", "-pidfile", pidfile)
 	stopVNCProxy(ctx, dir)
-	ensureNetnsLoopback(ctx, r) // CNI: a fresh netns has lo DOWN, so qemu's -vnc 127.0.0.1 would fail to bind
+	ensureNetnsLoopback(ctx, r)
 	if r.Netns != "" {
 		logger.Debugf(ctx, "running qemu in netns %s via `ip netns exec`", filepath.Base(r.Netns))
 	}
@@ -267,7 +267,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	if err := saveRec(dir, r); err != nil {
 		return err
 	}
-	c := launchCmd(r, args) // CNI: wraps in `ip netns exec` so -netdev tap finds the in-netns TAP
+	c := launchCmd(r, args)
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
 	if err := c.Run(); err != nil {
 		return fmt.Errorf("launch qemu: %w", err)

@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,4 +150,41 @@ func TestVMDirPrefixSeparatesSiblingNames(t *testing.T) {
 	if strings.Contains("qemu\x00-drive\x00file=/state/vms/foo-clone/disk.qcow2", needle) {
 		t.Fatal("sibling foo-clone matched")
 	}
+}
+
+func TestReadUntilWaitsForTheFullPrompt(t *testing.T) {
+	out, ok := hmpTranscript(" set_pass", "word vnc (qemu)\r\n", "Error: No VNC display is present\r\n", "(qemu) ")
+	if !ok || !hmpReplied(out) {
+		t.Fatalf("readUntil = (%q, %v), want the rejection after the echoed prompt-shaped password", out, ok)
+	}
+	if out, ok := hmpTranscript(" set_password vnc abcd\r\n"); ok {
+		t.Errorf("readUntil = (%q, true), want false when the monitor closes before the prompt", out)
+	}
+}
+
+func TestHMPRepliedFlagsAnyMessage(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		out  string
+		want bool
+	}{
+		{"echo and prompt only", " set_password vnc abcd\r\n(qemu) ", false},
+		{"invalid parameter", " set_password vnc ab cd\r\nError: invalid parameter value: cd\r\n(qemu) ", true},
+		{"display inactive", " set_password vnc abcd\r\nCould not set password\r\n(qemu) ", true},
+	} {
+		if got := hmpReplied(tc.out); got != tc.want {
+			t.Errorf("%s: hmpReplied = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func hmpTranscript(chunks ...string) (string, bool) {
+	client, monitor := net.Pipe()
+	go func() {
+		for _, chunk := range chunks {
+			_, _ = monitor.Write([]byte(chunk))
+		}
+		_ = monitor.Close()
+	}()
+	return readUntil(client, hmpPrompt)
 }

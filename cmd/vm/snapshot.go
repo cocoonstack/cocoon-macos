@@ -76,6 +76,7 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 			}
 			r.VNCPass = vncPass
 			terminate(ctx, r, stopGracePeriod)
+			stopVNCProxy(ctx, dir)
 			r.PID = 0
 			if err := saveRec(dir, r); err != nil {
 				return err

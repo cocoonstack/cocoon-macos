@@ -74,6 +74,7 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 			return err
 		}
 	}
+	ctx := cliutil.CommandContext(cmd)
 	dir, overlay, ovmfVars, digest, err := scaffoldVM(cmd, name, srcRec.Image, srcRec.OVMFVars, filepath.Base(srcRec.OVMFVars))
 	if err != nil {
 		return err
@@ -81,10 +82,9 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 	var r *record
 	defer func() {
 		if retErr != nil {
-			retErr = errors.Join(retErr, cleanupFailedVM(cmd, dir, r))
+			retErr = errors.Join(retErr, cleanupFailedVM(ctx, cmd, dir, r))
 		}
 	}()
-	ctx := cliutil.CommandContext(cmd)
 	storage, err = resizeSystemDisk(ctx, overlay, storage)
 	if err != nil {
 		return err

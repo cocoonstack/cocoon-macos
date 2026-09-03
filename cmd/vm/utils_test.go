@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"context"
 	"net"
 	"os"
 	"path/filepath"
@@ -175,6 +176,29 @@ func TestHMPRepliedFlagsAnyMessage(t *testing.T) {
 		if got := hmpReplied(tc.out); got != tc.want {
 			t.Errorf("%s: hmpReplied = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestWithVMLockUnlocksAfterCallerCancel(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "vms", "demo")
+	ctx, cancel := context.WithCancel(t.Context())
+	if err := withVMLock(ctx, dir, func() error {
+		cancel()
+		return nil
+	}); err != nil {
+		t.Fatalf("first lock: %v", err)
+	}
+	relocked := make(chan error, 1)
+	go func() {
+		relocked <- withVMLock(t.Context(), dir, func() error { return nil })
+	}()
+	select {
+	case err := <-relocked:
+		if err != nil {
+			t.Fatalf("second lock: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("second lock blocked: the cancelled caller context suppressed Unlock")
 	}
 }
 

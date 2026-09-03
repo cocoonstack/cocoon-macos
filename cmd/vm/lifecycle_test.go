@@ -76,6 +76,37 @@ func TestRestoreRefusesRunningPasswordedVNC(t *testing.T) {
 	}
 }
 
+func TestRestoreForceStopsVNCProxyWhenApplyIsRefused(t *testing.T) {
+	stateDir := t.TempDir()
+	vmDir, _ := startUnrecordedQEMU(t, stateDir, "macos-demo")
+	r, err := loadRec(vmDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.VNCDisp = 7
+	if err := saveRec(vmDir, r); err != nil {
+		t.Fatal(err)
+	}
+	spawnTestProxy(t, vmDir)
+	cmd := newLifecycleTestCommand(t, stateDir)
+	cmd.Flags().String("tag", "", "")
+	cmd.Flags().Bool("force", true, "")
+	cmd.Flags().String("vnc-password", "", "")
+
+	err = NewHandler().Restore(cmd, []string{"macos-demo"})
+	if err == nil || !strings.Contains(err.Error(), "no snapshots") {
+		t.Fatalf("Restore error = %v, want the no-snapshots refusal after the stop", err)
+	}
+	if _, err := os.Stat(filepath.Join(vmDir, vncProxyPID)); !os.IsNotExist(err) {
+		t.Errorf("proxy pid file survived the refused restore: %v", err)
+	}
+	if err := utils.WaitFor(t.Context(), 2*time.Second, 10*time.Millisecond, func() (bool, error) {
+		return !vncProxyRunning(vmDir), nil
+	}); err != nil {
+		t.Errorf("proxy still running after the refused restore: %v", err)
+	}
+}
+
 func TestCloneRejectsRunningSource(t *testing.T) {
 	stateDir := t.TempDir()
 	startUnrecordedQEMU(t, stateDir, "macos-src")

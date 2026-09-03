@@ -66,19 +66,7 @@ func TestVNCProxyRunning(t *testing.T) {
 		t.Fatal("missing proxy pidfile reported as running")
 	}
 
-	sock := filepath.Join(dir, vncSockName)
-	proxy := exec.Command(os.Args[0], "-test.run=TestVNCProxyHelperProcess", "--", vncProxyOp, sock)
-	proxy.Env = append(os.Environ(), "COCOON_MACOS_VNC_PROXY_HELPER=1")
-	if err := proxy.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = proxy.Process.Kill()
-		_ = proxy.Wait()
-	})
-	if err := utils.WritePIDFile(filepath.Join(dir, vncProxyPID), proxy.Process.Pid); err != nil {
-		t.Fatal(err)
-	}
+	spawnTestProxy(t, dir)
 
 	if err := utils.WaitFor(t.Context(), 2*time.Second, 10*time.Millisecond, func() (bool, error) {
 		return vncProxyRunning(dir), nil
@@ -93,4 +81,21 @@ func TestVNCProxyHelperProcess(t *testing.T) {
 	}
 	time.Sleep(time.Minute)
 	os.Exit(0)
+}
+
+func spawnTestProxy(t *testing.T, dir string) {
+	t.Helper()
+	sock := filepath.Join(dir, vncSockName)
+	proxy := exec.Command(os.Args[0], "-test.run=TestVNCProxyHelperProcess", "--", vncProxyOp, sock)
+	proxy.Env = append(os.Environ(), "COCOON_MACOS_VNC_PROXY_HELPER=1")
+	if err := proxy.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = proxy.Process.Kill()
+		_ = proxy.Wait()
+	})
+	if err := utils.WritePIDFile(filepath.Join(dir, vncProxyPID), proxy.Process.Pid); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -13,6 +13,24 @@ import (
 	"github.com/cocoonstack/cocoon-macos/home"
 )
 
+func TestNetConfResolvesFlagThenRecordThenDefault(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("cni-conf-dir", "", "")
+	cmd.Flags().String("cni-bin-dir", "", "")
+	if got := netConf(cmd, &record{}).CNIConfDir; got != "/etc/cni/net.d" {
+		t.Errorf("default CNIConfDir = %q", got)
+	}
+	if got := netConf(cmd, &record{CNIConfDir: "/rec/net.d", CNIBinDir: "/rec/bin"}).CNIBinDir; got != "/rec/bin" {
+		t.Errorf("record CNIBinDir = %q", got)
+	}
+	if err := cmd.Flags().Set("cni-conf-dir", "/flag/net.d"); err != nil {
+		t.Fatal(err)
+	}
+	if got := netConf(cmd, &record{CNIConfDir: "/rec/net.d"}).CNIConfDir; got != "/flag/net.d" {
+		t.Errorf("flag CNIConfDir = %q, want the flag over the record", got)
+	}
+}
+
 func TestNetConfScope(t *testing.T) {
 	conf := netConf(&cobra.Command{}, &record{})
 	if got, want := conf.NetScope, "cm"; got != want {

@@ -371,7 +371,7 @@ func hmpReplied(out string) bool {
 		if line == "" || strings.HasPrefix(line, strings.TrimSpace(hmpPrompt)) {
 			continue
 		}
-		if !echoed && strings.HasPrefix(line, "set_password ") {
+		if !echoed && strings.Contains(line, "set_password ") {
 			echoed = true
 			continue
 		}

@@ -28,7 +28,7 @@ Shown for `tahoe:26`; the actual `repo:tag` follows `macos`.
 | stage | what |
 |-------|------|
 | `boot` | Smoke: boot OpenCore → macOS Recovery (proves KVM + OpenCore + recovery). |
-| `install` | Full install from scratch → capture → push `<repo>:<tag>-base` (~65 min). |
+| `install` | Full install from scratch → capture → push `<repo>:<tag>-base` (polls for the Setup Assistant, up to ~2 h). |
 | `setup` | Pull `<repo>:<tag>-base` → boot Recovery → `provision-macos.sh` (SA-skip recipe + user + SSH) → push `<repo>:<tag>`. |
 | `desktop` | Pull `<repo>:<tag>` → boot → attempt auto-login + Setup-Assistant skip + slim → re-push `<repo>:<tag>` (WIP, currently blocked on the Setup Assistant — see [Known issues](known-issues.md)). |
 | `slim` | Pull `<repo>:<tag>` → boot → reclaim stale clusters → re-push `<repo>:<tag>` (smaller). |
@@ -38,7 +38,7 @@ Shown for `tahoe:26`; the actual `repo:tag` follows `macos`.
 
 - **`scripts/qmp-input.py`** — QMP absolute mouse click/move, keyboard type/chord, **Tesseract + PIL
   OCR-click and title routing** (drives the macOS GUI installer where buttons can't be reached by the
-  keyboard), and HMP `screendump`.
+  keyboard), and QMP `screendump`.
 - **`scripts/provision-macos.sh`** — runs in the Recovery Terminal against the installed Data volume:
   offline `dscl -f` user, `.AppleSetupDone`, and a first-boot LaunchDaemon that enables Remote Login.
 

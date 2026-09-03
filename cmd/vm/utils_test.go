@@ -153,24 +153,11 @@ func TestVMDirPrefixSeparatesSiblingNames(t *testing.T) {
 }
 
 func TestReadUntilWaitsForTheFullPrompt(t *testing.T) {
-	client, monitor := net.Pipe()
-	go func() {
-		for _, chunk := range []string{" set_pass", "word vnc (qemu)\r\n", "Error: No VNC display is present\r\n", "(qemu) "} {
-			_, _ = monitor.Write([]byte(chunk))
-		}
-		_ = monitor.Close()
-	}()
-	out, ok := readUntil(client, hmpPrompt)
+	out, ok := hmpTranscript(" set_pass", "word vnc (qemu)\r\n", "Error: No VNC display is present\r\n", "(qemu) ")
 	if !ok || !hmpReplied(out) {
 		t.Fatalf("readUntil = (%q, %v), want the rejection after the echoed prompt-shaped password", out, ok)
 	}
-
-	client, monitor = net.Pipe()
-	go func() {
-		_, _ = monitor.Write([]byte(" set_password vnc abcd\r\n"))
-		_ = monitor.Close()
-	}()
-	if out, ok := readUntil(client, hmpPrompt); ok {
+	if out, ok := hmpTranscript(" set_password vnc abcd\r\n"); ok {
 		t.Errorf("readUntil = (%q, true), want false when the monitor closes before the prompt", out)
 	}
 }
@@ -189,4 +176,15 @@ func TestHMPRepliedFlagsAnyMessage(t *testing.T) {
 			t.Errorf("%s: hmpReplied = %v, want %v", tc.name, got, tc.want)
 		}
 	}
+}
+
+func hmpTranscript(chunks ...string) (string, bool) {
+	client, monitor := net.Pipe()
+	go func() {
+		for _, chunk := range chunks {
+			_, _ = monitor.Write([]byte(chunk))
+		}
+		_ = monitor.Close()
+	}()
+	return readUntil(client, hmpPrompt)
 }

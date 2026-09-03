@@ -55,7 +55,7 @@ func withVMLock(ctx context.Context, dir string, fn func() error) error {
 	if err := l.Lock(ctx); err != nil {
 		return fmt.Errorf("lock vm: %w", err)
 	}
-	defer func() { _ = l.Unlock(context.Background()) }()
+	defer func() { _ = l.Unlock(context.WithoutCancel(ctx)) }()
 	return fn()
 }
 
@@ -141,12 +141,12 @@ func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir,
 	} else if !os.IsNotExist(statErr) {
 		return "", "", "", "", fmt.Errorf("stat vm record: %w", statErr)
 	}
-	cleanupCtx, cancel := context.WithTimeout(context.Background(), vmCleanupTimeout)
+	ctx := cliutil.CommandContext(cmd)
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), vmCleanupTimeout)
 	defer cancel()
 	if err = resetIncompleteVMDir(cleanupCtx, dir); err != nil {
 		return "", "", "", "", err
 	}
-	ctx := cliutil.CommandContext(cmd)
 	base, digest, err := resolveBase(ctx, cmd, image, name)
 	if err != nil {
 		return "", "", "", "", err

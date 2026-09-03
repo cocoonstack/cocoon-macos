@@ -67,9 +67,7 @@ func TestWithNBDLeaseSerializesConcurrentInjectors(t *testing.T) {
 	errCh := make(chan error, workers)
 	var wg sync.WaitGroup
 	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			errCh <- withNBDLease(t.Context(), lockPath, func() error {
 				n := active.Add(1)
 				defer active.Add(-1)
@@ -78,7 +76,7 @@ func TestWithNBDLeaseSerializesConcurrentInjectors(t *testing.T) {
 				time.Sleep(time.Millisecond)
 				return nil
 			})
-		}()
+		})
 	}
 	wg.Wait()
 	close(errCh)

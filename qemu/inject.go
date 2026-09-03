@@ -34,24 +34,25 @@ type nbdConnection struct {
 	ocPath  string
 }
 
-// fresh context, not the caller's: disconnect must still run when the caller is unwinding after a timeout.
-func (c *nbdConnection) disconnect() error {
+// detached from the caller's cancellation: disconnect must still run when the caller is unwinding after a timeout.
+func (c *nbdConnection) disconnect(ctx context.Context) error {
 	logger := log.WithFunc("qemu.nbdConnection.disconnect")
+	ctx = context.WithoutCancel(ctx)
 	var commandErr error
-	disconnectCtx, disconnectCancel := context.WithTimeout(context.Background(), nbdCommandTimeout)
+	disconnectCtx, disconnectCancel := context.WithTimeout(ctx, nbdCommandTimeout)
 	if out, err := exec.CommandContext(disconnectCtx, "qemu-nbd", "--disconnect", c.device).CombinedOutput(); err != nil {
 		logger.Warnf(disconnectCtx, "disconnect %s (output: %s): %v", c.device, out, err)
 		commandErr = fmt.Errorf("disconnect %s (output: %s): %w", c.device, out, err)
 	}
 	disconnectCancel()
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), nbdCleanupTimeout)
+	waitCtx, waitCancel := context.WithTimeout(ctx, nbdCleanupTimeout)
 	defer waitCancel()
 	if err := utils.WaitFor(waitCtx, 10*time.Second, 100*time.Millisecond, func() (bool, error) {
 		held, scanErr := isFileHeld(c.ocPath)
 		return !held, scanErr
 	}); err != nil {
 		logger.Warnf(waitCtx, "qcow2 %s still held after nbd disconnect: %v", c.ocPath, err)
-		killCtx, killCancel := context.WithTimeout(context.Background(), nbdCleanupTimeout)
+		killCtx, killCancel := context.WithTimeout(ctx, nbdCleanupTimeout)
 		defer killCancel()
 		var cleanupErrs []error
 		if cleanupErr := utils.TerminateProcess(killCtx, c.pid, "qemu-nbd", c.ocPath, time.Second); cleanupErr != nil {
@@ -83,7 +84,7 @@ func InjectConfig(ctx context.Context, ocPath string, sm *SMBIOS) error {
 		if connectErr != nil {
 			return connectErr
 		}
-		defer func() { retErr = errors.Join(retErr, conn.disconnect()) }()
+		defer func() { retErr = errors.Join(retErr, conn.disconnect(ctx)) }()
 		if waitErr := waitForPart(ctx, conn.device); waitErr != nil {
 			return waitErr
 		}
@@ -92,7 +93,7 @@ func InjectConfig(ctx context.Context, ocPath string, sm *SMBIOS) error {
 			return fmt.Errorf("create mount dir: %w", err)
 		}
 		mounted := false
-		defer func() { retErr = errors.Join(retErr, cleanupNBDMount(mnt, mounted)) }()
+		defer func() { retErr = errors.Join(retErr, cleanupNBDMount(ctx, mnt, mounted)) }()
 		var mountErr error
 		for _, p := range []string{conn.device + "p1", conn.device + "p2", conn.device} {
 			if mountErr = exec.CommandContext(ctx, "mount", p, mnt).Run(); mountErr == nil {
@@ -113,7 +114,7 @@ func withNBDLease(ctx context.Context, path string, fn func() error) error {
 	if err := l.Lock(ctx); err != nil {
 		return fmt.Errorf("lock qemu-nbd lease: %w", err)
 	}
-	defer func() { _ = l.Unlock(context.Background()) }()
+	defer func() { _ = l.Unlock(context.WithoutCancel(ctx)) }()
 	return fn()
 }
 
@@ -130,14 +131,14 @@ func waitForPart(ctx context.Context, nbd string) error {
 	return nil
 }
 
-func cleanupNBDMount(mnt string, mounted bool) error {
+func cleanupNBDMount(ctx context.Context, mnt string, mounted bool) error {
 	if !mounted {
 		if err := os.Remove(mnt); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove mount dir %s: %w", mnt, err)
 		}
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), nbdCleanupTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), nbdCleanupTimeout)
 	defer cancel()
 	if out, err := exec.CommandContext(ctx, "umount", mnt).CombinedOutput(); err != nil {
 		return fmt.Errorf("unmount %s (output: %s): %w", mnt, out, err)
@@ -185,14 +186,14 @@ func connectFreeNBD(ctx context.Context, ocPath string) (*nbdConnection, error) 
 			if err == nil {
 				return &nbdConnection{device: nbd, pid: pid, pidFile: pidFile, ocPath: ocPath}, nil
 			}
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), nbdCleanupTimeout)
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), nbdCleanupTimeout)
 			_ = exec.CommandContext(cleanupCtx, "qemu-nbd", "--disconnect", nbd).Run()
 			_ = cleanupNBDForPath(cleanupCtx, ocPath)
 			cancel()
 			return nil, fmt.Errorf("read qemu-nbd pid file %s: %w", pidFile, err)
 		}
 		lastErr = fmt.Errorf("connect qemu-nbd %s (output: %s): %w", nbd, out, cerr)
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), nbdCleanupTimeout)
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), nbdCleanupTimeout)
 		_ = cleanupNBDForPath(cleanupCtx, ocPath)
 		cancel()
 		if ctx.Err() != nil {

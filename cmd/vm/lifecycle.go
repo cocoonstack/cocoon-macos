@@ -125,12 +125,8 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 				if err := teardownNet(ctx, cmd, r); err != nil {
 					return err
 				}
-			} else {
-				cleanupCtx, cancel := context.WithTimeout(context.Background(), vmCleanupTimeout)
-				defer cancel()
-				if cleanupErr := reapStrayHelpers(cleanupCtx, dir); cleanupErr != nil {
-					return cleanupErr
-				}
+			} else if cleanupErr := reapStrayHelpers(ctx, dir); cleanupErr != nil {
+				return cleanupErr
 			}
 			if err := os.RemoveAll(dir); err != nil {
 				return fmt.Errorf("remove vm dir: %w", err)
@@ -150,7 +146,8 @@ func (h *Handler) createVM(cmd *cobra.Command, image string, launch bool) error 
 	if err != nil {
 		return err
 	}
-	return withVMLock(cliutil.CommandContext(cmd), dir, func() error {
+	ctx := cliutil.CommandContext(cmd)
+	return withVMLock(ctx, dir, func() error {
 		r, err := h.create(cmd, image, name)
 		if err != nil {
 			return err
@@ -160,7 +157,7 @@ func (h *Handler) createVM(cmd *cobra.Command, image string, launch bool) error 
 			return nil
 		}
 		if err := h.launch(cmd, dir, r); err != nil {
-			return errors.Join(err, cleanupFailedVM(cmd, dir, r))
+			return errors.Join(err, cleanupFailedVM(ctx, cmd, dir, r))
 		}
 		fmt.Printf("%s (pid %d)\n", r.Name, r.PID)
 		return nil
@@ -191,16 +188,16 @@ func (h *Handler) create(cmd *cobra.Command, image, name string) (r *record, ret
 	if err != nil {
 		return nil, err
 	}
+	ctx := cliutil.CommandContext(cmd)
 	dir, overlay, ovmfVars, digest, err := scaffoldVM(cmd, name, image, varsTmpl, "OVMF_VARS.fd")
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if retErr != nil {
-			retErr = errors.Join(retErr, cleanupFailedVM(cmd, dir, r))
+			retErr = errors.Join(retErr, cleanupFailedVM(ctx, cmd, dir, r))
 		}
 	}()
-	ctx := cliutil.CommandContext(cmd)
 	storage, err = resizeSystemDisk(ctx, overlay, storage)
 	if err != nil {
 		return nil, err
@@ -258,7 +255,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	pidfile := filepath.Join(dir, "qemu.pid")
 	args := append(spec.Args(), "-daemonize", "-pidfile", pidfile)
 	stopVNCProxy(ctx, dir)
-	ensureNetnsLoopback(ctx, r) // CNI: a fresh netns has lo DOWN, so qemu's -vnc 127.0.0.1 would fail to bind
+	ensureNetnsLoopback(ctx, r)
 	if r.Netns != "" {
 		logger.Debugf(ctx, "running qemu in netns %s via `ip netns exec`", filepath.Base(r.Netns))
 	}
@@ -267,7 +264,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	if err := saveRec(dir, r); err != nil {
 		return err
 	}
-	c := launchCmd(r, args) // CNI: wraps in `ip netns exec` so -netdev tap finds the in-netns TAP
+	c := launchCmd(r, args)
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
 	if err := c.Run(); err != nil {
 		return fmt.Errorf("launch qemu: %w", err)
@@ -312,8 +309,8 @@ func validateMacOSCPUs(cpus int) error {
 }
 
 // cleanupFailedVM uses an uncanceled bounded context so cancellation still reaps helpers, networking and QEMU.
-func cleanupFailedVM(cmd *cobra.Command, dir string, r *record) error {
-	ctx, cancel := context.WithTimeout(context.Background(), vmCleanupTimeout)
+func cleanupFailedVM(ctx context.Context, cmd *cobra.Command, dir string, r *record) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), vmCleanupTimeout)
 	defer cancel()
 	var errs []error
 	if r != nil {

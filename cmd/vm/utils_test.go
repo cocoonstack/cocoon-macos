@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -148,6 +149,29 @@ func TestVMDirPrefixSeparatesSiblingNames(t *testing.T) {
 	}
 	if strings.Contains("qemu\x00-drive\x00file=/state/vms/foo-clone/disk.qcow2", needle) {
 		t.Fatal("sibling foo-clone matched")
+	}
+}
+
+func TestReadUntilWaitsForTheFullPrompt(t *testing.T) {
+	client, monitor := net.Pipe()
+	go func() {
+		for _, chunk := range []string{" set_pass", "word vnc (qemu)\r\n", "Error: No VNC display is present\r\n", "(qemu) "} {
+			_, _ = monitor.Write([]byte(chunk))
+		}
+		_ = monitor.Close()
+	}()
+	out, ok := readUntil(client, hmpPrompt)
+	if !ok || !hmpReplied(out) {
+		t.Fatalf("readUntil = (%q, %v), want the rejection after the echoed prompt-shaped password", out, ok)
+	}
+
+	client, monitor = net.Pipe()
+	go func() {
+		_, _ = monitor.Write([]byte(" set_password vnc abcd\r\n"))
+		_ = monitor.Close()
+	}()
+	if out, ok := readUntil(client, hmpPrompt); ok {
+		t.Errorf("readUntil = (%q, true), want false when the monitor closes before the prompt", out)
 	}
 }
 

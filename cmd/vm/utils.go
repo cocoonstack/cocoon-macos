@@ -24,7 +24,10 @@ import (
 	"github.com/cocoonstack/cocoon/utils"
 )
 
-const vmCleanupTimeout = 30 * time.Second
+const (
+	vmCleanupTimeout = 30 * time.Second
+	hmpPrompt        = "(qemu) "
+)
 
 func loadRec(dir string) (*record, error) {
 	var r record
@@ -342,7 +345,7 @@ func setVNCPassword(ctx context.Context, monSock, pw string) error {
 	defer func() { _ = conn.Close() }()
 	// the monitor discards input until its first prompt, so an early set_password is silently lost
 	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-	if _, ok := readUntil(conn, "(qemu)"); !ok {
+	if _, ok := readUntil(conn, hmpPrompt); !ok {
 		return errors.New("monitor prompt not seen")
 	}
 	if _, err := fmt.Fprintf(conn, "set_password vnc %s\n", pw); err != nil {
@@ -350,7 +353,10 @@ func setVNCPassword(ctx context.Context, monSock, pw string) error {
 	}
 	// wait for the next prompt so QEMU has executed the line before we close (HMP echoes char-by-char)
 	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	out, _ := readUntil(conn, "(qemu)")
+	out, ok := readUntil(conn, hmpPrompt)
+	if !ok {
+		return errors.New("monitor closed before answering set_password")
+	}
 	if hmpReplied(out) {
 		// HMP reports failure only by printing; out echoes the typed password, so never surface it
 		return errors.New("qemu rejected set_password (vnc display not active?)")
@@ -361,7 +367,7 @@ func setVNCPassword(ctx context.Context, monSock, pw string) error {
 func hmpReplied(out string) bool {
 	for line := range strings.SplitSeq(out, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "(qemu)") || strings.Contains(line, "set_password") {
+		if line == "" || strings.HasPrefix(line, strings.TrimSpace(hmpPrompt)) || strings.Contains(line, "set_password") {
 			continue
 		}
 		return true

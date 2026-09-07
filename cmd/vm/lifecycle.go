@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -297,10 +298,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 
 func requestedVMName(cmd *cobra.Command, fallback string) string {
 	name, _ := cmd.Flags().GetString("name")
-	if name != "" {
-		return name
-	}
-	return fallback
+	return cmp.Or(name, fallback)
 }
 
 func validateMacOSCPUs(cpus int) error {

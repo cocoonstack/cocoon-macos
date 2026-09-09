@@ -39,7 +39,7 @@ func loadRec(dir string) (*record, error) {
 
 // saveRec writes vm.json atomically (temp + fsync + rename) so a crash can't truncate it.
 func saveRec(dir string, r *record) error {
-	if err := utils.AtomicWriteJSON(filepath.Join(dir, "vm.json"), r); err != nil {
+	if err := utils.AtomicWriteJSON(filepath.Join(dir, "vm.json"), r, utils.Sync); err != nil {
 		return fmt.Errorf("write vm record: %w", err)
 	}
 	return nil

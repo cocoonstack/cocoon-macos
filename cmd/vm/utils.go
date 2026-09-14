@@ -292,14 +292,11 @@ func resolveBase(ctx context.Context, cmd *cobra.Command, image, name string) (s
 		return "", "", err
 	}
 	vm := &types.VMConfig{Image: image, Name: name}
-	sc, _, err := store.Config(ctx, []*types.VMConfig{vm})
+	sc, _, err := store.Config(ctx, vm)
 	if err != nil {
 		return "", "", fmt.Errorf("resolve image %q (not a file, not in the store): %w", image, err)
 	}
-	if len(sc) == 0 || len(sc[0]) == 0 {
-		return "", "", fmt.Errorf("image %q resolved to no disk", image)
-	}
-	return sc[0][0].Path, vm.ImageDigest, nil
+	return sc[0].Path, vm.ImageDigest, nil
 }
 
 // ensureCloudimgFirmware writes a placeholder CLOUDHV.fd purely to satisfy cloudimg.Config's firmware validation — cocoon-macos boots via OVMF and never reads it.

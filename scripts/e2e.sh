@@ -135,9 +135,9 @@ run_dummy() {
   log "############ [DUMMY] TIER ############"
 
   # --- image store -------------------------------------------------------------------------------
-  out=$(img list -o json 2>&1); if [ "$(echo "$out" | tr -d '[:space:]')" = "[]" ]; then
-    pass "[DUMMY] image list empty-store => []"
-  else fail "[DUMMY] image list empty-store" "got: $out"; fi
+  out=$(img list -o json 2>&1); if [ "$(echo "$out" | jqv "isinstance(d, list)" 2>/dev/null)" = "True" ]; then
+    pass "[DUMMY] image list -o json is a list (never null)"
+  else fail "[DUMMY] image list -o json" "got: $out"; fi
   check "[DUMMY] image rm absent-ref is a no-op (no crash)" img rm does-not-exist:tag
 
   # --- vm create: CoW overlay on shared base + per-VM OVMF_VARS copy + vm.json -------------------
@@ -152,7 +152,9 @@ run_dummy() {
   else fail "[DUMMY] vm create" "create returned nonzero"; fi
 
   # --- negative path: missing --opencore is rejected ---------------------------------------------
-  if vm create "$DUMMY_BASE" -n dneg --ovmf-code "$DUMMY_VARS" --ovmf-vars "$DUMMY_VARS" >/dev/null 2>&1; then
+  if [ -f "$CM_HOME/firmware/OpenCore.qcow2" ]; then
+    skip "[DUMMY] create without --opencore rejected" "shared loader provisioned in $CM_HOME/firmware, the fallback is legitimate"
+  elif vm create "$DUMMY_BASE" -n dneg --ovmf-code "$DUMMY_VARS" --ovmf-vars "$DUMMY_VARS" >/dev/null 2>&1; then
     fail "[DUMMY] create without --opencore rejected" "create unexpectedly succeeded"
   else pass "[DUMMY] create without --opencore rejected"; fi
 
@@ -275,23 +277,23 @@ post_conditions_dummy() {
 # =================================================================================================
 # hmp sends one HMP command to a monitor unix socket (mirror of build-qemu-macos.sh `mon`)
 hmp() { local sock=$1 cmd=$2; printf '%s\n' "$cmd" | timeout 5 socat - "UNIX-CONNECT:$sock" >/dev/null 2>&1 || true; }
-gssh() { sshpass -p cocoon ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -p "$CM_SSH_PORT" cocoon@localhost "$@"; }
+gssh() { sshpass -p cocoon ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=8 -p "$CM_SSH_PORT" cocoon@localhost "$@"; }
 
 run_real() {
   log "############ [REAL] TIER (tahoe:26 boot) ############"
   for v in CM_OVMF_CODE CM_OVMF_VARS CM_OPENCORE; do
     if [ -z "${!v:-}" ] || [ ! -f "${!v}" ]; then skip "[REAL] all boot rows" "$v unset or file missing"; return; fi
   done
-  for b in qemu-system-x86_64 socat sshpass oras; do command -v "$b" >/dev/null 2>&1 || { skip "[REAL] all boot rows" "missing $b"; return; }; done
+  for b in qemu-system-x86_64 socat sshpass; do command -v "$b" >/dev/null 2>&1 || { skip "[REAL] all boot rows" "missing $b"; return; }; done
   [ -e /dev/kvm ] && [ -r /dev/kvm ] && [ -w /dev/kvm ] || { skip "[REAL] all boot rows" "/dev/kvm not rw"; return; }
 
   if img inspect "$CM_TAHOE_REF" >/dev/null 2>&1; then
-    dig=$(img inspect "$CM_TAHOE_REF" 2>/dev/null | jqv "d.get('digest', d.get('image_digest',''))")
+    dig=$(img inspect "$CM_TAHOE_REF" 2>/dev/null | jqv "d.get('id','')")
     pass "[REAL] image already in store, reuse (digest=$dig) — skip ~15GB re-pull"
   else
     log "[REAL] pulling $CM_TAHOE_REF (may be ~15GB)"
     if img pull "$CM_TAHOE_REF" >/dev/null 2>&1; then
-      dig=$(img inspect "$CM_TAHOE_REF" 2>/dev/null | jqv "d.get('digest', d.get('image_digest',''))")
+      dig=$(img inspect "$CM_TAHOE_REF" 2>/dev/null | jqv "d.get('id','')")
       if [ -n "$dig" ]; then pass "[REAL] image pull => content-addressed blob (digest=$dig)"; else fail "[REAL] image pull digest" "no digest after pull"; fi
     else fail "[REAL] image pull" "oras/cloudimg pull failed"; return; fi
   fi

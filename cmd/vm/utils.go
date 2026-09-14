@@ -30,11 +30,11 @@ const (
 )
 
 func loadRec(dir string) (*record, error) {
-	var r record
-	if err := utils.ReadJSONFile(filepath.Join(dir, "vm.json"), &r); err != nil {
+	r := new(record)
+	if err := utils.ReadJSONFile(filepath.Join(dir, "vm.json"), r); err != nil {
 		return nil, fmt.Errorf("read vm record: %w", err)
 	}
-	return &r, nil
+	return r, nil
 }
 
 // saveRec writes vm.json atomically (temp + fsync + rename) so a crash can't truncate it.

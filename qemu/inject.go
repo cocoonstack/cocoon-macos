@@ -248,8 +248,8 @@ func nbdArgReferencesDevice(arg, device string) bool {
 	if arg == device || arg == "--connect="+device {
 		return true
 	}
-	partition := strings.TrimPrefix(arg, device+"p")
-	if partition == arg || partition == "" {
+	partition, ok := strings.CutPrefix(arg, device+"p")
+	if !ok || partition == "" {
 		return false
 	}
 	_, err := strconv.Atoi(partition)

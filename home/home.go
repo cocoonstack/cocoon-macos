@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -35,8 +36,8 @@ func VMsDir(cmd *cobra.Command) string {
 
 // VMDir returns the per-VM state directory under VMsDir.
 func VMDir(cmd *cobra.Command, name string) (string, error) {
-	if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
-		return "", fmt.Errorf("invalid vm name %q: must be one path component", name)
+	if name == "" || strings.HasPrefix(name, ".") || filepath.Base(name) != name {
+		return "", fmt.Errorf("invalid vm name %q: must be one path component and not start with a dot", name)
 	}
 	return filepath.Join(VMsDir(cmd), name), nil
 }

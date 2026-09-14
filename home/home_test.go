@@ -33,6 +33,8 @@ func TestVMDir(t *testing.T) {
 		{name: "", wantErr: true},
 		{name: ".", wantErr: true},
 		{name: "..", wantErr: true},
+		{name: ".locks", wantErr: true},
+		{name: ".hidden", wantErr: true},
 		{name: "../demo", wantErr: true},
 		{name: "nested/demo", wantErr: true},
 		{name: "/tmp/demo", wantErr: true},

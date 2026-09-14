@@ -213,7 +213,8 @@ run_dummy() {
   fi
 
   # --- process lifecycle: stop sets PID=0 ; no leaked proc ---------------------------------------
-  pid_d1=$(setsid "$QEMU_STUB" -f "$d1_disk" >/dev/null 2>&1 & echo $!)
+  : > "$CM_HOME/vms/d1/qemu.pid"
+  pid_d1=$(setsid "$QEMU_STUB" -f "$d1_disk" "$CM_HOME/vms/d1/qemu.pid" >/dev/null 2>&1 & echo $!)
   python3 - "$CM_HOME/vms/d1/vm.json" "$pid_d1" <<'PY'
 import json,sys
 p=sys.argv[1]; pid=int(sys.argv[2])

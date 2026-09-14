@@ -3,12 +3,11 @@ module github.com/cocoonstack/cocoon-macos
 go 1.27.0
 
 require (
-	github.com/cocoonstack/cocoon v0.6.6
+	github.com/cocoonstack/cocoon v0.6.7-0.20260914111354-5f7dfa26aa14
 	github.com/docker/go-units v0.5.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/projecteru2/core v0.1.3
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/sync v0.22.0
 	howett.net/plist v1.0.1
 	oras.land/oras-go/v2 v2.6.1
 )
@@ -47,6 +46,7 @@ require (
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect

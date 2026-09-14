@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -11,13 +12,10 @@ import (
 	"github.com/cocoonstack/cocoon/utils"
 )
 
-const (
-	// minDataDiskSize mirrors cocoon's hypervisor.MinDataDiskSize, kept local because that package isn't dependency-light.
-	minDataDiskSize int64 = 16 << 20
+// maxDataDisks: macOS has no virtio-blk, so disks ride ich9-ahci's 6 SATA ports; OpenCoreBoot=sata.2 and MacHDD=sata.4 leave exactly four free.
+const maxDataDisks = 4
 
-	// maxDataDisks: macOS has no virtio-blk, so disks ride ich9-ahci's 6 SATA ports; OpenCoreBoot=sata.2 and MacHDD=sata.4 leave exactly four free.
-	maxDataDisks = 4
-)
+var agentOnlyDiskKeys = []string{"fstype", "mount", "directio"}
 
 // reserved names (a clone's copied disks) count against both the duplicate check and the AHCI cap.
 func parseDataDisks(raw, reserved []string) ([]types.DataDiskSpec, error) {
@@ -64,39 +62,14 @@ func parseDataDisks(raw, reserved []string) ([]types.DataDiskSpec, error) {
 }
 
 func parseDataDiskSpec(s string) (types.DataDiskSpec, error) {
-	var spec types.DataDiskSpec
-	if s == "" {
-		return spec, fmt.Errorf("data disk: empty spec")
-	}
 	for part := range strings.SplitSeq(s, ",") {
-		rawKey, rawVal, ok := strings.Cut(part, "=")
-		if !ok {
-			return spec, fmt.Errorf("data disk: %q is not key=value", part)
-		}
-		key, val := strings.TrimSpace(rawKey), strings.TrimSpace(rawVal)
-		switch key {
-		case "size":
-			n, err := parseSize(val)
-			if err != nil {
-				return spec, fmt.Errorf("data disk: invalid size %q: %w", val, err)
-			}
-			if n < minDataDiskSize {
-				return spec, fmt.Errorf("data disk: size %s below 16MiB minimum", val)
-			}
-			spec.Size = n
-		case "name":
-			if !types.ValidDataDiskName(val) {
-				return spec, fmt.Errorf("data disk: invalid name %q (must match [a-z][a-z0-9_-]{0,19}, no cocoon- prefix)", val)
-			}
-			spec.Name = val
-		case "fstype", "mount", "directio":
-			return spec, fmt.Errorf("data disk: key %q unsupported on macOS (no in-guest agent; format the disk in the guest with Disk Utility/diskutil)", key)
-		default:
-			return spec, fmt.Errorf("data disk: unknown key %q", key)
+		if key, _, _ := strings.Cut(part, "="); slices.Contains(agentOnlyDiskKeys, strings.TrimSpace(key)) {
+			return types.DataDiskSpec{}, fmt.Errorf("data disk: key %q unsupported on macOS (no in-guest agent; format the disk in the guest with Disk Utility/diskutil)", key)
 		}
 	}
-	if spec.Size == 0 {
-		return spec, fmt.Errorf("data disk: size= required")
+	spec, err := types.ParseDataDiskSpec(s)
+	if err != nil {
+		return spec, fmt.Errorf("data disk: %w", err)
 	}
 	return spec, nil
 }

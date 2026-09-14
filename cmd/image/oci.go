@@ -3,24 +3,20 @@ package image
 import (
 	"cmp"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"slices"
 	"strings"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"golang.org/x/sync/errgroup"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/credentials"
 
-	"github.com/cocoonstack/cocoon/utils"
+	"github.com/cocoonstack/cocoon/images/cloudimg"
+	"github.com/cocoonstack/cocoon/progress"
 )
 
 // ghcr throttles a single stream to a fraction of the link.
@@ -47,23 +43,18 @@ func pullOCIBlob(ctx context.Context, ref, dest string) error {
 	}
 	defer func() { _ = f.Close() }()
 
-	if layer.Size <= 0 || !supportsRange(ctx, client, blobURL) {
-		if err = fetchSingle(ctx, repo, layer, f); err != nil {
-			return err
-		}
-	} else {
-		if err = f.Truncate(layer.Size); err != nil {
-			return err
-		}
-		if err = fetchParallel(ctx, client, blobURL, layer.Size, f); err != nil {
-			return err
-		}
+	digest, err := cloudimg.DownloadBlob(ctx, client, blobURL, f, pullConns, progress.Nop)
+	if err != nil {
+		return err
 	}
 	// flush before import adopts the file, so a crash can't leave an unverified blob in the store
 	if err = f.Sync(); err != nil {
 		return fmt.Errorf("sync %s: %w", dest, err)
 	}
-	return verifyDigest(dest, layer.Digest.String())
+	if got := "sha256:" + digest; got != layer.Digest.String() {
+		return fmt.Errorf("digest mismatch: got %s want %s", got, layer.Digest)
+	}
+	return nil
 }
 
 func resolveQcow2Layer(ctx context.Context, repo *remote.Repository, ref string) (ocispec.Descriptor, error) {
@@ -84,71 +75,6 @@ func resolveQcow2Layer(ctx context.Context, repo *remote.Repository, ref string)
 		return ocispec.Descriptor{}, fmt.Errorf("%s: %w", ref, err)
 	}
 	return layer, nil
-}
-
-// supportsRange probes whether the blob endpoint honors Range (ghcr's presigned redirect does; a registry answering 200 does not).
-func supportsRange(ctx context.Context, client *auth.Client, url string) bool {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return false
-	}
-	req.Header.Set("Range", "bytes=0-0")
-	resp, err := client.Do(req)
-	if err != nil {
-		return false
-	}
-	_ = resp.Body.Close()
-	return resp.StatusCode == http.StatusPartialContent
-}
-
-func fetchParallel(ctx context.Context, client *auth.Client, url string, size int64, f *os.File) error {
-	g, gctx := errgroup.WithContext(ctx)
-	for _, r := range utils.SplitRanges(size, pullConns) {
-		start, end := r[0], r[1]
-		g.Go(func() error { return fetchRange(gctx, client, url, start, end, f) })
-	}
-	return g.Wait()
-}
-
-func fetchRange(ctx context.Context, client *auth.Client, url string, start, end int64, f *os.File) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	return utils.CopyRangeBody(resp, io.NewOffsetWriter(f, start), start, end)
-}
-
-func fetchSingle(ctx context.Context, repo *remote.Repository, layer ocispec.Descriptor, f *os.File) error {
-	rc, err := repo.Blobs().Fetch(ctx, layer)
-	if err != nil {
-		return fmt.Errorf("fetch layer %s: %w", layer.Digest, err)
-	}
-	defer func() { _ = rc.Close() }()
-	_, err = io.Copy(f, rc)
-	return err
-}
-
-func verifyDigest(path, want string) error {
-	f, err := os.Open(path) //nolint:gosec // path is an internal temp path (os.CreateTemp), not user input
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	if _, err = io.Copy(h, f); err != nil {
-		return err
-	}
-	got := "sha256:" + hex.EncodeToString(h.Sum(nil))
-	if got != want {
-		return fmt.Errorf("digest mismatch: got %s want %s", got, want)
-	}
-	return nil
 }
 
 // dockerCredential resolves credentials from the user's docker config; a missing config yields an empty store, so anonymous public pulls still work.

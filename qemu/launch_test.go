@@ -167,10 +167,10 @@ func TestArgsGuestRebootExitsQEMU(t *testing.T) {
 func TestArgsEscapeCommasInPaths(t *testing.T) {
 	s := Spec{
 		Disk: "/v/a,b/disk.qcow2", OpenCore: "/v/oc.qcow2", OVMFCode: "/v/c.fd", OVMFVars: "/v/v.fd", CPUs: 2, Memory: "2048", VNCDisp: -1,
-		MonSock: "/v/a,b/monitor.sock", DataDisks: []string{"/v/a,b/data1.qcow2"},
+		MonSock: "/v/a,b/monitor.sock", DataDisks: []string{"/v/a,b/data1.qcow2"}, Tap: "t,0",
 	}
 	args := s.Args()
-	for _, want := range []string{"file=/v/a,,b/disk.qcow2", "unix:/v/a,,b/monitor.sock,server,nowait", "file=/v/a,,b/data1.qcow2"} {
+	for _, want := range []string{"file=/v/a,,b/disk.qcow2", "unix:/v/a,,b/monitor.sock,server,nowait", "file=/v/a,,b/data1.qcow2", "ifname=t,,0,"} {
 		if !slices.ContainsFunc(args, func(a string) bool { return strings.Contains(a, want) }) {
 			t.Errorf("args lack %q: %v", want, args)
 		}

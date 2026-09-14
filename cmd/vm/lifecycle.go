@@ -47,11 +47,11 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 					return fmt.Errorf("repair vnc proxy: %w", err)
 				}
 			}
+			ignored := ""
 			if cmd.Flags().Changed("vnc") || cmd.Flags().Changed("vnc-password") {
-				fmt.Printf("%s (pid %d, already running; supplied VNC settings ignored because live QEMU cannot be retargeted)\n", n, r.PID)
-			} else {
-				fmt.Printf("%s (pid %d, already running)\n", n, r.PID)
+				ignored = "; supplied VNC settings ignored because live QEMU cannot be retargeted"
 			}
+			fmt.Printf("%s (pid %d, already running%s)\n", n, r.PID, ignored)
 			return nil
 		}
 		r.VNCDisp, r.VNCPass = vnc, vncPass

@@ -12,7 +12,6 @@ import (
 
 	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
-	"github.com/vishvananda/netlink"
 
 	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
@@ -120,7 +119,7 @@ func teardownNet(ctx context.Context, cmd *cobra.Command, r *record) error {
 	return nil
 }
 
-// toggleNet downs a stopped VM's owned NICs so a dead VMM's carrier-less TAP can't storm host softirqs via the tc mirred redirect, and brings them back up on start.
+// toggleNet quiesces the provider's NICs around stop and start; the bridge backend has nothing to quiesce and no-ops.
 func toggleNet(cmd *cobra.Command, r *record, up bool) {
 	if !r.TapOwned {
 		return
@@ -135,27 +134,6 @@ func toggleNet(cmd *cobra.Command, r *record, up bool) {
 		logger.Warnf(ctx, "%s network for %s: %v", verb, r.VMID, err)
 	} else if err := toggle(provider, ctx, r.VMID); err != nil {
 		logger.Warnf(ctx, "%s network for %s: %v", verb, r.VMID, err)
-	}
-	setTapLink(ctx, r, up)
-}
-
-// setTapLink flips a host-netns TAP's admin state: cocoon's bridge backend no-ops Quiesce, so the toggle lives here; a CNI TAP is inside a netns and is the provider's job.
-func setTapLink(ctx context.Context, r *record, up bool) {
-	if r.Tap == "" || r.Netns != "" {
-		return
-	}
-	logger := log.WithFunc("cmd.vm.setTapLink")
-	link, err := netlink.LinkByName(r.Tap)
-	if err != nil {
-		logger.Warnf(ctx, "find tap %s: %v", r.Tap, err)
-		return
-	}
-	set := netlink.LinkSetUp
-	if !up {
-		set = netlink.LinkSetDown
-	}
-	if err := set(link); err != nil {
-		logger.Warnf(ctx, "set tap %s up=%v: %v", r.Tap, up, err)
 	}
 }
 

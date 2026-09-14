@@ -64,13 +64,13 @@ func (s Spec) Args() []string {
 		"-device", "usb-kbd,bus=xhci.0",
 		"-device", "usb-tablet,bus=xhci.0",
 		"-device", "isa-applesmc,osk=" + osk,
-		"-drive", "if=pflash,format=raw,readonly=on,file=" + s.OVMFCode,
-		"-drive", "if=pflash,format=" + varsFmt + ",file=" + s.OVMFVars,
+		"-drive", "if=pflash,format=raw,readonly=on,file=" + escapeOptValue(s.OVMFCode),
+		"-drive", "if=pflash,format=" + varsFmt + ",file=" + escapeOptValue(s.OVMFVars),
 		"-smbios", "type=2",
 		"-device", "ich9-ahci,id=sata",
-		"-drive", "id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,aio=io_uring,file=" + s.OpenCore,
+		"-drive", "id=OpenCoreBoot,if=none,snapshot=on,format=qcow2,aio=io_uring,file=" + escapeOptValue(s.OpenCore),
 		"-device", "ide-hd,bus=sata.2,drive=OpenCoreBoot",
-		"-drive", "id=MacHDD," + ahciDriveOpts + ",file=" + s.Disk,
+		"-drive", "id=MacHDD," + ahciDriveOpts + ",file=" + escapeOptValue(s.Disk),
 		"-device", "ide-hd,bus=sata.4,drive=MacHDD",
 		"-device", "vmware-svga",
 	}
@@ -83,7 +83,7 @@ func (s Spec) Args() []string {
 	for i, path := range s.DataDisks {
 		id := fmt.Sprintf("DataDisk%d", i)
 		a = append(a,
-			"-drive", fmt.Sprintf("id=%s,%s,file=%s", id, ahciDriveOpts, path),
+			"-drive", fmt.Sprintf("id=%s,%s,file=%s", id, ahciDriveOpts, escapeOptValue(path)),
 			"-device", fmt.Sprintf("ide-hd,bus=sata.%d,drive=%s", dataDiskPorts[i], id))
 	}
 	switch {
@@ -104,7 +104,7 @@ func (s Spec) Args() []string {
 	if s.VNCDisp >= 0 {
 		var vnc string
 		if s.VNCSock != "" {
-			vnc = "unix:" + s.VNCSock
+			vnc = "unix:" + escapeOptValue(s.VNCSock)
 		} else {
 			vnc = fmt.Sprintf("127.0.0.1:%d", s.VNCDisp)
 		}
@@ -115,10 +115,10 @@ func (s Spec) Args() []string {
 		a = append(a, "-k", "en-us", "-vnc", vnc)
 	}
 	if s.MonSock != "" {
-		a = append(a, "-monitor", "unix:"+s.MonSock+",server,nowait")
+		a = append(a, "-monitor", "unix:"+escapeOptValue(s.MonSock)+",server,nowait")
 	}
 	if s.QMPSock != "" {
-		a = append(a, "-qmp", "unix:"+s.QMPSock+",server,nowait")
+		a = append(a, "-qmp", "unix:"+escapeOptValue(s.QMPSock)+",server,nowait")
 	}
 	return a
 }
@@ -127,3 +127,5 @@ func (s Spec) Args() []string {
 func IsQcow2NVRAM(path string) bool {
 	return strings.HasSuffix(path, ".qcow2")
 }
+
+func escapeOptValue(v string) string { return strings.ReplaceAll(v, ",", ",,") }

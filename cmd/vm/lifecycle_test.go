@@ -34,6 +34,31 @@ func TestSnapshotAdoptsQEMUWhenRecordPIDWasNotCommitted(t *testing.T) {
 	}
 }
 
+func TestSnapshotRefusesDuplicateTag(t *testing.T) {
+	stateDir := t.TempDir()
+	cmd := newLifecycleTestCommand(t, stateDir)
+	cmd.Flags().String("tag", "", "")
+	if err := cmd.Flags().Set("tag", "base"); err != nil {
+		t.Fatal(err)
+	}
+	vmDir, err := home.VMDir(cmd, "macos-demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(vmDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r := &record{Name: "macos-demo", Disk: filepath.Join(vmDir, "disk.qcow2"), VNCDisp: -1, Snapshots: []string{"base"}}
+	if err := saveRec(vmDir, r); err != nil {
+		t.Fatal(err)
+	}
+
+	err = NewHandler().Snapshot(cmd, []string{"macos-demo"})
+	if err == nil || !strings.Contains(err.Error(), "already has snapshot") {
+		t.Fatalf("Snapshot error = %v, want the duplicate tag refusal", err)
+	}
+}
+
 func TestRMAdoptsQEMUWhenRecordPIDWasNotCommitted(t *testing.T) {
 	stateDir := t.TempDir()
 	vmDir, _ := startUnrecordedQEMU(t, stateDir, "macos-demo")

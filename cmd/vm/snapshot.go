@@ -3,6 +3,7 @@ package vm
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/projecteru2/core/log"
@@ -34,6 +35,9 @@ func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {
 		}
 		if running {
 			return fmt.Errorf("vm %q is running (pid %d); stop it first (qemu-img snapshot on a live image corrupts it)", r.Name, r.PID)
+		}
+		if slices.Contains(r.Snapshots, tag) {
+			return fmt.Errorf("vm %q already has snapshot %q", r.Name, tag)
 		}
 		if err := snapshotAllOrNothing(ctx, imagesToSnapshot(r), tag); err != nil {
 			return err

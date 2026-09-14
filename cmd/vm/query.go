@@ -15,24 +15,29 @@ import (
 	"github.com/cocoonstack/cocoon/utils"
 )
 
+type vmOutput struct {
+	*record
+	State string `json:"state"`
+}
+
 func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	vmsDir := home.VMsDir(cmd)
 	names, err := utils.ScanSubdirs(vmsDir)
 	if err != nil {
 		return err
 	}
-	recs := []*record{}
+	vms := []vmOutput{}
 	for _, n := range names {
 		if r, err := loadRec(filepath.Join(vmsDir, n)); err == nil {
-			recs = append(recs, r)
+			vms = append(vms, vmOutput{r, vmState(r)})
 		}
 	}
-	return cliutil.OutputFormatted(cmd, recs, func(w *tabwriter.Writer) {
+	return cliutil.OutputFormatted(cmd, vms, func(w *tabwriter.Writer) {
 		fmt.Fprintln(w, "NAME\tSTATE\tCPU\tMEM\tNET\tVNC\tSSH\tIMAGE\tCREATED") //nolint:errcheck // the tabwriter flush reports the write error
-		for _, r := range recs {
+		for _, v := range vms {
 			fmt.Fprintf(w, "%s\t%s\t%d\t%sM\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck // the tabwriter flush reports the write error
-				r.Name, vmState(r), r.CPUs, r.Memory, cmp.Or(r.NetMode, netUser),
-				vncCol(r), sshCol(r), r.Image, formatTime(r.Created))
+				v.Name, v.State, v.CPUs, v.Memory, cmp.Or(v.NetMode, netUser),
+				vncCol(v.record), sshCol(v.record), v.Image, formatTime(v.Created))
 		}
 	})
 }
@@ -46,7 +51,7 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return cliutil.OutputJSON(r)
+	return cliutil.OutputJSON(vmOutput{r, vmState(r)})
 }
 
 func (h *Handler) Console(cmd *cobra.Command, args []string) error {

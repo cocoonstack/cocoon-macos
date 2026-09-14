@@ -28,119 +28,93 @@ func (h *Handler) Run(cmd *cobra.Command, args []string) error {
 }
 
 func (h *Handler) Start(cmd *cobra.Command, args []string) error {
-	ctx := cliutil.CommandContext(cmd)
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
-	for _, n := range args {
-		dir, err := home.VMDir(cmd, n)
+	return forEachVMDir(cmd, args, func(ctx context.Context, n, dir string) error {
+		r, err := loadRec(dir)
 		if err != nil {
 			return err
 		}
-		if err := withVMLock(ctx, dir, func() error {
-			r, err := loadRec(dir)
-			if err != nil {
-				return err
-			}
-			// an op that held the lock (export, a racing run) may have restarted qemu; adopt it and only repair a dead vnc proxy
-			running, err := reconcileRunningQEMU(dir, r)
-			if err != nil {
-				return err
-			}
-			if running {
-				if r.Netns != "" && r.VNCDisp >= 0 && !vncProxyRunning(dir) {
-					if err := startVNCProxy(ctx, dir, r.VNCDisp); err != nil {
-						return fmt.Errorf("repair vnc proxy: %w", err)
-					}
-				}
-				if cmd.Flags().Changed("vnc") || cmd.Flags().Changed("vnc-password") {
-					fmt.Printf("%s (pid %d, already running; supplied VNC settings ignored because live QEMU cannot be retargeted)\n", n, r.PID)
-				} else {
-					fmt.Printf("%s (pid %d, already running)\n", n, r.PID)
-				}
-				return nil
-			}
-			r.VNCDisp, r.VNCPass = vnc, vncPass
-			if err := h.launch(cmd, dir, r); err != nil {
-				return err
-			}
-			toggleNet(cmd, r, true)
-			fmt.Printf("%s (pid %d)\n", n, r.PID)
-			return nil
-		}); err != nil {
+		// an op that held the lock (export, a racing run) may have restarted qemu; adopt it and only repair a dead vnc proxy
+		running, err := reconcileRunningQEMU(dir, r)
+		if err != nil {
 			return err
 		}
-	}
-	return nil
+		if running {
+			if r.Netns != "" && r.VNCDisp >= 0 && !vncProxyRunning(dir) {
+				if err := startVNCProxy(ctx, dir, r.VNCDisp); err != nil {
+					return fmt.Errorf("repair vnc proxy: %w", err)
+				}
+			}
+			if cmd.Flags().Changed("vnc") || cmd.Flags().Changed("vnc-password") {
+				fmt.Printf("%s (pid %d, already running; supplied VNC settings ignored because live QEMU cannot be retargeted)\n", n, r.PID)
+			} else {
+				fmt.Printf("%s (pid %d, already running)\n", n, r.PID)
+			}
+			return nil
+		}
+		r.VNCDisp, r.VNCPass = vnc, vncPass
+		if err := h.launch(cmd, dir, r); err != nil {
+			return err
+		}
+		toggleNet(cmd, r, true)
+		fmt.Printf("%s (pid %d)\n", n, r.PID)
+		return nil
+	})
 }
 
 func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 	grace := graceFromFlags(cmd)
-	ctx := cliutil.CommandContext(cmd)
-	for _, n := range args {
-		dir, err := home.VMDir(cmd, n)
+	return forEachVMDir(cmd, args, func(ctx context.Context, n, dir string) error {
+		r, err := loadRec(dir)
 		if err != nil {
 			return err
 		}
-		if err := withVMLock(ctx, dir, func() error {
-			r, err := loadRec(dir)
-			if err != nil {
-				return err
-			}
+		if _, err := reconcileRunningQEMU(dir, r); err != nil {
+			return err
+		}
+		if err := stopInstance(ctx, dir, r, grace); err != nil {
+			return err
+		}
+		toggleNet(cmd, r, false)
+		r.PID, r.VNCDisp, r.VNCPass, r.VNCPassSet = 0, -1, "", false // VNC is launch-scoped: gone with the qemu it belonged to
+		if err := saveRec(dir, r); err != nil {
+			return err
+		}
+		fmt.Println(n)
+		return nil
+	})
+}
+
+func (h *Handler) RM(cmd *cobra.Command, args []string) error {
+	grace := graceFromFlags(cmd)
+	return forEachVMDir(cmd, args, func(ctx context.Context, n, dir string) error {
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			fmt.Println(n)
+			return nil
+		} else if err != nil {
+			return fmt.Errorf("stat vm dir: %w", err)
+		}
+		// the flock stops a concurrent create/start from changing state between terminate and RemoveAll
+		if r, err := loadRec(dir); err == nil {
 			if _, err := reconcileRunningQEMU(dir, r); err != nil {
 				return err
 			}
 			if err := stopInstance(ctx, dir, r, grace); err != nil {
 				return err
 			}
-			toggleNet(cmd, r, false)
-			r.PID, r.VNCDisp, r.VNCPass, r.VNCPassSet = 0, -1, "", false // VNC is launch-scoped: gone with the qemu it belonged to
-			return saveRec(dir, r)
-		}); err != nil {
-			return err
+			if err := teardownNet(ctx, cmd, r); err != nil {
+				return err
+			}
+		} else if cleanupErr := reapStrayHelpers(ctx, dir); cleanupErr != nil {
+			return cleanupErr
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			return fmt.Errorf("remove vm dir: %w", err)
 		}
 		fmt.Println(n)
-	}
-	return nil
-}
-
-func (h *Handler) RM(cmd *cobra.Command, args []string) error {
-	grace := graceFromFlags(cmd)
-	ctx := cliutil.CommandContext(cmd)
-	for _, n := range args {
-		dir, err := home.VMDir(cmd, n)
-		if err != nil {
-			return err
-		}
-		if err := withVMLock(ctx, dir, func() error {
-			if _, err := os.Stat(dir); os.IsNotExist(err) {
-				return nil
-			} else if err != nil {
-				return fmt.Errorf("stat vm dir: %w", err)
-			}
-			// the flock stops a concurrent create/start from changing state between terminate and RemoveAll
-			if r, err := loadRec(dir); err == nil {
-				if _, err := reconcileRunningQEMU(dir, r); err != nil {
-					return err
-				}
-				if err := stopInstance(ctx, dir, r, grace); err != nil {
-					return err
-				}
-				if err := teardownNet(ctx, cmd, r); err != nil {
-					return err
-				}
-			} else if cleanupErr := reapStrayHelpers(ctx, dir); cleanupErr != nil {
-				return cleanupErr
-			}
-			if err := os.RemoveAll(dir); err != nil {
-				return fmt.Errorf("remove vm dir: %w", err)
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-		fmt.Println(n)
-	}
-	return nil
+		return nil
+	})
 }
 
 func (h *Handler) createVM(cmd *cobra.Command, image string, launch bool) error {
@@ -241,7 +215,7 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	if err := requireCNIVNCPassword(r.Netns != "", r.VNCDisp, r.VNCPass); err != nil {
 		return err
 	}
-	if hostIsAMD() {
+	if isHostAMD() {
 		// macOS reads MSRs an AMD host lacks; without kvm.ignore_msrs KVM injects #GP (best-effort, host-global)
 		if err := os.WriteFile("/sys/module/kvm/parameters/ignore_msrs", []byte("1\n"), 0o600); err != nil {
 			logger.Warnf(ctx, "set kvm ignore_msrs for AMD: %v", err)

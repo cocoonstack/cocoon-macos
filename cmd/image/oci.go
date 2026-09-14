@@ -47,7 +47,7 @@ func pullOCIBlob(ctx context.Context, ref, dest string) error {
 	}
 	defer func() { _ = f.Close() }()
 
-	if layer.Size <= 0 || !rangeSupported(ctx, client, blobURL) {
+	if layer.Size <= 0 || !supportsRange(ctx, client, blobURL) {
 		if err = fetchSingle(ctx, repo, layer, f); err != nil {
 			return err
 		}
@@ -86,8 +86,8 @@ func resolveQcow2Layer(ctx context.Context, repo *remote.Repository, ref string)
 	return layer, nil
 }
 
-// rangeSupported probes whether the blob endpoint honors Range (ghcr's presigned redirect does; a registry answering 200 does not).
-func rangeSupported(ctx context.Context, client *auth.Client, url string) bool {
+// supportsRange probes whether the blob endpoint honors Range (ghcr's presigned redirect does; a registry answering 200 does not).
+func supportsRange(ctx context.Context, client *auth.Client, url string) bool {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return false

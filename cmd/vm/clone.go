@@ -40,10 +40,7 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 }
 
 func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr error) {
-	netMode := srcRec.NetMode
-	if cmd.Flags().Changed("net") {
-		netMode, _ = cmd.Flags().GetString("net")
-	}
+	netMode := inherit(cmd, "net", srcRec.NetMode, cmd.Flags().GetString)
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	if err := requireCNIVNCPassword(netMode == netCNI, vnc, vncPass); err != nil {
@@ -53,10 +50,7 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 	if err := validateTapFlag(netMode, tapFlag); err != nil {
 		return err
 	}
-	cpus := srcRec.CPUs
-	if cmd.Flags().Changed("cpus") {
-		cpus, _ = cmd.Flags().GetInt("cpus")
-	}
+	cpus := inherit(cmd, "cpus", srcRec.CPUs, cmd.Flags().GetInt)
 	if err := validateMacOSCPUs(cpus); err != nil {
 		return err
 	}
@@ -100,26 +94,17 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 	if err != nil {
 		return err
 	}
+	ssh, _ := cmd.Flags().GetInt("ssh-port")
 	r = &record{
 		Name: name, Image: srcRec.Image, ImageDigest: digest, Disk: overlay,
-		OVMFCode: srcRec.OVMFCode, OVMFVars: ovmfVars, CPUs: cpus, Memory: srcRec.Memory, Storage: storage,
+		OVMFCode: srcRec.OVMFCode, OVMFVars: ovmfVars, CPUs: cpus, Storage: storage,
+		Memory:       inherit(cmd, "memory", srcRec.Memory, cmd.Flags().GetString),
+		Hugepages:    inherit(cmd, "hugepages", srcRec.Hugepages, cmd.Flags().GetBool),
+		ExitOnReboot: inherit(cmd, "exit-on-reboot", srcRec.ExitOnReboot, cmd.Flags().GetBool),
+		VNCDisp:      vnc, SSHPort: ssh, VNCPass: vncPass,
 		DataDisks: append(copied, newDisks...),
 		VMID:      utils.GenerateID(), Created: time.Now().Format(time.RFC3339),
 	}
-	if cmd.Flags().Changed("memory") {
-		r.Memory, _ = cmd.Flags().GetString("memory")
-	}
-	r.Hugepages = srcRec.Hugepages
-	if cmd.Flags().Changed("hugepages") {
-		r.Hugepages, _ = cmd.Flags().GetBool("hugepages")
-	}
-	r.ExitOnReboot = srcRec.ExitOnReboot
-	if cmd.Flags().Changed("exit-on-reboot") {
-		r.ExitOnReboot, _ = cmd.Flags().GetBool("exit-on-reboot")
-	}
-	r.VNCDisp = vnc
-	r.SSHPort, _ = cmd.Flags().GetInt("ssh-port")
-	r.VNCPass = vncPass
 	// fresh identity when SRC has one or --random-smbios, so two clones never share a serial/MAC
 	randomSMBIOS, _ := cmd.Flags().GetBool("random-smbios")
 	freshIdentity := randomSMBIOS || srcRec.SMBIOS != nil

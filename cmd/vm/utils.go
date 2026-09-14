@@ -59,6 +59,20 @@ func withVMLock(ctx context.Context, dir string, fn func() error) error {
 	return fn()
 }
 
+func forEachVMDir(cmd *cobra.Command, args []string, fn func(ctx context.Context, name, dir string) error) error {
+	ctx := cliutil.CommandContext(cmd)
+	for _, n := range args {
+		dir, err := home.VMDir(cmd, n)
+		if err != nil {
+			return err
+		}
+		if err := withVMLock(ctx, dir, func() error { return fn(ctx, n, dir) }); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func withVMLocks(ctx context.Context, dirs []string, fn func() error) error {
 	dirs = slices.Clone(dirs)
 	slices.Sort(dirs)
@@ -292,14 +306,14 @@ func graceFromFlags(cmd *cobra.Command) time.Duration {
 	return stopGracePeriod
 }
 
-func hostIsAMD() bool {
+func isHostAMD() bool {
 	b, err := os.ReadFile("/proc/cpuinfo")
 	return err == nil && strings.Contains(string(b), "AuthenticAMD")
 }
 
 // resolveBase returns the immutable base qcow2 (+ digest): a direct filesystem path, else an image ref resolved through cocoon's cloudimg store.
 func resolveBase(ctx context.Context, cmd *cobra.Command, image, name string) (string, string, error) {
-	if _, err := os.Stat(image); err == nil {
+	if utils.FileExists(image) {
 		return image, "", nil
 	}
 	ensureCloudimgFirmware(cmd)
@@ -321,7 +335,7 @@ func ensureCloudimgFirmware(cmd *cobra.Command) {
 	if utils.ValidFile(fw) {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(fw), 0o750); err == nil {
+	if err := utils.EnsureDirs(filepath.Dir(fw)); err == nil {
 		_ = os.WriteFile(fw, []byte("placeholder: cocoon-macos boots via OVMF, not CLOUDHV\n"), 0o600)
 	}
 }
@@ -410,4 +424,12 @@ func readUntil(conn net.Conn, marker string) (string, bool) {
 func flagOr(cmd *cobra.Command, name, def string) string {
 	v, _ := cmd.Flags().GetString(name)
 	return cmp.Or(v, def)
+}
+
+func inherit[T any](cmd *cobra.Command, flag string, base T, get func(string) (T, error)) T {
+	if !cmd.Flags().Changed(flag) {
+		return base
+	}
+	v, _ := get(flag)
+	return v
 }

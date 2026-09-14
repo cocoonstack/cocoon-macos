@@ -172,9 +172,11 @@ func TestHMPRepliedFlagsAnyMessage(t *testing.T) {
 		{"readline redraw echo", "s\x1b[K\x1b[Dse\x1b[K\x1b[D\x1b[Dset_password vnc abcd\r\n(qemu) ", false},
 		{"readline redraw then rejection", "s\x1b[K\x1b[Dset_password vnc \"abc\r\nset_password: string expected\r\n(qemu) ", true},
 	} {
-		if got := hmpReplied(tc.out); got != tc.want {
-			t.Errorf("%s: hmpReplied = %v, want %v", tc.name, got, tc.want)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hmpReplied(tc.out); got != tc.want {
+				t.Errorf("hmpReplied = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

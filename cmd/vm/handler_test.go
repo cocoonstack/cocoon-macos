@@ -2,10 +2,9 @@ package vm
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -24,13 +23,15 @@ func TestValidateMacOSCPUs(t *testing.T) {
 		{cpus: 3, wantErr: true},
 		{cpus: 4},
 	} {
-		err := validateMacOSCPUs(tt.cpus)
-		if (err != nil) != tt.wantErr {
-			t.Fatalf("validateMacOSCPUs(%d) error = %v, wantErr %v", tt.cpus, err, tt.wantErr)
-		}
-		if err != nil && !strings.Contains(err.Error(), "positive even number") {
-			t.Fatalf("validateMacOSCPUs(%d) error = %v", tt.cpus, err)
-		}
+		t.Run(strconv.Itoa(tt.cpus), func(t *testing.T) {
+			err := validateMacOSCPUs(tt.cpus)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateMacOSCPUs(%d) error = %v, wantErr %v", tt.cpus, err, tt.wantErr)
+			}
+			if err != nil && !strings.Contains(err.Error(), "positive even number") {
+				t.Fatalf("validateMacOSCPUs(%d) error = %v", tt.cpus, err)
+			}
+		})
 	}
 }
 
@@ -65,29 +66,12 @@ func TestStartAlreadyRunningIsIdempotent(t *testing.T) {
 	if err := os.MkdirAll(vmDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-
-	fakeQEMU := filepath.Join(t.TempDir(), qemuBinary)
-	if err := os.Symlink("/bin/sh", fakeQEMU); err != nil {
-		t.Fatal(err)
-	}
 	disk := filepath.Join(vmDir, "disk.qcow2")
-	process := exec.Command(fakeQEMU, "-c", "while :; do sleep 1; done", disk)
-	if err := process.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = process.Process.Kill()
-		_ = process.Wait()
-	})
-
-	rec := &record{Name: "macos-demo", Disk: disk, PID: process.Process.Pid, VNCDisp: 1}
+	rec := &record{Name: "macos-demo", Disk: disk, PID: spawnFakeQEMU(t, disk), VNCDisp: 1}
 	if err := saveRec(vmDir, rec); err != nil {
 		t.Fatal(err)
 	}
-
-	cmd := &cobra.Command{}
-	cmd.SetContext(t.Context())
-	cmd.Flags().String("state-dir", stateDir, "")
+	cmd := newLifecycleTestCommand(t, stateDir)
 	cmd.Flags().Int("vnc", -1, "")
 	cmd.Flags().String("vnc-password", "", "")
 	if err := cmd.Flags().Set("vnc", "2"); err != nil {
@@ -110,35 +94,12 @@ func TestStartAlreadyRunningIsIdempotent(t *testing.T) {
 }
 
 func TestStartAdoptsQEMUWhenRecordPIDWasNotCommitted(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("process cmdline adoption requires /proc")
-	}
 	stateDir := t.TempDir()
-	vmDir := filepath.Join(stateDir, "vms", "macos-demo")
-	if err := os.MkdirAll(vmDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	fakeQEMU := filepath.Join(t.TempDir(), qemuBinary)
-	if err := os.Symlink("/bin/sh", fakeQEMU); err != nil {
-		t.Fatal(err)
-	}
-	disk := filepath.Join(vmDir, "disk.qcow2")
-	process := exec.Command(fakeQEMU, "-c", "while :; do sleep 1; done", disk)
-	if err := process.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = process.Process.Kill()
-		_ = process.Wait()
-	})
-	if err := saveRec(vmDir, &record{Name: "macos-demo", Disk: disk, VNCDisp: -1}); err != nil {
-		t.Fatal(err)
-	}
-	cmd := &cobra.Command{}
-	cmd.SetContext(t.Context())
-	cmd.Flags().String("state-dir", stateDir, "")
+	vmDir, pid := startUnrecordedQEMU(t, stateDir, "macos-demo")
+	cmd := newLifecycleTestCommand(t, stateDir)
 	cmd.Flags().Int("vnc", -1, "")
 	cmd.Flags().String("vnc-password", "", "")
+
 	if err := NewHandler().Start(cmd, []string{"macos-demo"}); err != nil {
 		t.Fatalf("Start must adopt the already-running QEMU: %v", err)
 	}
@@ -146,8 +107,8 @@ func TestStartAdoptsQEMUWhenRecordPIDWasNotCommitted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.PID != process.Process.Pid {
-		t.Fatalf("adopted PID = %d, want %d", got.PID, process.Process.Pid)
+	if got.PID != pid {
+		t.Fatalf("adopted PID = %d, want %d", got.PID, pid)
 	}
 }
 

@@ -46,9 +46,7 @@ func TestNetConfScope(t *testing.T) {
 
 func TestRMRetainsStateWhenNetworkTeardownFails(t *testing.T) {
 	stateDir := t.TempDir()
-	cmd := &cobra.Command{}
-	cmd.SetContext(t.Context())
-	cmd.Flags().String("state-dir", stateDir, "")
+	cmd := newLifecycleTestCommand(t, stateDir)
 	cmd.Flags().Bool("force", false, "")
 	dir, err := home.VMDir(cmd, "macos-demo")
 	if err != nil {

@@ -167,11 +167,20 @@ func startUnrecordedQEMU(t *testing.T, stateDir, name string) (string, int) {
 	if err := os.MkdirAll(vmDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	disk := filepath.Join(vmDir, "disk.qcow2")
+	pid := spawnFakeQEMU(t, disk)
+	if err := saveRec(vmDir, &record{Name: name, Disk: disk, VNCDisp: -1}); err != nil {
+		t.Fatal(err)
+	}
+	return vmDir, pid
+}
+
+func spawnFakeQEMU(t *testing.T, disk string) int {
+	t.Helper()
 	fakeQEMU := filepath.Join(t.TempDir(), qemuBinary)
 	if err := os.Symlink("/bin/sh", fakeQEMU); err != nil {
 		t.Fatal(err)
 	}
-	disk := filepath.Join(vmDir, "disk.qcow2")
 	process := exec.Command(fakeQEMU, "-c", "while :; do sleep 1; done", disk)
 	if err := process.Start(); err != nil {
 		t.Fatal(err)
@@ -190,10 +199,7 @@ func startUnrecordedQEMU(t *testing.T, stateDir, name string) (string, int) {
 	}); err != nil {
 		t.Fatalf("fake QEMU did not start: %v", err)
 	}
-	if err := saveRec(vmDir, &record{Name: name, Disk: disk, VNCDisp: -1}); err != nil {
-		t.Fatal(err)
-	}
-	return vmDir, process.Process.Pid
+	return process.Process.Pid
 }
 
 func newLifecycleTestCommand(t *testing.T, stateDir string) *cobra.Command {

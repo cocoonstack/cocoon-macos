@@ -14,7 +14,7 @@ import (
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 )
 
-func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {
+func Snapshot(cmd *cobra.Command, args []string) error {
 	dir, err := home.VMDir(cmd, args[0])
 	if err != nil {
 		return err
@@ -51,7 +51,7 @@ func (h *Handler) Snapshot(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
+func Restore(cmd *cobra.Command, args []string) error {
 	dir, err := home.VMDir(cmd, args[0])
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 			}
 		}
 		if wasRunning {
-			return h.launch(cmd, dir, r)
+			return launch(cmd, dir, r)
 		}
 		return saveRec(dir, r)
 	}); err != nil {

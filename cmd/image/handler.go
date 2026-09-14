@@ -17,12 +17,7 @@ import (
 
 const maxPullAttempts = 3
 
-// Handler is the image command surface on cocoon's cloudimg store.
-type Handler struct{}
-
-func NewHandler() *Handler { return &Handler{} }
-
-func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
+func Pull(cmd *cobra.Command, args []string) error {
 	ctx := cliutil.CommandContext(cmd)
 	s, err := home.OpenStore(ctx, cmd)
 	if err != nil {
@@ -68,7 +63,7 @@ func (h *Handler) Pull(cmd *cobra.Command, args []string) error {
 	return fmt.Errorf("pull %s after %d attempts: %w", ref, maxPullAttempts, perr)
 }
 
-func (h *Handler) List(cmd *cobra.Command, _ []string) error {
+func List(cmd *cobra.Command, _ []string) error {
 	ctx := cliutil.CommandContext(cmd)
 	s, err := home.OpenStore(ctx, cmd)
 	if err != nil {
@@ -91,7 +86,7 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	})
 }
 
-func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
+func Inspect(cmd *cobra.Command, args []string) error {
 	ctx := cliutil.CommandContext(cmd)
 	s, err := home.OpenStore(ctx, cmd)
 	if err != nil {
@@ -107,7 +102,7 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 	return cliutil.OutputJSON(img)
 }
 
-func (h *Handler) RM(cmd *cobra.Command, args []string) error {
+func RM(cmd *cobra.Command, args []string) error {
 	ctx := cliutil.CommandContext(cmd)
 	s, err := home.OpenStore(ctx, cmd)
 	if err != nil {

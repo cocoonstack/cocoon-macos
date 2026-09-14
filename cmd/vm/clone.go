@@ -12,7 +12,7 @@ import (
 	"github.com/cocoonstack/cocoon/utils"
 )
 
-func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
+func Clone(cmd *cobra.Command, args []string) error {
 	src := args[0]
 	srcDir, err := home.VMDir(cmd, src)
 	if err != nil {
@@ -35,11 +35,11 @@ func (h *Handler) Clone(cmd *cobra.Command, args []string) error {
 		if running {
 			return fmt.Errorf("vm %q is running; stop it before cloning", src)
 		}
-		return h.clone(cmd, srcRec, name)
+		return clone(cmd, srcRec, name)
 	})
 }
 
-func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr error) {
+func clone(cmd *cobra.Command, srcRec *record, name string) (retErr error) {
 	netMode := inherit(cmd, "net", srcRec.NetMode, cmd.Flags().GetString)
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")

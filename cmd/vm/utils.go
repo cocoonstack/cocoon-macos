@@ -125,12 +125,9 @@ func parseSize(raw string) (int64, error) {
 
 // resizeSystemDisk grows a new overlay to target bytes (0 = keep image size); shrinking is rejected because qemu-img cannot prove the guest filesystem survives.
 func resizeSystemDisk(ctx context.Context, path string, target int64) (int64, error) {
-	hdr, ok, err := utils.ReadQcow2Header(path)
+	hdr, _, err := utils.ReadQcow2Header(path)
 	if err != nil {
 		return 0, fmt.Errorf("read system disk %s: %w", path, err)
-	}
-	if !ok {
-		return 0, fmt.Errorf("system disk %s is not qcow2", path)
 	}
 	if target == 0 || target == hdr.VirtualSize {
 		return hdr.VirtualSize, nil
@@ -355,10 +352,6 @@ func resolveFirmware(cmd *cobra.Command) (opencore, code, vars string, err error
 
 // setVNCPassword applies the VNC password over the HMP monitor (QEMU was started with password=on).
 func setVNCPassword(ctx context.Context, monSock, pw string) error {
-	// Start reaches here without the create/clone pre-check
-	if err := validateVNCPassword(pw); err != nil {
-		return err
-	}
 	var conn net.Conn
 	var dialErr error
 	// the monitor socket appears asynchronously after -daemonize

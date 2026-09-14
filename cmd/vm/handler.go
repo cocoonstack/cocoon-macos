@@ -17,11 +17,6 @@ const (
 	netCNI    = "cni"
 )
 
-// Handler is the vm command surface: per-VM CoW overlays on a golden macOS qcow2, booted by qemu-system-x86_64 on an x86 Linux/KVM host.
-type Handler struct{}
-
-func NewHandler() *Handler { return &Handler{} }
-
 type record struct {
 	Name        string `json:"name"`
 	VMID        string `json:"vmid,omitempty"` // random network-plane id (cocoon VMIDPrefix); != Name

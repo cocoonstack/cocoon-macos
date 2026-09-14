@@ -102,7 +102,7 @@ func TestStartAlreadyRunningIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := NewHandler().Start(cmd, []string{"macos-demo"}); err != nil {
+	if err := Start(cmd, []string{"macos-demo"}); err != nil {
 		t.Fatalf("duplicate start must adopt the live qemu: %v", err)
 	}
 	got, err := loadRec(vmDir)
@@ -121,7 +121,7 @@ func TestStartAdoptsQEMUWhenRecordPIDWasNotCommitted(t *testing.T) {
 	cmd.Flags().Int("vnc", -1, "")
 	cmd.Flags().String("vnc-password", "", "")
 
-	if err := NewHandler().Start(cmd, []string{"macos-demo"}); err != nil {
+	if err := Start(cmd, []string{"macos-demo"}); err != nil {
 		t.Fatalf("Start must adopt the already-running QEMU: %v", err)
 	}
 	got, err := loadRec(vmDir)

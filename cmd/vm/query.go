@@ -20,7 +20,7 @@ type vmOutput struct {
 	State string `json:"state"`
 }
 
-func (h *Handler) List(cmd *cobra.Command, _ []string) error {
+func List(cmd *cobra.Command, _ []string) error {
 	vmsDir := home.VMsDir(cmd)
 	names, err := utils.ScanSubdirs(vmsDir)
 	if err != nil {
@@ -42,7 +42,7 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	})
 }
 
-func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
+func Inspect(cmd *cobra.Command, args []string) error {
 	dir, err := home.VMDir(cmd, args[0])
 	if err != nil {
 		return err
@@ -54,7 +54,7 @@ func (h *Handler) Inspect(cmd *cobra.Command, args []string) error {
 	return cliutil.OutputJSON(vmOutput{r, vmState(r)})
 }
 
-func (h *Handler) Console(cmd *cobra.Command, args []string) error {
+func Console(cmd *cobra.Command, args []string) error {
 	dir, err := home.VMDir(cmd, args[0])
 	if err != nil {
 		return err

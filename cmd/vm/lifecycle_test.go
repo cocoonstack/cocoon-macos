@@ -21,7 +21,7 @@ func TestSnapshotAdoptsQEMUWhenRecordPIDWasNotCommitted(t *testing.T) {
 	cmd := newLifecycleTestCommand(t, stateDir)
 	cmd.Flags().String("tag", "", "")
 
-	err := NewHandler().Snapshot(cmd, []string{"macos-demo"})
+	err := Snapshot(cmd, []string{"macos-demo"})
 	if err == nil || !strings.Contains(err.Error(), "is running") {
 		t.Fatalf("Snapshot error = %v, want running VM rejection", err)
 	}
@@ -53,7 +53,7 @@ func TestSnapshotRefusesDuplicateTag(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = NewHandler().Snapshot(cmd, []string{"macos-demo"})
+	err = Snapshot(cmd, []string{"macos-demo"})
 	if err == nil || !strings.Contains(err.Error(), "already has snapshot") {
 		t.Fatalf("Snapshot error = %v, want the duplicate tag refusal", err)
 	}
@@ -68,7 +68,7 @@ func TestRMAdoptsQEMUWhenRecordPIDWasNotCommitted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := NewHandler().RM(cmd, []string{"macos-demo"}); err != nil {
+	if err := RM(cmd, []string{"macos-demo"}); err != nil {
 		t.Fatalf("RM: %v", err)
 	}
 	if _, err := os.Stat(vmDir); !os.IsNotExist(err) {
@@ -92,7 +92,7 @@ func TestRestoreRefusesRunningPasswordedVNC(t *testing.T) {
 	cmd.Flags().Bool("force", true, "")
 	cmd.Flags().String("vnc-password", "", "")
 
-	err = NewHandler().Restore(cmd, []string{"macos-demo"})
+	err = Restore(cmd, []string{"macos-demo"})
 	if err == nil || !strings.Contains(err.Error(), "password-gated VNC") {
 		t.Fatalf("Restore error = %v, want the password-gated VNC refusal", err)
 	}
@@ -118,7 +118,7 @@ func TestRestoreForceStopsVNCProxyWhenApplyIsRefused(t *testing.T) {
 	cmd.Flags().Bool("force", true, "")
 	cmd.Flags().String("vnc-password", "", "")
 
-	err = NewHandler().Restore(cmd, []string{"macos-demo"})
+	err = Restore(cmd, []string{"macos-demo"})
 	if err == nil || !strings.Contains(err.Error(), "no snapshots") {
 		t.Fatalf("Restore error = %v, want the no-snapshots refusal after the stop", err)
 	}
@@ -141,7 +141,7 @@ func TestCloneRejectsRunningSource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := NewHandler().Clone(cmd, []string{"macos-src"})
+	err := Clone(cmd, []string{"macos-src"})
 	if err == nil || !strings.Contains(err.Error(), "stop it before cloning") {
 		t.Fatalf("Clone error = %v, want running source rejection", err)
 	}

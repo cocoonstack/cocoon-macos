@@ -6,14 +6,14 @@ import (
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 )
 
-func Command(h *Handler) *cobra.Command {
+func Command() *cobra.Command {
 	vmCmd := &cobra.Command{Use: "vm", Short: "Manage macOS VMs"} // --state-dir is a root persistent flag
 
 	createCmd := &cobra.Command{
 		Use:   "create [flags] IMAGE",
 		Short: "Create a macOS VM from a qcow2 image (does not start it)",
 		Args:  cobra.ExactArgs(1),
-		RunE:  h.Create,
+		RunE:  Create,
 	}
 	addVMFlags(createCmd)
 
@@ -21,7 +21,7 @@ func Command(h *Handler) *cobra.Command {
 		Use:   "run [flags] IMAGE",
 		Short: "Create and start a macOS VM from a qcow2 image",
 		Args:  cobra.ExactArgs(1),
-		RunE:  h.Run,
+		RunE:  Run,
 	}
 	addVMFlags(runCmd)
 
@@ -29,7 +29,7 @@ func Command(h *Handler) *cobra.Command {
 		Use:   "start VM [VM...]",
 		Short: "Start created/stopped VM(s); VNC is off unless --vnc is given for this start",
 		Args:  cobra.MinimumNArgs(1),
-		RunE:  h.Start,
+		RunE:  Start,
 	}
 	startCmd.Flags().Int("vnc", -1, "VNC display number for this start only (n => port 590n); omit to keep VNC off")
 	startCmd.Flags().String("vnc-password", "", "VNC password for this start (≤8 bytes, QEMU password auth)")
@@ -38,7 +38,7 @@ func Command(h *Handler) *cobra.Command {
 		Use:   "stop VM [VM...]",
 		Short: "Stop running VM(s)",
 		Args:  cobra.MinimumNArgs(1),
-		RunE:  h.Stop,
+		RunE:  Stop,
 	}
 	stopCmd.Flags().Bool("force", false, "force stop (immediate SIGKILL, skip ACPI shutdown)")
 
@@ -46,7 +46,7 @@ func Command(h *Handler) *cobra.Command {
 		Use:     "list",
 		Aliases: []string{"ls"},
 		Short:   "List VMs with status",
-		RunE:    h.List,
+		RunE:    List,
 	}
 	cliutil.AddFormatFlag(listCmd)
 
@@ -54,21 +54,21 @@ func Command(h *Handler) *cobra.Command {
 		Use:   "inspect VM",
 		Short: "Show detailed VM info (JSON)",
 		Args:  cobra.ExactArgs(1),
-		RunE:  h.Inspect,
+		RunE:  Inspect,
 	}
 
 	consoleCmd := &cobra.Command{
 		Use:   "console VM",
 		Short: "Attach to a running VM's console (VNC/serial)",
 		Args:  cobra.ExactArgs(1),
-		RunE:  h.Console,
+		RunE:  Console,
 	}
 
 	rmCmd := &cobra.Command{
 		Use:   "rm VM [VM...]",
 		Short: "Remove VM(s): stop if running, tear down networking, delete state",
 		Args:  cobra.MinimumNArgs(1),
-		RunE:  h.RM,
+		RunE:  RM,
 	}
 	rmCmd.Flags().Bool("force", false, "force kill (immediate SIGKILL, skip the ACPI grace window)")
 	rmCmd.Flags().String("cni-conf-dir", "", "CNI config dir for a VM created before the record remembered it")
@@ -78,7 +78,7 @@ func Command(h *Handler) *cobra.Command {
 		Use:   "snapshot VM",
 		Short: "Take an offline qcow2-internal snapshot of a stopped VM (disk state; NVRAM if qcow2)",
 		Args:  cobra.ExactArgs(1),
-		RunE:  h.Snapshot,
+		RunE:  Snapshot,
 	}
 	snapshotCmd.Flags().String("tag", "", "snapshot tag (default: snap-<timestamp>)")
 
@@ -86,7 +86,7 @@ func Command(h *Handler) *cobra.Command {
 		Use:   "restore VM",
 		Short: "Revert a VM to a snapshot (default: newest)",
 		Args:  cobra.ExactArgs(1),
-		RunE:  h.Restore,
+		RunE:  Restore,
 	}
 	restoreCmd.Flags().String("tag", "", "snapshot tag to restore (default: newest)")
 	restoreCmd.Flags().Bool("force", false, "stop the VM, restore, then relaunch if it was running")
@@ -96,7 +96,7 @@ func Command(h *Handler) *cobra.Command {
 		Use:   "clone SRC",
 		Short: "Clone a stopped VM: fresh CoW overlay on the shared base + a unique Apple identity + its own network endpoint (--net inherited from the source)",
 		Args:  cobra.ExactArgs(1),
-		RunE:  h.Clone,
+		RunE:  Clone,
 	}
 	addVMFlags(cloneCmd) // loader is inherited from SRC
 

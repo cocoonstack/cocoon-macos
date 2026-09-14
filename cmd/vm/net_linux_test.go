@@ -63,7 +63,7 @@ func TestRMRetainsStateWhenNetworkTeardownFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = NewHandler().RM(cmd, []string{"macos-demo"})
+	err = RM(cmd, []string{"macos-demo"})
 	if err == nil || !strings.Contains(err.Error(), "unknown --net mode") {
 		t.Fatalf("RM error = %v, want network teardown failure", err)
 	}

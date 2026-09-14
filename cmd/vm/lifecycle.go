@@ -20,15 +20,15 @@ import (
 	"github.com/cocoonstack/cocoon/utils"
 )
 
-func (h *Handler) Create(cmd *cobra.Command, args []string) error {
-	return h.createVM(cmd, args[0], false)
+func Create(cmd *cobra.Command, args []string) error {
+	return createVM(cmd, args[0], false)
 }
 
-func (h *Handler) Run(cmd *cobra.Command, args []string) error {
-	return h.createVM(cmd, args[0], true)
+func Run(cmd *cobra.Command, args []string) error {
+	return createVM(cmd, args[0], true)
 }
 
-func (h *Handler) Start(cmd *cobra.Command, args []string) error {
+func Start(cmd *cobra.Command, args []string) error {
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	return forEachVMDir(cmd, args, func(ctx context.Context, n, dir string) error {
@@ -55,7 +55,7 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 		r.VNCDisp, r.VNCPass = vnc, vncPass
-		if err := h.launch(cmd, dir, r); err != nil {
+		if err := launch(cmd, dir, r); err != nil {
 			return err
 		}
 		toggleNet(cmd, r, true)
@@ -64,7 +64,7 @@ func (h *Handler) Start(cmd *cobra.Command, args []string) error {
 	})
 }
 
-func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
+func Stop(cmd *cobra.Command, args []string) error {
 	grace := graceFromFlags(cmd)
 	return forEachVMDir(cmd, args, func(ctx context.Context, n, dir string) error {
 		r, err := loadRec(dir)
@@ -87,7 +87,7 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 	})
 }
 
-func (h *Handler) RM(cmd *cobra.Command, args []string) error {
+func RM(cmd *cobra.Command, args []string) error {
 	grace := graceFromFlags(cmd)
 	return forEachVMDir(cmd, args, func(ctx context.Context, n, dir string) error {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
@@ -118,7 +118,7 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 	})
 }
 
-func (h *Handler) createVM(cmd *cobra.Command, image string, launch bool) error {
+func createVM(cmd *cobra.Command, image string, start bool) error {
 	name := requestedVMName(cmd, "macos-"+time.Now().Format("20060102-150405"))
 	dir, err := home.VMDir(cmd, name)
 	if err != nil {
@@ -126,15 +126,15 @@ func (h *Handler) createVM(cmd *cobra.Command, image string, launch bool) error 
 	}
 	ctx := cliutil.CommandContext(cmd)
 	return withVMLock(ctx, dir, func() error {
-		r, err := h.create(cmd, image, name)
+		r, err := create(cmd, image, name)
 		if err != nil {
 			return err
 		}
-		if !launch {
+		if !start {
 			fmt.Println(r.Name)
 			return nil
 		}
-		if err := h.launch(cmd, dir, r); err != nil {
+		if err := launch(cmd, dir, r); err != nil {
 			return errors.Join(err, cleanupFailedVM(ctx, cmd, dir, r))
 		}
 		fmt.Printf("%s (pid %d)\n", r.Name, r.PID)
@@ -142,7 +142,7 @@ func (h *Handler) createVM(cmd *cobra.Command, image string, launch bool) error 
 	})
 }
 
-func (h *Handler) create(cmd *cobra.Command, image, name string) (r *record, retErr error) {
+func create(cmd *cobra.Command, image, name string) (r *record, retErr error) {
 	rawDisks, _ := cmd.Flags().GetStringArray("data-disk")
 	diskSpecs, err := parseDataDisks(rawDisks, nil) // fail fast before any scaffolding
 	if err != nil {
@@ -213,7 +213,7 @@ func (h *Handler) create(cmd *cobra.Command, image, name string) (r *record, ret
 	return r, saveRec(dir, r)
 }
 
-func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
+func launch(cmd *cobra.Command, dir string, r *record) error {
 	ctx := cliutil.CommandContext(cmd)
 	logger := log.WithFunc("cmd.vm.launch")
 	if err := requireCNIVNCPassword(r.Netns != "", r.VNCDisp, r.VNCPass); err != nil {

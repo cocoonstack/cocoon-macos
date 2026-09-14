@@ -12,6 +12,7 @@ import (
 	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/progress"
+	"github.com/cocoonstack/cocoon/types"
 )
 
 const maxPullAttempts = 3
@@ -76,6 +77,9 @@ func (h *Handler) List(cmd *cobra.Command, _ []string) error {
 	imgs, err := s.List(ctx)
 	if err != nil {
 		return err
+	}
+	if imgs == nil {
+		imgs = []*types.Image{}
 	}
 	return cliutil.OutputFormatted(cmd, imgs, func(w *tabwriter.Writer) {
 		fmt.Fprintln(w, "NAME\tTYPE\tSIZE\tDIGEST\tCREATED") //nolint:errcheck // the tabwriter flush reports the write error

@@ -190,7 +190,7 @@ func (h *Handler) create(cmd *cobra.Command, image, name string) (r *record, ret
 		return nil, err
 	}
 	ctx := cliutil.CommandContext(cmd)
-	dir, overlay, ovmfVars, digest, err := scaffoldVM(cmd, name, image, varsTmpl, "OVMF_VARS.fd")
+	dir, overlay, ovmfVars, digest, err := scaffoldVM(cmd, name, image, varsTmpl)
 	if err != nil {
 		return nil, err
 	}

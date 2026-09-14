@@ -131,7 +131,7 @@ func resizeSystemDisk(ctx context.Context, path string, target int64) (int64, er
 }
 
 // scaffoldVM lays down a new VM dir, disk overlay, and OVMF_VARS copy; it refuses an existing record — a second create/clone under the same name would truncate the live overlay.
-func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir, overlay, ovmfVars, digest string, err error) {
+func scaffoldVM(cmd *cobra.Command, name, image, varsSrc string) (dir, overlay, ovmfVars, digest string, err error) {
 	dir, err = home.VMDir(cmd, name)
 	if err != nil {
 		return "", "", "", "", err
@@ -163,7 +163,7 @@ func scaffoldVM(cmd *cobra.Command, name, image, varsSrc, varsName string) (dir,
 	if err = bakeOverlay(ctx, base, overlay); err != nil {
 		return "", "", "", "", err
 	}
-	ovmfVars = filepath.Join(dir, varsName)
+	ovmfVars = filepath.Join(dir, filepath.Base(varsSrc))
 	if err = utils.ReflinkCopy(ctx, ovmfVars, varsSrc, utils.Sync); err != nil {
 		return "", "", "", "", fmt.Errorf("copy OVMF_VARS: %w", err)
 	}

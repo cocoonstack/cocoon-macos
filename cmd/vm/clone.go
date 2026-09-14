@@ -3,7 +3,6 @@ package vm
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -75,7 +74,7 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 		}
 	}
 	ctx := cliutil.CommandContext(cmd)
-	dir, overlay, ovmfVars, digest, err := scaffoldVM(cmd, name, srcRec.Image, srcRec.OVMFVars, filepath.Base(srcRec.OVMFVars))
+	dir, overlay, ovmfVars, digest, err := scaffoldVM(cmd, name, srcRec.Image, srcRec.OVMFVars)
 	if err != nil {
 		return err
 	}

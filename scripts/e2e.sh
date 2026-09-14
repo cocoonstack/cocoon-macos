@@ -193,7 +193,7 @@ run_dummy() {
   if vm restore dnos >/dev/null 2>&1; then fail "[DUMMY] restore-no-snapshots rejected" "unexpectedly succeeded"; else pass "[DUMMY] restore-no-snapshots rejected"; fi
 
   # --- vm clone: fresh overlay on SAME base + distinct identity ----------------------------------
-  if [ "$OC_REAL" = 1 ] && [ "$(id -u)" = 0 ] && [ -e /dev/nbd0 ]; then SRC=s1; else SRC=d1; fi
+  if [ -f "$CM_HOME/vms/s1/vm.json" ]; then SRC=s1; else SRC=d1; fi
   vm clone "$SRC" -n c1 --net user --opencore "$DUMMY_OC" --ovmf-code "$DUMMY_VARS" --ovmf-vars "$DUMMY_VARS" >/dev/null 2>&1
   c1_disk=$(rec_field c1 disk)
   cbk=$(overlay_backing "$c1_disk")

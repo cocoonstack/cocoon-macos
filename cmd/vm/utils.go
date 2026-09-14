@@ -243,14 +243,13 @@ func applyNet(cmd *cobra.Command, r *record) error {
 	return nil
 }
 
-// isRunning is PID-reuse-safe: it verifies argv0 + the overlay path in the process cmdline.
 func isRunning(r *record) bool {
-	return utils.VerifyProcessCmdline(r.PID, qemuBinary, r.Disk)
+	return utils.VerifyProcessCmdline(r.PID, qemuBinary, qemuPIDPath(r.Disk))
 }
 
 // adopt a qemu that daemonized before its pid was saved; >1 match is corruption, not a guess.
 func adoptRunningQEMU(r *record) (bool, error) {
-	pids, err := utils.FindVMMByCmdline(qemuBinary, r.Disk)
+	pids, err := utils.FindVMMByCmdline(qemuBinary, qemuPIDPath(r.Disk))
 	if err != nil {
 		return false, fmt.Errorf("scan qemu process for %s: %w", r.Disk, err)
 	}
@@ -284,10 +283,14 @@ func terminate(ctx context.Context, r *record, grace time.Duration) error {
 	if r.PID <= 0 {
 		return nil
 	}
-	if err := utils.TerminateProcess(ctx, r.PID, qemuBinary, r.Disk, grace); err != nil {
+	if err := utils.TerminateProcess(ctx, r.PID, qemuBinary, qemuPIDPath(r.Disk), grace); err != nil {
 		return fmt.Errorf("terminate qemu pid %d: %w", r.PID, err)
 	}
 	return nil
+}
+
+func qemuPIDPath(disk string) string {
+	return filepath.Join(filepath.Dir(disk), "qemu.pid")
 }
 
 func stopInstance(ctx context.Context, dir string, r *record, grace time.Duration) error {

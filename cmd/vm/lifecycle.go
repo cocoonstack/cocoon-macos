@@ -238,7 +238,7 @@ func launch(cmd *cobra.Command, dir string, r *record) error {
 	if r.Netns != "" && r.VNCDisp >= 0 {
 		spec.VNCSock = filepath.Join(dir, vncSockName)
 	}
-	pidfile := filepath.Join(dir, "qemu.pid")
+	pidfile := qemuPIDPath(r.Disk)
 	args := append(spec.Args(), "-daemonize", "-pidfile", pidfile)
 	stopVNCProxy(ctx, dir)
 	ensureNetnsLoopback(ctx, r)

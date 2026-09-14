@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cocoonstack/cocoon-macos/home"
+	"github.com/cocoonstack/cocoon-macos/qemu"
 	"github.com/cocoonstack/cocoon/utils"
 )
 
@@ -154,6 +155,31 @@ func TestCloneRejectsRunningSource(t *testing.T) {
 	}
 }
 
+func TestStopAdoptsQEMUWithCommaInVMPath(t *testing.T) {
+	stateDir := t.TempDir()
+	name := "macos,demo"
+	vmDir, pid := startUnrecordedQEMU(t, stateDir, name)
+	r, err := loadRec(vmDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.PID = pid
+	if utils.VerifyProcessCmdline(pid, qemuBinary, r.Disk) {
+		t.Fatal("fake QEMU unexpectedly contains the unescaped disk path")
+	}
+	if !isRunning(r) {
+		t.Fatal("live QEMU was not identified")
+	}
+	cmd := newLifecycleTestCommand(t, stateDir)
+	cmd.Flags().Bool("force", true, "")
+	if err := Stop(cmd, []string{name}); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if utils.VerifyProcessCmdline(pid, qemuBinary, qemuPIDPath(r.Disk)) {
+		t.Error("QEMU survived Stop")
+	}
+}
+
 func startUnrecordedQEMU(t *testing.T, stateDir, name string) (string, int) {
 	t.Helper()
 	if runtime.GOOS != "linux" {
@@ -181,7 +207,11 @@ func spawnFakeQEMU(t *testing.T, disk string) int {
 	if err := os.Symlink("/bin/sh", fakeQEMU); err != nil {
 		t.Fatal(err)
 	}
-	process := exec.Command(fakeQEMU, "-c", "while :; do sleep 1; done", disk)
+	pidfile := qemuPIDPath(disk)
+	spec := qemu.Spec{Disk: disk, CPUs: 2, Memory: "2048", VNCDisp: -1}
+	args := append([]string{"-c", "while :; do sleep 1; done", "qemu"}, spec.Args()...)
+	args = append(args, "-daemonize", "-pidfile", pidfile)
+	process := exec.Command(fakeQEMU, args...)
 	if err := process.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +225,7 @@ func spawnFakeQEMU(t *testing.T, disk string) int {
 		<-waitDone
 	})
 	if err := utils.WaitFor(t.Context(), 5*time.Second, time.Millisecond, func() (bool, error) {
-		return utils.VerifyProcessCmdline(process.Process.Pid, qemuBinary, disk), nil
+		return utils.VerifyProcessCmdline(process.Process.Pid, qemuBinary, pidfile), nil
 	}); err != nil {
 		t.Fatalf("fake QEMU did not start: %v", err)
 	}

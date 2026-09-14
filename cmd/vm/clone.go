@@ -130,9 +130,6 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 	if err = prepareOpenCore(ctx, dir, ocBase, freshIdentity, r); err != nil {
 		return err
 	}
-	if !freshIdentity {
-		r.MAC = srcRec.MAC // prepareOpenCore only sets a fresh MAC for fresh identities
-	}
 	r.NetMode = netMode
 	if bridge, _ := cmd.Flags().GetString("bridge"); bridge != "" {
 		r.BridgeDev = bridge

@@ -16,6 +16,8 @@ func TestParseDataDisks(t *testing.T) {
 		wantSizes []int64
 	}{
 		{name: "single default name", raw: []string{"size=1G"}, wantNames: []string{"data1"}, wantSizes: []int64{gib}},
+		{name: "kubernetes Gi spelling", raw: []string{"size=1Gi"}, wantNames: []string{"data1"}, wantSizes: []int64{gib}},
+		{name: "GiB spelling", raw: []string{"size=1GiB"}, wantNames: []string{"data1"}, wantSizes: []int64{gib}},
 		{name: "explicit name", raw: []string{"name=logs,size=512M"}, wantNames: []string{"logs"}, wantSizes: []int64{512 << 20}},
 		{name: "multiple default names count up", raw: []string{"size=1G", "size=2G"}, wantNames: []string{"data1", "data2"}, wantSizes: []int64{gib, 2 * gib}},
 		{name: "auto name skips an explicit one", raw: []string{"name=data1,size=1G", "size=1G"}, wantNames: []string{"data1", "data2"}, wantSizes: []int64{gib, gib}},

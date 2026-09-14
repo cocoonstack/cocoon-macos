@@ -109,11 +109,7 @@ func storageFromFlag(cmd *cobra.Command) (int64, error) {
 
 // parseSize accepts Docker and Kubernetes quantity spellings such as 20G, 20Gi and 20GiB.
 func parseSize(raw string) (int64, error) {
-	parsed := strings.TrimSpace(raw)
-	if strings.HasSuffix(strings.ToLower(parsed), "i") {
-		parsed += "B"
-	}
-	n, err := units.RAMInBytes(parsed)
+	n, err := units.RAMInBytes(binarySuffix(strings.TrimSpace(raw)))
 	if err != nil {
 		return 0, err
 	}
@@ -121,6 +117,13 @@ func parseSize(raw string) (int64, error) {
 		return 0, errors.New("size must be positive")
 	}
 	return n, nil
+}
+
+func binarySuffix(v string) string {
+	if strings.HasSuffix(strings.ToLower(v), "i") {
+		return v + "B"
+	}
+	return v
 }
 
 // resizeSystemDisk grows a new overlay to target bytes (0 = keep image size); shrinking is rejected because qemu-img cannot prove the guest filesystem survives.

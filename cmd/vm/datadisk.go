@@ -62,12 +62,18 @@ func parseDataDisks(raw, reserved []string) ([]types.DataDiskSpec, error) {
 }
 
 func parseDataDiskSpec(s string) (types.DataDiskSpec, error) {
-	for part := range strings.SplitSeq(s, ",") {
-		if key, _, _ := strings.Cut(part, "="); slices.Contains(agentOnlyDiskKeys, strings.TrimSpace(key)) {
+	parts := strings.Split(s, ",")
+	for i, part := range parts {
+		key, val, ok := strings.Cut(part, "=")
+		key = strings.TrimSpace(key)
+		if slices.Contains(agentOnlyDiskKeys, key) {
 			return types.DataDiskSpec{}, fmt.Errorf("data disk: key %q unsupported on macOS (no in-guest agent; format the disk in the guest with Disk Utility/diskutil)", key)
 		}
+		if ok && key == "size" {
+			parts[i] = key + "=" + binarySuffix(strings.TrimSpace(val))
+		}
 	}
-	spec, err := types.ParseDataDiskSpec(s)
+	spec, err := types.ParseDataDiskSpec(strings.Join(parts, ","))
 	if err != nil {
 		return spec, fmt.Errorf("data disk: %w", err)
 	}

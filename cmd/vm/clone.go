@@ -54,6 +54,10 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 	if err := validateMacOSCPUs(cpus); err != nil {
 		return err
 	}
+	mem := inherit(cmd, "memory", srcRec.Memory, cmd.Flags().GetString)
+	if err := validateMemory(mem); err != nil {
+		return err
+	}
 	// SRC's disk names are reserved: extra --data-disk specs must not collide and the combined count still honors the AHCI cap
 	reserved := make([]string, len(srcRec.DataDisks))
 	for i, p := range srcRec.DataDisks {
@@ -97,8 +101,7 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 	ssh, _ := cmd.Flags().GetInt("ssh-port")
 	r = &record{
 		Name: name, Image: srcRec.Image, ImageDigest: digest, Disk: overlay,
-		OVMFCode: srcRec.OVMFCode, OVMFVars: ovmfVars, CPUs: cpus, Storage: storage,
-		Memory:       inherit(cmd, "memory", srcRec.Memory, cmd.Flags().GetString),
+		OVMFCode: srcRec.OVMFCode, OVMFVars: ovmfVars, CPUs: cpus, Memory: mem, Storage: storage,
 		Hugepages:    inherit(cmd, "hugepages", srcRec.Hugepages, cmd.Flags().GetBool),
 		ExitOnReboot: inherit(cmd, "exit-on-reboot", srcRec.ExitOnReboot, cmd.Flags().GetBool),
 		VNCDisp:      vnc, SSHPort: ssh, VNCPass: vncPass,

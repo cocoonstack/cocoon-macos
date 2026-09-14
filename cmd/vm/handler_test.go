@@ -35,6 +35,27 @@ func TestValidateMacOSCPUs(t *testing.T) {
 	}
 }
 
+func TestValidateMemory(t *testing.T) {
+	for _, tt := range []struct {
+		mem     string
+		wantErr bool
+	}{
+		{mem: "8192"},
+		{mem: "512"},
+		{mem: "8G", wantErr: true},
+		{mem: "819x", wantErr: true},
+		{mem: "0", wantErr: true},
+		{mem: "", wantErr: true},
+	} {
+		t.Run(tt.mem, func(t *testing.T) {
+			err := validateMemory(tt.mem)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateMemory(%q) error = %v, wantErr %v", tt.mem, err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestValidateTapFlag(t *testing.T) {
 	for _, tt := range []struct {
 		name, netMode, tap string

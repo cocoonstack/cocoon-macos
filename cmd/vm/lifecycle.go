@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/projecteru2/core/log"
@@ -151,6 +152,10 @@ func (h *Handler) create(cmd *cobra.Command, image, name string) (r *record, ret
 	if err = validateMacOSCPUs(cpus); err != nil {
 		return nil, err
 	}
+	mem, _ := cmd.Flags().GetString("memory")
+	if err = validateMemory(mem); err != nil {
+		return nil, err
+	}
 	vnc, _ := cmd.Flags().GetInt("vnc")
 	vncPass, _ := cmd.Flags().GetString("vnc-password")
 	netMode, _ := cmd.Flags().GetString("net")
@@ -183,7 +188,6 @@ func (h *Handler) create(cmd *cobra.Command, image, name string) (r *record, ret
 	if err != nil {
 		return nil, err
 	}
-	mem, _ := cmd.Flags().GetString("memory")
 	ssh, _ := cmd.Flags().GetInt("ssh-port")
 	huge, _ := cmd.Flags().GetBool("hugepages")
 	exitOnReboot, _ := cmd.Flags().GetBool("exit-on-reboot")
@@ -281,6 +285,13 @@ func requestedVMName(cmd *cobra.Command, fallback string) string {
 func validateMacOSCPUs(cpus int) error {
 	if cpus < 1 || cpus%2 != 0 {
 		return fmt.Errorf("--cpus must be a positive even number, got %d", cpus)
+	}
+	return nil
+}
+
+func validateMemory(mem string) error {
+	if n, err := strconv.Atoi(mem); err != nil || n <= 0 {
+		return fmt.Errorf("--memory must be a positive MiB count, got %q", mem)
 	}
 	return nil
 }

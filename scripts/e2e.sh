@@ -110,7 +110,7 @@ setup_fixtures() {
   # tiny throwaway base; never booted in DUMMY tier, only used for overlay/backing-chain assertions
   qemu-img create -f qcow2 "$DUMMY_BASE" 64M >/dev/null
   [ "$OC_REAL" = 1 ] || qemu-img create -f qcow2 "$DUMMY_OC" 16M >/dev/null
-  : > "$DUMMY_VARS"   # raw .fd stand-in (imagesToSnapshot excludes raw NVRAM — that's the point of a row)
+  head -c 4096 /dev/zero > "$DUMMY_VARS"   # raw .fd stand-in, non-empty so ValidFile accepts it (imagesToSnapshot excludes raw NVRAM — that's the point of a row)
   # faithful qemu stand-in (a renamed long-runner): argv0 basename == qemu-system-x86_64 and we pass
   # the disk path as an arg, so terminate()'s cmdline match reaps it. `tail -f <disk>` runs forever.
   mkdir -p "$(dirname "$QEMU_STUB")"
@@ -135,7 +135,7 @@ run_dummy() {
   log "############ [DUMMY] TIER ############"
 
   # --- image store -------------------------------------------------------------------------------
-  out=$(img list 2>&1); if [ "$(echo "$out" | tr -d '[:space:]')" = "[]" ]; then
+  out=$(img list -o json 2>&1); if [ "$(echo "$out" | tr -d '[:space:]')" = "[]" ]; then
     pass "[DUMMY] image list empty-store => []"
   else fail "[DUMMY] image list empty-store" "got: $out"; fi
   check "[DUMMY] image rm absent-ref is a no-op (no crash)" img rm does-not-exist:tag
@@ -147,7 +147,7 @@ run_dummy() {
     if [ -f "$d1_disk" ]; then pass "[DUMMY] vm create bakes overlay disk.qcow2"; else fail "[DUMMY] vm create overlay" "no disk at $d1_disk"; fi
     bk=$(overlay_backing "$d1_disk")
     if [ "$bk" = "$DUMMY_BASE" ]; then pass "[DUMMY] overlay backing == shared base"; else fail "[DUMMY] overlay backing" "got $bk want $DUMMY_BASE"; fi
-    if [ -f "$CM_HOME/vms/d1/OVMF_VARS.fd" ]; then pass "[DUMMY] OVMF_VARS copied per-VM"; else fail "[DUMMY] OVMF_VARS copy" "missing"; fi
+    if [ -f "$CM_HOME/vms/d1/$(basename "$DUMMY_VARS")" ]; then pass "[DUMMY] OVMF_VARS copied per-VM"; else fail "[DUMMY] OVMF_VARS copy" "missing"; fi
     if [ -f "$CM_HOME/vms/d1/vm.json" ]; then pass "[DUMMY] vm.json written"; else fail "[DUMMY] vm.json" "missing"; fi
   else fail "[DUMMY] vm create" "create returned nonzero"; fi
 
@@ -157,7 +157,7 @@ run_dummy() {
   else pass "[DUMMY] create without --opencore rejected"; fi
 
   # --- vm list / inspect -------------------------------------------------------------------------
-  cnt=$(vm list 2>/dev/null | jqv "len([r for r in d if r['name']=='d1'])")
+  cnt=$(vm list -o json 2>/dev/null | jqv "len([r for r in d if r['name']=='d1'])")
   if [ "$cnt" = "1" ]; then pass "[DUMMY] vm list shows d1"; else fail "[DUMMY] vm list" "count=$cnt"; fi
   st=$(rec_field d1 name)
   if [ "$st" = "d1" ]; then pass "[DUMMY] vm inspect returns record JSON"; else fail "[DUMMY] vm inspect" "name=$st"; fi

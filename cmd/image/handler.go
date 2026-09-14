@@ -108,6 +108,15 @@ func RM(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	for _, ref := range args {
+		img, err := s.Inspect(ctx, ref)
+		if err != nil {
+			return err
+		}
+		if img == nil {
+			return fmt.Errorf("image not found: %s", ref)
+		}
+	}
 	deleted, err := s.Delete(ctx, args)
 	if err != nil {
 		return err

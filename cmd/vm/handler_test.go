@@ -34,6 +34,31 @@ func TestValidateMacOSCPUs(t *testing.T) {
 	}
 }
 
+func TestValidateTapFlag(t *testing.T) {
+	for _, tt := range []struct {
+		name, netMode, tap string
+		wantErr            bool
+	}{
+		{"tap mode with a tap", netTAP, "tap0", false},
+		{"tap mode without a tap", netTAP, "", false},
+		{"user mode without a tap", "", "", false},
+		{"default mode with a tap", "", "tap0", true},
+		{"user mode with a tap", netUser, "tap0", true},
+		{"cni mode with a tap", netCNI, "tap0", true},
+		{"bridge mode with a tap", netBridge, "tap0", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateTapFlag(tt.netMode, tt.tap)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateTapFlag(%q, %q) error = %v, wantErr %v", tt.netMode, tt.tap, err, tt.wantErr)
+			}
+			if err != nil && !strings.Contains(err.Error(), "--tap requires --net tap") {
+				t.Fatalf("validateTapFlag(%q, %q) error = %v", tt.netMode, tt.tap, err)
+			}
+		})
+	}
+}
+
 func TestStartAlreadyRunningIsIdempotent(t *testing.T) {
 	stateDir := t.TempDir()
 	vmDir := filepath.Join(stateDir, "vms", "macos-demo")

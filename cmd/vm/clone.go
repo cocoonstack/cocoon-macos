@@ -49,6 +49,10 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 	if err := requireCNIVNCPassword(netMode == netCNI, vnc, vncPass); err != nil {
 		return err
 	}
+	tapFlag, _ := cmd.Flags().GetString("tap")
+	if err := validateTapFlag(netMode, tapFlag); err != nil {
+		return err
+	}
 	cpus := srcRec.CPUs
 	if cmd.Flags().Changed("cpus") {
 		cpus, _ = cmd.Flags().GetInt("cpus")
@@ -135,7 +139,6 @@ func (h *Handler) clone(cmd *cobra.Command, srcRec *record, name string) (retErr
 	} else if !cmd.Flags().Changed("net") {
 		r.BridgeDev = srcRec.BridgeDev
 	}
-	tapFlag, _ := cmd.Flags().GetString("tap")
 	r.Tap = tapFlag
 	r.CNIConfDir = flagOr(cmd, "cni-conf-dir", srcRec.CNIConfDir)
 	r.CNIBinDir = flagOr(cmd, "cni-bin-dir", srcRec.CNIBinDir)

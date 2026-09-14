@@ -199,6 +199,13 @@ func resetIncompleteVMDir(ctx context.Context, dir string) error {
 // vmDirPrefix is the cmdline needle for a VM dir: the separator keeps foo from matching foo-clone.
 func vmDirPrefix(dir string) string { return dir + "/" }
 
+func validateTapFlag(netMode, tap string) error {
+	if tap != "" && netMode != netTAP {
+		return fmt.Errorf("--tap requires --net tap, got --net %s", cmp.Or(netMode, netUser))
+	}
+	return nil
+}
+
 // prepareNet returns the TAP ifname, netns path (CNI only), and guest MAC; user-mode and a pre-created --tap need no provisioning, every other mode goes through the per-OS provisionNet.
 func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err error) {
 	switch r.NetMode {

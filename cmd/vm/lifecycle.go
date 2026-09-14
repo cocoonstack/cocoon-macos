@@ -181,6 +181,10 @@ func (h *Handler) create(cmd *cobra.Command, image, name string) (r *record, ret
 	if err = requireCNIVNCPassword(netMode == netCNI, vnc, vncPass); err != nil {
 		return nil, err
 	}
+	tap, _ := cmd.Flags().GetString("tap")
+	if err = validateTapFlag(netMode, tap); err != nil {
+		return nil, err
+	}
 	storage, err := storageFromFlag(cmd)
 	if err != nil {
 		return nil, err
@@ -205,7 +209,6 @@ func (h *Handler) create(cmd *cobra.Command, image, name string) (r *record, ret
 	}
 	mem, _ := cmd.Flags().GetString("memory")
 	ssh, _ := cmd.Flags().GetInt("ssh-port")
-	tap, _ := cmd.Flags().GetString("tap")
 	huge, _ := cmd.Flags().GetBool("hugepages")
 	exitOnReboot, _ := cmd.Flags().GetBool("exit-on-reboot")
 	cniConfDir, _ := cmd.Flags().GetString("cni-conf-dir")

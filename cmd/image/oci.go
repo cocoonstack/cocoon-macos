@@ -39,7 +39,7 @@ func pullOCIBlob(ctx context.Context, ref, dest string) error {
 	if err != nil {
 		return err
 	}
-	blobURL := fmt.Sprintf("https://%s/v2/%s/blobs/%s", repo.Reference.Registry, repo.Reference.Repository, layer.Digest)
+	blobURL := fmt.Sprintf("https://%s/v2/%s/blobs/%s", repo.Reference.Host(), repo.Reference.Repository, layer.Digest)
 
 	f, err := os.Create(dest) //nolint:gosec // dest is an internal temp path (os.CreateTemp), not user input
 	if err != nil {

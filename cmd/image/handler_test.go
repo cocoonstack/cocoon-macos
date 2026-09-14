@@ -1,7 +1,6 @@
 package image
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -16,12 +15,11 @@ func TestListEmptyStore(t *testing.T) {
 	}
 }
 
-func TestRMUnknownRef(t *testing.T) {
+func TestRMUnknownRefIsANoOp(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().String("state-dir", t.TempDir(), "")
 	cmd.SetContext(t.Context())
-	err := RM(cmd, []string{"ghcr.io/cocoonstack/cocoon-macos/taho:26"})
-	if err == nil || !strings.Contains(err.Error(), "image not found") {
-		t.Fatalf("RM error = %v, want the not-found refusal", err)
+	if err := RM(cmd, []string{"ghcr.io/cocoonstack/cocoon-macos/taho:26"}); err != nil {
+		t.Fatalf("RM of an unknown ref must be a no-op: %v", err)
 	}
 }

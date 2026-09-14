@@ -311,7 +311,6 @@ func validateMacOSCPUs(cpus int) error {
 	return nil
 }
 
-// cleanupFailedVM uses an uncanceled bounded context so cancellation still reaps helpers, networking and QEMU.
 func cleanupFailedVM(ctx context.Context, cmd *cobra.Command, dir string, r *record) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), vmCleanupTimeout)
 	defer cancel()
@@ -335,7 +334,6 @@ func reapStrayHelpers(ctx context.Context, dir string) error {
 	)
 }
 
-// prepareOpenCore points r.OpenCore at the shared base, or with randomSMBIOS at a per-VM overlay whose config.plist is patched with a unique identity.
 func prepareOpenCore(ctx context.Context, dir, ocBase string, randomSMBIOS bool, r *record) error {
 	if !randomSMBIOS {
 		r.OpenCore, r.OpenCoreBase = ocBase, ""

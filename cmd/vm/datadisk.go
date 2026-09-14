@@ -19,7 +19,7 @@ const (
 	maxDataDisks = 4
 )
 
-// parseDataDisks parses --data-disk args, auto-naming unnamed ones dataN; reserved names (a clone's copied disks) count against both the duplicate check and the AHCI cap.
+// reserved names (a clone's copied disks) count against both the duplicate check and the AHCI cap.
 func parseDataDisks(raw, reserved []string) ([]types.DataDiskSpec, error) {
 	used := make(map[string]bool, len(reserved))
 	for _, n := range reserved {

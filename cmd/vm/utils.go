@@ -206,7 +206,6 @@ func validateTapFlag(netMode, tap string) error {
 	return nil
 }
 
-// prepareNet returns the TAP ifname, netns path (CNI only), and guest MAC; user-mode and a pre-created --tap need no provisioning, every other mode goes through the per-OS provisionNet.
 func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err error) {
 	switch r.NetMode {
 	case "", netUser:
@@ -327,7 +326,6 @@ func ensureCloudimgFirmware(cmd *cobra.Command) {
 	}
 }
 
-// resolveFirmware returns the OpenCore loader + OVMF code/vars base/template paths: an explicit flag wins, else the shared copy under <state-dir>/firmware/.
 func resolveFirmware(cmd *cobra.Command) (opencore, code, vars string, err error) {
 	fw := home.FirmwareDir(cmd)
 	opencore = flagOr(cmd, "opencore", filepath.Join(fw, "OpenCore.qcow2"))

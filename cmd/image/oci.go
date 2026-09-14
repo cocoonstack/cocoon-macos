@@ -23,7 +23,7 @@ import (
 	"github.com/cocoonstack/cocoon/utils"
 )
 
-// pullConns is the parallel HTTP Range connection count; ghcr throttles a single stream to a fraction of the link.
+// ghcr throttles a single stream to a fraction of the link.
 const pullConns = 8
 
 // pullOCIBlob downloads ref's qcow2 layer to dest and verifies its sha256 digest.

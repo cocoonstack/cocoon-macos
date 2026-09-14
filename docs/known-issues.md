@@ -25,6 +25,13 @@ first-boot daemon runs `pmset -a displaysleep 0 sleep 0 disablesleep 1` system-w
 pre-login loginwindow and disabling system sleep too) to keep the framebuffer painted; older images
 need a `setup`-stage rebuild.
 
+## Bridge TAPs left DOWN by builds before 2026-09-14
+
+Earlier builds set an auto-created `--net tap|bridge` TAP admin-DOWN on `vm stop`; the current build
+neither downs nor ups it (a TAP QEMU has closed has no carrier, so its bridge port forwards nothing).
+A VM stopped by an earlier build therefore keeps a DOWN TAP after `vm start`: run `ip link set <tap>
+up` once (the name is in `vm inspect`), or `vm rm` and recreate it.
+
 ## GUI lands at the Setup Assistant
 
 A fresh macOS 26 clone boots to the system Setup Assistant, which resists every offline marker-based

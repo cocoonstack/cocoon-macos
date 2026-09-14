@@ -38,10 +38,11 @@ created before the record carried them takes `rm --cni-conf-dir` and
 
 ## Clones
 
-`vm clone` inherits the source's `--net` mode, and for `bridge` its bridge, unless `--net` or `--bridge` is given; every clone gets its own TAP (and netns under `cni`) and, with a fresh identity, its own MAC. A source attached to a pre-created host TAP (`--tap tap0`) cannot share it, so its clone needs its own `--tap`; a `tap` source that auto-created its TAP on a bridge clones like `bridge`.
+`vm clone` inherits the source's `--net` mode, and for `bridge` its bridge, unless `--net` or `--bridge` is given; every clone gets its own TAP (and netns under `cni`) and its own MAC: a fresh identity seeds it from the new SMBIOS ROM, otherwise the network provider assigns one. A source attached to a pre-created host TAP (`--tap tap0`) cannot share it, so its clone needs its own `--tap`; a `tap` source that auto-created its TAP on a bridge clones like `bridge`.
 
-`vm stop` leaves an auto-created TAP in place but admin-DOWN, for a fast restart; `vm rm` (and a
-failed `create`) deletes it; `vm start` brings it back up.
+`vm stop` leaves an auto-created TAP in place for a fast restart; once QEMU closes it the TAP has
+no carrier and its bridge port forwards nothing, so nothing else needs quiescing. `vm rm` (and a
+failed `create`) deletes it.
 
 ## VNC exposure
 

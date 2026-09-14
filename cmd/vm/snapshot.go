@@ -75,8 +75,9 @@ func (h *Handler) Restore(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("vm %q serves a password-gated VNC display; pass --vnc-password to relaunch it, or stop, restore, then start --vnc %d --vnc-password", r.Name, r.VNCDisp)
 			}
 			r.VNCPass = vncPass
-			terminate(ctx, r, stopGracePeriod)
-			stopVNCProxy(ctx, dir)
+			if err := stopInstance(ctx, dir, r, stopGracePeriod); err != nil {
+				return err
+			}
 			r.PID = 0
 			if err := saveRec(dir, r); err != nil {
 				return err

@@ -89,9 +89,10 @@ func (h *Handler) Stop(cmd *cobra.Command, args []string) error {
 			if _, err := reconcileRunningQEMU(dir, r); err != nil {
 				return err
 			}
-			terminate(ctx, r, grace)
+			if err := stopInstance(ctx, dir, r, grace); err != nil {
+				return err
+			}
 			toggleNet(cmd, r, false)
-			stopVNCProxy(ctx, dir)
 			r.PID, r.VNCDisp, r.VNCPass, r.VNCPassSet = 0, -1, "", false // VNC is launch-scoped: gone with the qemu it belonged to
 			return saveRec(dir, r)
 		}); err != nil {
@@ -121,8 +122,9 @@ func (h *Handler) RM(cmd *cobra.Command, args []string) error {
 				if _, err := reconcileRunningQEMU(dir, r); err != nil {
 					return err
 				}
-				terminate(ctx, r, grace)
-				stopVNCProxy(ctx, dir)
+				if err := stopInstance(ctx, dir, r, grace); err != nil {
+					return err
+				}
 				if err := teardownNet(ctx, cmd, r); err != nil {
 					return err
 				}
@@ -286,14 +288,12 @@ func (h *Handler) launch(cmd *cobra.Command, dir string, r *record) error {
 	if r.VNCPass != "" {
 		if err := setVNCPassword(ctx, spec.MonSock, r.VNCPass); err != nil {
 			// qemu keeps password=on with no password set, so every VNC auth would fail
-			terminate(ctx, r, 0)
-			return fmt.Errorf("set vnc password: %w", err)
+			return errors.Join(fmt.Errorf("set vnc password: %w", err), terminate(ctx, r, 0))
 		}
 	}
 	if spec.VNCSock != "" {
 		if err := startVNCProxy(ctx, dir, r.VNCDisp); err != nil {
-			terminate(ctx, r, 0)
-			return fmt.Errorf("start vnc proxy: %w", err)
+			return errors.Join(fmt.Errorf("start vnc proxy: %w", err), terminate(ctx, r, 0))
 		}
 	}
 	return saveRec(dir, r)
@@ -317,11 +317,7 @@ func cleanupFailedVM(ctx context.Context, cmd *cobra.Command, dir string, r *rec
 	defer cancel()
 	var errs []error
 	if r != nil {
-		terminate(ctx, r, 0)
-		stopVNCProxy(ctx, dir)
-		if err := teardownNet(ctx, cmd, r); err != nil {
-			errs = append(errs, err)
-		}
+		errs = append(errs, stopInstance(ctx, dir, r, 0), teardownNet(ctx, cmd, r))
 	}
 	if err := reapStrayHelpers(ctx, dir); err != nil {
 		errs = append(errs, err)

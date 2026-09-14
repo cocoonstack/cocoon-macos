@@ -270,10 +270,20 @@ func reconcileRunningQEMU(dir string, r *record) (bool, error) {
 }
 
 // terminate stops the VM's qemu, verifying the cmdline before signaling; grace=0 means immediate SIGKILL.
-func terminate(ctx context.Context, r *record, grace time.Duration) {
-	if r.PID > 0 {
-		_ = utils.TerminateProcess(ctx, r.PID, qemuBinary, r.Disk, grace)
+func terminate(ctx context.Context, r *record, grace time.Duration) error {
+	if r.PID <= 0 {
+		return nil
 	}
+	if err := utils.TerminateProcess(ctx, r.PID, qemuBinary, r.Disk, grace); err != nil {
+		return fmt.Errorf("terminate qemu pid %d: %w", r.PID, err)
+	}
+	return nil
+}
+
+func stopInstance(ctx context.Context, dir string, r *record, grace time.Duration) error {
+	err := terminate(ctx, r, grace)
+	stopVNCProxy(ctx, dir)
+	return err
 }
 
 func graceFromFlags(cmd *cobra.Command) time.Duration {

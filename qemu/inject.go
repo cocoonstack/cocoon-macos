@@ -95,7 +95,7 @@ func InjectConfig(ctx context.Context, ocPath string, sm *SMBIOS) error {
 		mounted := false
 		defer func() { retErr = errors.Join(retErr, cleanupNBDMount(ctx, mnt, mounted)) }()
 		var mountErr error
-		for _, p := range []string{conn.device + "p1", conn.device + "p2", conn.device} {
+		for _, p := range []string{conn.device + "p1", conn.device + "p2"} {
 			if mountErr = exec.CommandContext(ctx, "mount", p, mnt).Run(); mountErr == nil {
 				mounted = true
 				break

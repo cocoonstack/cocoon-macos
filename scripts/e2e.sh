@@ -40,9 +40,7 @@ DUMMY_VARS=$CM_HOME/_dummy-vars.fd        # stand-in OVMF_VARS template (raw .fd
 # SKIP unless a real OpenCore is supplied. Non-injection rows work fine with the fake.
 OC_REAL=0
 if [ -n "${CM_OPENCORE:-}" ] && [ -f "${CM_OPENCORE}" ]; then DUMMY_OC=$CM_OPENCORE; OC_REAL=1; else DUMMY_OC=$CM_HOME/_dummy-oc.qcow2; fi
-# faithful qemu stand-in for proc-lifecycle: argv0 basename == qemu-system-x86_64 + the disk path in
-# argv, so terminate()'s PID-reuse-safe VerifyProcessCmdline match actually reaps it (a bare sleeper
-# would NOT match — that's the whole point of the cmdline check).
+# The stand-in exposes the QEMU basename and raw pidfile path for cmdline identity checks.
 QEMU_STUB=/tmp/cm-qemu-stub/qemu-system-x86_64
 
 PASS=0; FAIL=0; SKIP=0
@@ -111,8 +109,7 @@ setup_fixtures() {
   qemu-img create -f qcow2 "$DUMMY_BASE" 64M >/dev/null
   [ "$OC_REAL" = 1 ] || qemu-img create -f qcow2 "$DUMMY_OC" 16M >/dev/null
   head -c 4096 /dev/zero > "$DUMMY_VARS"   # raw .fd stand-in, non-empty so ValidFile accepts it (imagesToSnapshot excludes raw NVRAM — that's the point of a row)
-  # faithful qemu stand-in (a renamed long-runner): argv0 basename == qemu-system-x86_64 and we pass
-  # the disk path as an arg, so terminate()'s cmdline match reaps it. `tail -f <disk>` runs forever.
+  # Copy tail under the QEMU basename so lifecycle checks can identify the stand-in.
   mkdir -p "$(dirname "$QEMU_STUB")"
   cp "$(command -v tail)" "$QEMU_STUB"
   # test bridge for --net tap|bridge rows

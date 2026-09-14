@@ -31,9 +31,11 @@ cocoon-macos vm clone m1 -n m2 --ssh-port 2223 --random-smbios
 A clone bakes a fresh copy-on-write overlay on the **shared base** (never on SRC's per-VM overlay,
 which would break on `vm rm m1`). It cold-boots a **fresh Apple identity** when `--random-smbios`
 is given to the clone (or inherited automatically when SRC already carries one) — without it, the
-clone shares SRC's serial, and its MAC comes from the network provider (`tap`/`bridge`/`cni`) or
-QEMU's default under `user`. Clones copy SRC's data disks and can add more; a clone-of-a-clone
-keeps a correct backing chain. SRC must be stopped while its OVMF variables and data disks are copied.
+clone shares SRC's serial. With a fresh identity, `user`, `tap`, and `bridge` use its ROM MAC;
+`cni` always uses the provider MAC. Without one, auto-created `tap`/`bridge` use a provider MAC,
+while `user` and pre-created `--tap` use QEMU's non-unique default. Clones copy SRC's data disks
+and can add more; a clone-of-a-clone keeps a correct backing chain. SRC must be stopped while its
+OVMF variables and data disks are copied.
 
 ## Data disks (`--data-disk`)
 

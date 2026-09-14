@@ -11,9 +11,10 @@
 
 `tap`/`bridge`/`cni` make a macOS VM join the **same** forwarding plane as cocoon's Cloud
 Hypervisor / Firecracker VMs on the node, so the guest can DHCP a **real LAN IP** from the upstream
-network. In `tap` and `bridge` mode the guest NIC MAC stays equal to the SMBIOS ROM. Auto-create
-(`bridge`/`cni`) is Linux-only (needs `CAP_NET_ADMIN`); `user` and a pre-created `--tap` work
-everywhere.
+network. With a fresh SMBIOS identity, `tap` and `bridge` use its ROM as the guest NIC MAC;
+otherwise auto-created TAPs use the provider MAC and a pre-created `--tap` uses QEMU's default.
+Auto-creation (`tap` without `--tap`, `bridge`, `cni`) is Linux-only (needs `CAP_NET_ADMIN`);
+`user` and a pre-created `--tap` work everywhere.
 
 In `cni` mode, the guest NIC uses the MAC CNI assigned to `eth0` because `macspoofchk` allow-lists
 that address; the SMBIOS ROM identity remains unchanged.
@@ -38,7 +39,13 @@ created before the record carried them takes `rm --cni-conf-dir` and
 
 ## Clones
 
-`vm clone` inherits the source's `--net` mode, and for `bridge` its bridge, unless `--net` or `--bridge` is given; every clone gets its own TAP (and netns under `cni`) and its own MAC: a fresh identity seeds it from the new SMBIOS ROM, otherwise the network provider assigns one. A source attached to a pre-created host TAP (`--tap tap0`) cannot share it, so its clone needs its own `--tap`; a `tap` source that auto-created its TAP on a bridge clones like `bridge`.
+`vm clone` inherits the source's `--net` mode, and for `bridge` its bridge, unless `--net` or
+`--bridge` is given. Auto-created `tap`/`bridge`/`cni` networking gives the clone a new TAP
+(and netns under `cni`) and a provider-assigned MAC, except that host-bridge modes keep a fresh
+SMBIOS ROM MAC when present. Without a fresh identity, `user` and pre-created `--tap` use
+QEMU's default MAC, which is not unique across VMs. A source attached to a pre-created host TAP
+(`--tap tap0`) cannot share it, so its clone needs its own `--tap`; a `tap` source that auto-created
+its TAP on a bridge clones like `bridge`.
 
 `vm stop` leaves an auto-created TAP in place for a fast restart; once QEMU closes it the TAP has
 no carrier and its bridge port forwards nothing, so nothing else needs quiescing. `vm rm` (and a

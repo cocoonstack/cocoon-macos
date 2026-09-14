@@ -4,7 +4,6 @@ go 1.27.0
 
 require (
 	github.com/cocoonstack/cocoon v0.6.7-0.20260914143903-dd8e8debb0c9
-	github.com/docker/go-units v0.5.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/projecteru2/core v0.1.3
 	github.com/spf13/cobra v1.10.2
@@ -21,6 +20,7 @@ require (
 	github.com/creack/pty v1.1.24 // indirect
 	github.com/docker/cli v29.6.2+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.8 // indirect
+	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/getsentry/sentry-go v0.48.0 // indirect

@@ -44,7 +44,7 @@ comma-separated `key=value`:
 cocoon-macos vm run <IMAGE> --data-disk size=20G --data-disk name=scratch,size=50G
 ```
 
-- **Keys:** `size=` (required, `units.RAMInBytes` syntax e.g. `20G`, min 16 MiB) and `name=`
+- **Keys:** `size=` (required, Docker or Kubernetes spelling — `20G`, `20Gi`, `20GiB` — min 16 MiB) and `name=`
   (optional, `[a-z][a-z0-9_-]{0,19}` and not starting with `cocoon-`, default `data1`, `data2`, …;
   duplicates error).
 - **At most 4 disks.** macOS has no virtio-blk driver (the OS disk rides AHCI), so data disks take the

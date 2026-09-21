@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -19,6 +20,8 @@ import (
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/utils"
 )
+
+var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$`)
 
 func Create(cmd *cobra.Command, args []string) error {
 	return createVM(cmd, args[0], false)
@@ -119,7 +122,10 @@ func RM(cmd *cobra.Command, args []string) error {
 }
 
 func createVM(cmd *cobra.Command, image string, start bool) error {
-	name := requestedVMName(cmd, "macos-"+time.Now().Format("20060102-150405"))
+	name, err := requestedVMName(cmd, "macos-"+time.Now().Format("20060102-150405"))
+	if err != nil {
+		return err
+	}
 	dir, err := home.VMDir(cmd, name)
 	if err != nil {
 		return err
@@ -277,9 +283,16 @@ func launch(cmd *cobra.Command, dir string, r *record) error {
 	return saveRec(dir, r)
 }
 
-func requestedVMName(cmd *cobra.Command, fallback string) string {
-	name, _ := cmd.Flags().GetString("name")
-	return cmp.Or(name, fallback)
+func requestedVMName(cmd *cobra.Command, fallback string) (string, error) {
+	flag, _ := cmd.Flags().GetString("name")
+	name := cmp.Or(flag, fallback)
+	if !validName.MatchString(name) {
+		if flag == "" {
+			return "", fmt.Errorf("generated vm name %q is invalid (max 63 chars): pass --name", name)
+		}
+		return "", fmt.Errorf("invalid vm name %q: must match %s (max 63 chars; the name is a path component of every qemu socket)", name, validName.String())
+	}
+	return name, nil
 }
 
 func validateMacOSCPUs(cpus int) error {

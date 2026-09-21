@@ -18,7 +18,10 @@ func Clone(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	name := requestedVMName(cmd, src+"-clone-"+time.Now().Format("150405"))
+	name, err := requestedVMName(cmd, src+"-clone-"+time.Now().Format("150405"))
+	if err != nil {
+		return err
+	}
 	dir, err := home.VMDir(cmd, name)
 	if err != nil {
 		return err

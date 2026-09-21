@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -175,6 +176,35 @@ func TestGCRefusesABusyVM(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); err != nil {
 		t.Errorf("busy dir touched: %v", err)
+	}
+}
+
+func TestGCRefusesUnreadableRecord(t *testing.T) {
+	cmd := newLifecycleTestCommand(t, t.TempDir())
+	dir := filepath.Join(home.VMsDir(cmd), "owned")
+	if err := os.MkdirAll(filepath.Join(dir, "vm.json"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	collected := false
+	err := sweep(t.Context(), cmd, func(o *gc.Orchestrator, _ *cobra.Command) error {
+		gc.Register(o, gc.Module[struct{}]{
+			Name:   "network",
+			ReadDB: func(context.Context) (struct{}, error) { return struct{}{}, nil },
+			Resolve: func(context.Context, struct{}, map[string]any) []string {
+				return []string{"owned"}
+			},
+			Collect: func(context.Context, []string, struct{}) error {
+				collected = true
+				return nil
+			},
+		})
+		return nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "read vm owned for gc") {
+		t.Fatalf("sweep = %v, want the record read error", err)
+	}
+	if collected {
+		t.Fatal("network was collected without a complete ownership snapshot")
 	}
 }
 

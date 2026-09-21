@@ -11,6 +11,7 @@
 
 ```bash
 go build -o cocoon-macos .
+sudo install -m 755 cocoon-macos /usr/local/bin/cocoon-macos
 ```
 
 ## Provision the host (`scripts/doctor.sh`)
@@ -21,7 +22,8 @@ Run once per host. `doctor.sh`:
 2. Loads the `nbd` kernel module,
 3. Provisions the **shared firmware** into `<state-dir>/firmware` — it downloads the LongQT OpenCore
    release and bakes a GPT/ESP `OpenCore.qcow2` plus the 4 MB OVMF `CODE`/`VARS`. Every VM reuses this
-   one firmware install.
+   one firmware install. Firmware is built in a staging directory and only completed files are
+   published, so a failed provisioning attempt can be retried.
 
 ```bash
 sudo scripts/doctor.sh
@@ -33,6 +35,8 @@ any piece with `--opencore` / `--ovmf-code` / `--ovmf-vars` on the VM commands.
 `doctor.sh` is a bash script, not the Go CLI: it reads `$COCOON_MACOS_HOME` only (there is no
 `--state-dir` flag), and the LongQT OpenCore release it fetches is pinned by `$LONGQT_VER` (default
 `v0.7`).
+
+Use `sudo cocoon-macos ...` with the default root-owned state directory or host networking.
 
 ## State directory
 

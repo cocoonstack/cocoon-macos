@@ -16,6 +16,11 @@ any disk is touched. VMs launched by a cocoon-macos older than this rule with a
 passworded non-CNI display are not recognised as password-gated until their
 next stop or start.
 
+A forced restore quiesces CNI forwarding after stopping QEMU and restores forwarding only after
+the relaunch succeeds. An apply failure leaves the VM stopped; a relaunch error leaves forwarding
+quiesced. After resolving the failure, retry restore or use `vm start`, which also restores forwarding
+when it adopts an already-running QEMU after a failed record write.
+
 Snapshots are **offline qcow2-internal** (`qemu-img snapshot`, VM stopped) and cover the system disk,
 every data disk, and `OVMF_VARS` when it is qcow2 (a raw `.fd` NVRAM has no internal-snapshot
 support, so with raw NVRAM only guest disk state rolls back). Live RAM snapshot is intentionally

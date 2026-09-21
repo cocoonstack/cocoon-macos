@@ -49,11 +49,7 @@ if [ -f "$FW/OpenCore.qcow2" ] && [ -f "$FW/OVMF_CODE.fd" ] && [ -f "$FW/OVMF_VA
 fi
 
 [ -f /usr/share/OVMF/OVMF_VARS_4M.fd ] || die "OVMF_VARS_4M.fd missing after installing ovmf (unexpected OVMF layout)"
-log "installing OVMF (4M build)"
-cp -f /usr/share/OVMF/OVMF_CODE_4M.fd "$FW/OVMF_CODE.fd"
-cp -f /usr/share/OVMF/OVMF_VARS_4M.fd "$FW/OVMF_VARS.fd"
-
-tmp="$(mktemp -d)"
+tmp="$(mktemp -d "$FW/.provision-XXXXXX")"
 nbd="" esp="" iso=""
 cleanup() {
 	[ -n "$esp" ] && umount "$esp" 2>/dev/null || true
@@ -63,13 +59,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
+log "installing OVMF (4M build)"
+cp /usr/share/OVMF/OVMF_CODE_4M.fd "$tmp/OVMF_CODE.fd"
+cp /usr/share/OVMF/OVMF_VARS_4M.fd "$tmp/OVMF_VARS.fd"
+
 log "downloading LongQT OpenCore $LONGQT_VER"
 curl -fsSL -o "$tmp/oc.iso" "$ISO_URL"
 
 # Bake the loader into a GPT+ESP qcow2: OpenCore must be a writable disk so a per-VM overlay can
 # inject a unique SMBIOS; the LongQT loader ships only as an ISO, so copy its EFI onto a fresh ESP.
 log "baking OpenCore.qcow2"
-oc="$FW/OpenCore.qcow2"
+oc="$tmp/OpenCore.qcow2"
 qemu-img create -f qcow2 "$oc" 384M >/dev/null
 for i in $(seq 0 15); do
 	if [ -e "/dev/nbd$i" ] && [ ! -e "/sys/block/nbd$i/pid" ]; then nbd="/dev/nbd$i"; break; fi
@@ -95,6 +95,9 @@ umount "$iso"
 iso=""
 qemu-nbd --disconnect "$nbd"
 nbd=""
+mv "$tmp/OVMF_CODE.fd" "$FW/OVMF_CODE.fd"
+mv "$tmp/OVMF_VARS.fd" "$FW/OVMF_VARS.fd"
+mv "$oc" "$FW/OpenCore.qcow2"
 
 log "✅ host ready — firmware in $FW"
 log "next: cocoon-macos image pull ghcr.io/cocoonstack/cocoon-macos/tahoe:26"

@@ -61,7 +61,6 @@ require_kvm() {
 
 mon() { echo "$*" | socat - "UNIX-CONNECT:$MON_SOCK" >/dev/null 2>&1 || true; }
 click() { python3 "$QMP_PY" "$QMP_SOCK" click "$1" "$2" 2>/dev/null || true; }
-dclick() { python3 "$QMP_PY" "$QMP_SOCK" dclick "$1" "$2" 2>/dev/null || true; }
 typestr() { python3 "$QMP_PY" "$QMP_SOCK" type "$1" 2>/dev/null || true; }
 keys() { python3 "$QMP_PY" "$QMP_SOCK" key "$@" 2>/dev/null || true; }
 chord() { python3 "$QMP_PY" "$QMP_SOCK" chord "$@" 2>/dev/null || true; }
@@ -138,10 +137,13 @@ configure_opencore() {  # patch OpenCore config.plist; arg "hide" => HideAuxilia
     cfg=$(sudo find /mnt/oc -iname config.plist 2>/dev/null | head -1)
     if [[ -n "$cfg" ]]; then
       sudo HIDE="$hide" python3 - "$cfg" <<'PY' || true
-import plistlib, os, sys
+import os
+import plistlib
+import sys
 p = sys.argv[1]
-d = plistlib.load(open(p, "rb"))
-d.setdefault("Booter", {}).setdefault("Quirks", {})["RequestBootVarRouting"] = True
+with open(p, "rb") as f:
+    d = plistlib.load(f)
+d.setdefault("UEFI", {}).setdefault("Quirks", {})["RequestBootVarRouting"] = True
 b = d.setdefault("Misc", {}).setdefault("Boot", {})
 mode = os.environ.get("HIDE")
 if mode == "hide":
@@ -157,7 +159,8 @@ elif mode == "recovery":
     b["Timeout"] = 0
 else:
     b["Timeout"] = 8
-plistlib.dump(d, open(p, "wb"))
+with open(p, "wb") as f:
+    plistlib.dump(d, f)
 print("[oc] patched config.plist (HIDE=%s) in %s" % (os.environ.get("HIDE"), p))
 PY
     else
@@ -230,13 +233,6 @@ boot_to_recovery() {  # OpenCore picker -> macOS Base System -> Recovery window
   screendump "inst-01-recovery"
 }
 
-open_disk_utility() {  # Recovery chooser -> Disk Utility -> Continue
-  log "opening Disk Utility (click row + Continue)"
-  click 600 465; sleep 1; click 815 525
-  sleep 35
-  screendump "du-00-open"
-}
-
 erase_target() {  # open Terminal (Shift-Cmd-T), erase disk0 as APFS "Macintosh"
   log "erasing disk0 via Terminal"
   chord shift meta_l t; sleep 4
@@ -292,12 +288,6 @@ stage_install() {  # M2: erase target, then adaptively drive the GUI installer t
   ocrclick Reinstall; sleep 1; ocrclick Continue; sleep 6
   drive_installer || { log "click-through hung before disk-select — skipping the 55-min monitor + capture"; return 1; }
   screendump "oc-installing"
-  # Capture the base only once the install ACTUALLY finishes — a completed install auto-reboots into
-  # the stock Setup Assistant. The old fixed 55-min window captured unconditionally, so when firmware
-  # ran slower the install was still going and a half-installed base shipped (Untitled volume,
-  # read-only /usr/local, a first boot that spends ~25min FINISHING the install). Two safeguards:
-  # OCR the SA to capture the moment it's done, and a ~2h ceiling so any slow install still completes
-  # before capture regardless of firmware/runner speed.
   log "monitoring install until it reaches Setup Assistant (jiggling to defeat display-sleep)"
   local i done=""
   for ((i = 1; i <= 120; i++)); do
@@ -309,7 +299,7 @@ stage_install() {  # M2: erase target, then adaptively drive the GUI installer t
       log "install reached Setup Assistant at monitor $i — install complete"; done=1; break
     fi
   done
-  [ -n "$done" ] || log "WARN: Setup Assistant not detected in ~2h; capturing current state anyway"
+  [ -n "$done" ] || { log "FATAL: Setup Assistant not detected in ~2h; refusing to capture"; return 1; }
   capture_and_push "$GHCR_TAG-base"
 }
 
@@ -323,13 +313,9 @@ capture_and_push() {  # stop QEMU, compress the installed macOS qcow2, push it t
   local out="$WORKDIR/$QCOW2_NAME"
   qemu-img convert -O qcow2 -c "$OSX_KVM_DIR/$QCOW2_NAME" "$out"
   log "captured $(du -h "$out" | cut -f1); pushing -> $GHCR_REPO:$tag"
-  if command -v oras >/dev/null 2>&1; then
-    ( cd "$WORKDIR" && oras push "$GHCR_REPO:$tag" \
-        --artifact-type application/vnd.cocoon.macos.disk \
-        "$QCOW2_NAME:application/octet-stream" ) || log "oras push failed (check ghcr perms)"
-  else
-    log "oras not installed; skipping push"
-  fi
+  ( cd "$WORKDIR" && oras push "$GHCR_REPO:$tag" \
+      --artifact-type application/vnd.cocoon.macos.disk \
+      "$QCOW2_NAME:application/octet-stream" )
 }
 
 pull_image() {  # fetch $GHCR_REPO:$1 -> $QCOW2_NAME (the boot disk; skips the ~50min install)
@@ -356,7 +342,7 @@ print(l["digest"], l["size"])')
   rm -f "$QCOW2_NAME" "$QCOW2_NAME.aria2"
   for i in $(seq 1 40); do
     cur=$(stat -c%s "$QCOW2_NAME" 2>/dev/null || echo 0)
-    [[ "$cur" -ge "$size" && ! -f "$QCOW2_NAME.aria2" ]] && break
+    [[ "$cur" -eq "$size" && ! -f "$QCOW2_NAME.aria2" ]] && break
     tok=$(ghcr_token "$repo")
     loc=$(curl -sD - -o /dev/null -H "Authorization: Bearer $tok" "$api" | tr -d '\r' | awk -F': ' 'tolower($1)=="location"{print $2}')
     [[ -z "$loc" ]] && { sleep 5; continue; }
@@ -364,7 +350,9 @@ print(l["digest"], l["size"])')
     log "pull $QCOW2_NAME: $(($(stat -c%s "$QCOW2_NAME" 2>/dev/null || echo 0) / 1024 / 1024))/$((size / 1024 / 1024))MB"
   done
   cur=$(stat -c%s "$QCOW2_NAME" 2>/dev/null || echo 0)
-  [[ "$cur" -ge "$size" ]] || { log "FATAL: $QCOW2_NAME incomplete ($cur/$size) after aria2"; exit 1; }
+  [[ "$cur" -eq "$size" && ! -f "$QCOW2_NAME.aria2" ]] || { log "FATAL: $QCOW2_NAME incomplete ($cur/$size) after aria2"; return 1; }
+  [[ "$dig" == sha256:* ]] || { log "FATAL: unsupported image digest $dig"; return 1; }
+  printf '%s  %s\n' "${dig#sha256:}" "$QCOW2_NAME" | sha256sum --check --status || { log "FATAL: $QCOW2_NAME digest mismatch"; return 1; }
   qemu-img check "$QCOW2_NAME" >/dev/null 2>&1 || { log "FATAL: $QCOW2_NAME failed qemu-img check (corrupt)"; exit 1; }
   log "image present + verified: $(du -h "$QCOW2_NAME" | cut -f1)"
   [[ -f OVMF_VARS.fd ]] || cp OVMF_VARS-1920x1080.fd OVMF_VARS.fd
@@ -375,16 +363,7 @@ ghcr_token() {  # anonymous pull token for a ghcr repo path (public images); CI'
     python3 -c 'import sys, json; print(json.load(sys.stdin)["token"])'
 }
 
-boot_installed() {  # OpenCore picker -> installed macOS (2nd entry, right of EFI) -> Setup Assistant
-  sleep 75
-  screendump "setup-00-picker"
-  log "booting installed macOS (1x right + repeated ret)"
-  mon "sendkey right"; sleep 2
-  local t
-  for t in 1 2 3 4 5; do mon "sendkey ret"; sleep 8; done
-}
-
-PROVISION_URL="https://raw.githubusercontent.com/cocoonstack/cocoon-macos/master/scripts/provision-macos.sh"
+PROVISION_URL="https://raw.githubusercontent.com/cocoonstack/cocoon-macos/${GITHUB_SHA:-master}/scripts/provision-macos.sh"
 
 stage_setup() {  # M2b: boot Recovery (keyboard works there) + provision the installed volume (skip GUI Setup Assistant)
   # configure_opencore recovery made the picker STABLE (Timeout=0, all entries shown). The Recovery
@@ -480,7 +459,8 @@ stage_verify() {  # boot the turnkey tahoe:26 and confirm SSH
     python3 "$QMP_PY" "$QMP_SOCK" move $((60 + w * 15)) 420 2>/dev/null || true
   done
   screendump "vf-03-final"
-  [[ -n "$ok" ]] && log "VERIFY PASS: turnkey macOS boots + SSH works" || log "VERIFY: SSH not reachable yet (inspect vf-*.png + ssh-output.txt)"
+  [[ -n "$ok" ]] || { log "VERIFY FAIL: SSH not reachable (inspect vf-*.png + ssh-output.txt)"; return 1; }
+  log "VERIFY PASS: turnkey macOS boots + SSH works"
 }
 
 gssh() { sshpass -p cocoon ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -p "$SSH_PORT" cocoon@localhost "$@"; }
@@ -498,7 +478,7 @@ wait_ssh() {  # poll guest SSH (jiggling the mouse to keep the display awake); r
 
 apply_desktop_recipe() {  # skip Setup Assistant + auto-login cocoon + no display sleep + suppress keyboard wizard
   log "applying boot-to-desktop recipe over SSH"
-  gssh 'bash -s' <<'GUEST'
+  gssh 'bash -e -s' <<'GUEST'
 PV=$(sw_vers -productVersion); BV=$(sw_vers -buildVersion); echo "[recipe] PV=$PV BV=$BV"
 echo cocoon | sudo -S createhomedir -c -u cocoon >/dev/null 2>&1   # cocoon has never GUI-logged-in
 P=/Users/cocoon/Library/Preferences/com.apple.SetupAssistant
@@ -592,11 +572,6 @@ stage_slim() {  # SA-INDEPENDENT slim: boot, reclaim stale clusters over SSH, re
   # only needs SSH (sudo+dd work at the SA stage) + the MacHDD discard=unmap,detect-zeroes=unmap.
   boot_macintosh
   log "waiting for SSH (slim is SA-independent; SSH comes up even with the GUI at Setup Assistant)"
-  # A clean base boots to SSH fast (June tahoe:26 answered in ~96s). But stage_install captures on a
-  # fixed window with no completion check, so a slow install can ship a half-installed base whose
-  # first boot must FINISH the install ("~25min remaining", 20x slower) before sshd answers. wait_ssh
-  # is a ceiling that returns the moment SSH answers, so this large budget is free on a clean base and
-  # insurance against a half-installed one.
   wait_ssh 270 || { log "FATAL: SSH never came up"; return 1; }
   apply_perf_recipe   # bake the macOS-side perf tweaks into the image before reclaiming/repushing
   slim_disk

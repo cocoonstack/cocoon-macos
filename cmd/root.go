@@ -3,8 +3,10 @@ package cmd
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/projecteru2/core/log"
@@ -36,11 +38,12 @@ func run(ctx context.Context) error {
 	defer stop()
 
 	root := &cobra.Command{
-		Use:           "cocoon-macos",
-		Short:         "Run full macOS (Tahoe 26) as a QEMU/KVM guest on x86 Linux",
-		Version:       version.String(),
-		SilenceUsage:  true,
-		SilenceErrors: true, // Execute logs the error itself; don't let cobra double-print it
+		Use:               "cocoon-macos",
+		Short:             "Run full macOS (Tahoe 26) as a QEMU/KVM guest on x86 Linux",
+		Version:           version.String(),
+		SilenceUsage:      true,
+		SilenceErrors:     true, // Execute logs the error itself; don't let cobra double-print it
+		PersistentPreRunE: resolvePaths,
 	}
 	root.SetVersionTemplate("{{.Version}}")
 	root.PersistentFlags().String("state-dir", "", "state root (default $COCOON_MACOS_HOME or "+home.Default+")")
@@ -48,6 +51,25 @@ func run(ctx context.Context) error {
 	root.AddCommand(vm.GCCommand())
 	root.AddCommand(image.Command())
 	return root.ExecuteContext(ctx)
+}
+
+func resolvePaths(cmd *cobra.Command, _ []string) error {
+	for _, name := range []string{"state-dir", "cni-conf-dir", "cni-bin-dir"} {
+		path, _ := cmd.Flags().GetString(name)
+		if name == "state-dir" {
+			path = home.Dir(cmd)
+		} else if path == "" {
+			continue
+		}
+		path, err := filepath.Abs(path)
+		if err != nil {
+			return fmt.Errorf("resolve --%s: %w", name, err)
+		}
+		if err := cmd.Flags().Set(name, path); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // setupLog swaps stderr in because SetupLog binds whatever os.Stdout is at call time.

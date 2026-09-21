@@ -112,8 +112,11 @@ func Restore(cmd *cobra.Command, args []string) error {
 			}
 		}
 		if wasRunning {
+			if err := launch(cmd, dir, r); err != nil {
+				return err
+			}
 			toggleNet(cmd, r, true)
-			return launch(cmd, dir, r)
+			return nil
 		}
 		return saveRec(dir, r)
 	}); err != nil {

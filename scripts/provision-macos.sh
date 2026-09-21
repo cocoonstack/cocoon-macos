@@ -7,7 +7,7 @@
 #   - install a persistent LaunchDaemon that assigns a per-VM hostname
 #   - install a persistent LaunchDaemon that grows APFS after qcow2 expansion
 # Diagnostics are printed so a VNC screenshot shows progress/errors.
-set -x
+set -e
 USER_NAME="${USER_NAME:-cocoon}"
 USER_PASS="${USER_PASS:-cocoon}"
 
@@ -110,9 +110,6 @@ PLIST
 chown -R 501:20 "$VOL/Users/$USER_NAME/Library"
 echo "OK seeded com.apple.SetupAssistant.plist"
 
-# 2c) Auto-login OFFLINE: autoLoginUser + /etc/kcpassword -> reaches the DESKTOP (not just the login
-#     window). kcpassword = "cocoon" XOR Apple's key, one 12-byte block (bash 3.2 has no printf \xHH,
-#     so emit raw bytes via perl pack). FileVault is never enabled here, so auto-login is honored.
 cat > "$VOL/Library/Preferences/com.apple.loginwindow.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -123,7 +120,12 @@ cat > "$VOL/Library/Preferences/com.apple.loginwindow.plist" <<PLIST
 PLIST
 chown 0:0 "$VOL/Library/Preferences/com.apple.loginwindow.plist"; chmod 644 "$VOL/Library/Preferences/com.apple.loginwindow.plist"
 mkdir -p "$VOL/etc"
-perl -e 'print pack(q{C*},30,230,49,76,189,210,221,234,163,185,31,125)' > "$VOL/etc/kcpassword"
+USER_PASS="$USER_PASS" perl -e '
+  my @key = (125,137,82,35,210,188,221,234,163,185,31);
+  my @bytes = unpack("C*", $ENV{USER_PASS});
+  push @bytes, (0) x (12 - @bytes % 12);
+  print pack("C*", map { $bytes[$_] ^ $key[$_ % @key] } 0 .. $#bytes);
+' > "$VOL/etc/kcpassword"
 chown 0:0 "$VOL/etc/kcpassword"; chmod 600 "$VOL/etc/kcpassword"
 echo "OK kcpassword ($(stat -f %z "$VOL/etc/kcpassword" 2>/dev/null)b) + autoLoginUser=$USER_NAME"
 # Suppress the Keyboard Setup Assistant for the QEMU USB keyboard (idVendor 1575 / idProduct 1 -> ANSI 40)
@@ -161,11 +163,12 @@ echo "OK SkipSetupItems managed-pref dropped (belt-and-suspenders)"
 mkdir -p "$VOL/Library/LaunchDaemons" "$VOL/usr/local/bin"
 cat > "$VOL/usr/local/bin/cocoon-firstboot.sh" <<'SH'
 #!/bin/bash
+set -e
 exec >>/var/log/cocoon-firstboot.log 2>&1
 echo "=== cocoon-firstboot $(date) ==="
-/usr/sbin/systemsetup -f -setremotelogin on
+/usr/sbin/systemsetup -f -setremotelogin on || true
 /bin/launchctl enable system/com.openssh.sshd
-/bin/launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist
+/bin/launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist || /bin/launchctl print system/com.openssh.sshd >/dev/null
 /bin/launchctl kickstart -k system/com.openssh.sshd
 echo "remotelogin: $(/usr/sbin/systemsetup -getremotelogin)"
 # Never sleep the display: the QEMU/VNC framebuffer is only repainted while macOS keeps the display

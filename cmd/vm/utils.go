@@ -139,6 +139,10 @@ func scaffoldVM(cmd *cobra.Command, name, image, varsSrc string) (dir, overlay, 
 	if err != nil {
 		return "", "", "", "", err
 	}
+	monitor := filepath.Join(dir, monitorSockName)
+	if len(monitor) > 107 {
+		return "", "", "", "", fmt.Errorf("monitor socket path is %d bytes; shorten --state-dir or --name to fit Linux's 107-byte limit", len(monitor))
+	}
 	if _, statErr := os.Stat(filepath.Join(dir, "vm.json")); statErr == nil {
 		return "", "", "", "", fmt.Errorf("vm %q already exists; rm it first or pick another --name", name)
 	} else if !os.IsNotExist(statErr) {
@@ -346,9 +350,12 @@ func resolveFirmware(cmd *cobra.Command) (opencore, code, vars string, err error
 	opencore = flagOr(cmd, "opencore", filepath.Join(fw, "OpenCore.qcow2"))
 	code = flagOr(cmd, "ovmf-code", filepath.Join(fw, "OVMF_CODE.fd"))
 	vars = flagOr(cmd, "ovmf-vars", filepath.Join(fw, "OVMF_VARS.fd"))
-	for _, p := range []string{opencore, code, vars} {
-		if !utils.ValidFile(p) {
-			return "", "", "", fmt.Errorf("firmware not found: %s — run scripts/doctor.sh to provision it (or pass --opencore/--ovmf-code/--ovmf-vars)", p)
+	for _, p := range []*string{&opencore, &code, &vars} {
+		if !utils.ValidFile(*p) {
+			return "", "", "", fmt.Errorf("firmware not found: %s — run scripts/doctor.sh to provision it (or pass --opencore/--ovmf-code/--ovmf-vars)", *p)
+		}
+		if *p, err = filepath.Abs(*p); err != nil {
+			return "", "", "", fmt.Errorf("resolve firmware path: %w", err)
 		}
 	}
 	return opencore, code, vars, nil

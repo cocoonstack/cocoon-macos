@@ -1,6 +1,7 @@
 # CLI Reference
 
 The CLI mirrors cocoon's `vm` / `image` command surface, trimmed to the macOS VM path.
+Run the examples in a root shell, or prefix commands with `sudo` for the default state root and host networking.
 
 ## Images
 
@@ -34,8 +35,8 @@ cocoon-macos vm rm m1
 
 - `create` scaffolds the VM (overlay, identity, network, record) without booting; `run` = `create` +
   boot; `start` boots a created/stopped VM.
-- `run` is atomic: if the boot fails it removes everything it just created (no half-made VM left
-  behind).
+- If the initial boot fails, `run` stops QEMU, tears down networking and removes the new VM state.
+  Cleanup failures are returned alongside the boot error; `gc` can reclaim unowned residue.
 - `vm stop` / `vm rm` (and the stop inside `vm restore --force`) first ask the guest to shut down
   (`system_powerdown` over QEMU's HMP monitor, the ACPI power button) and give it 10 s to halt; if
   QEMU is still running after that they send SIGTERM and SIGKILL at once. `vm stop --force` and
@@ -62,7 +63,6 @@ supervisor. It persists with the VM and is inherited by clones. QEMU's
 recover the existing record with `vm start`; standalone VMs keep QEMU's normal
 in-process reboot behavior.
 
-
 ## Housekeeping
 
 ```bash
@@ -85,7 +85,9 @@ the evidence outlives the last VM. Under a root without either (a
 mistyped `--state-dir`, an unset `$COCOON_MACOS_HOME`, a root that only ever pulled images) `gc`
 still removes the root's own stale pull temps but warns and leaves the host's netns and TAPs alone;
 a state root that does not exist at all is refused. A co-hosted cocoon's `gc` never touches the `cm`
-family and this verb never touches cocoon's.
+family and this verb never touches cocoon's. Use one cocoon-macos state root per host: the `cm`
+network namespace is shared across roots. An unreadable or invalid VM record aborts the ownership
+snapshot and prevents new orphan collection; a read error is not evidence that the VM is absent.
 
 ## What `vm run` does
 
@@ -100,5 +102,12 @@ family and this verb never touches cocoon's.
    same recipe boots macOS identically on Intel and AMD; on AMD it also sets `kvm.ignore_msrs=1`
    (macOS reads MSRs an AMD host lacks). See [Boot, Firmware & GUI](vm.md).
 
+New VM names contain 1–63 ASCII letters, digits, dots, underscores or hyphens, and start with a
+letter or digit. Create and clone also check the resolved monitor socket path against Linux's
+107-byte limit before scaffolding; shorten `--state-dir` or `--name` if needed.
+
 State is recorded under `--state-dir` / `$COCOON_MACOS_HOME` (default `/var/lib/cocoon-macos`).
+The CLI resolves a relative state root and supplied CNI directories against the current working
+directory. Local image and firmware paths are persisted as absolute paths, so start and clone do
+not depend on the working directory used for create. Use the same state root on later commands.
 `$COCOON_MACOS_LOG_LEVEL` sets the log level (`debug` / `info` / `warn` / `error`, default `info`).

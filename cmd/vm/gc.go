@@ -172,6 +172,9 @@ func vmGCModule(stateDir string, dirs []string) gc.Module[vmGCSnapshot] {
 			for _, dir := range dirs {
 				r, err := loadRec(dir)
 				if err != nil {
+					if !errors.Is(err, os.ErrNotExist) {
+						return vmGCSnapshot{}, fmt.Errorf("read vm %s for gc: %w", filepath.Base(dir), err)
+					}
 					snap.strays = append(snap.strays, dir)
 					continue
 				}

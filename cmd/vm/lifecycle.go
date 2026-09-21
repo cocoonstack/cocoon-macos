@@ -54,6 +54,7 @@ func Start(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("vnc") || cmd.Flags().Changed("vnc-password") {
 				ignored = "; supplied VNC settings ignored because live QEMU cannot be retargeted"
 			}
+			toggleNet(cmd, r, true)
 			fmt.Printf("%s (pid %d, already running%s)\n", n, r.PID, ignored)
 			return nil
 		}
@@ -155,6 +156,12 @@ func createVM(cmd *cobra.Command, image string, start bool) error {
 }
 
 func create(cmd *cobra.Command, image, name string) (r *record, retErr error) {
+	if utils.FileExists(image) {
+		image, retErr = filepath.Abs(image)
+		if retErr != nil {
+			return nil, fmt.Errorf("resolve image path: %w", retErr)
+		}
+	}
 	rawDisks, _ := cmd.Flags().GetStringArray("data-disk")
 	diskSpecs, err := parseDataDisks(rawDisks, nil) // fail fast before any scaffolding
 	if err != nil {

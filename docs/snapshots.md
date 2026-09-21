@@ -5,7 +5,7 @@
 ```bash
 cocoon-macos vm stop m1
 cocoon-macos vm snapshot m1 --tag clean
-cocoon-macos vm restore  m1 --tag clean   # --force to stop+restore+relaunch a running VM
+cocoon-macos vm restore  m1 --tag clean   # --force: power down, restore, relaunch a running VM
 ```
 
 `--force` on a running VM keeps its VNC display across the relaunch. A display

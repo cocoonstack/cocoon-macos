@@ -50,8 +50,10 @@ its TAP on a bridge clones like `bridge`.
 
 `vm stop` leaves an auto-created TAP in place for a fast restart; once QEMU closes it the TAP has
 no carrier and its bridge port forwards nothing, so bridge mode has nothing to quiesce. Under `cni`,
-`vm stop` downs the netns `eth0` so the idle TC redirect stops storming softirqs, and `vm start`
-brings it back up. `vm rm` (and a failed `create`) deletes the TAP and the netns.
+`vm stop` (and the stop inside `vm restore --force`) downs the netns `eth0` so the idle TC redirect
+stops storming softirqs, and `vm start` (or the relaunch) brings it back up. `vm rm` (and a failed
+`create`) deletes the TAP and the netns; a netns or TAP left behind by a create or clone that was
+killed before its record was written is reclaimed by `cocoon-macos gc`.
 
 ## VNC exposure
 

@@ -36,9 +36,12 @@ cocoon-macos vm rm m1
   boot; `start` boots a created/stopped VM.
 - `run` is atomic: if the boot fails it removes everything it just created (no half-made VM left
   behind).
-- `vm stop` / `vm rm` send QEMU SIGTERM (QEMU exits at once; the guest gets no ACPI power-button
-  event and no chance to flush) and SIGKILL it if it has not exited after 10 s; `--force` drops
-  the 10 s window, so SIGKILL follows the SIGTERM at once.
+- `vm stop` / `vm rm` (and the stop inside `vm restore --force`) first ask the guest to shut down
+  (`system_powerdown` over QEMU's HMP monitor, the ACPI power button) and give it 10 s to halt; if
+  QEMU is still running after that they send SIGTERM and SIGKILL at once. `vm stop --force` and
+  `vm rm --force` skip the power-down and the window (`vm restore --force` only means "stop first"
+  and keeps them). If the monitor cannot be reached the old SIGTERM-then-10 s-then-SIGKILL path runs
+  instead; a record whose QEMU is already gone skips the monitor entirely.
 - `--storage` expands the new VM's qcow2 system disk before boot. It accepts values such as `100Gi`
   or a byte count, never shrinks an image, and is inherited by `clone` unless explicitly overridden.
 
@@ -58,6 +61,31 @@ supervisor. It persists with the VM and is inherited by clones. QEMU's
 `-no-reboot` exit skips the normal `vm stop` cleanup, so the supervisor must
 recover the existing record with `vm start`; standalone VMs keep QEMU's normal
 in-process reboot behavior.
+
+
+## Housekeeping
+
+```bash
+cocoon-macos gc    # reclaim what no VM record owns
+```
+
+`gc` runs cocoon's netns and TAP collectors under cocoon-macos's own `cm` scope, so a `cm-<vmid>`
+netns or `cm<vmid8>-<nic>` TAP whose VM record is gone (a `create` or `clone` killed between network
+provisioning and the record write) is removed; a VM dir without a record is reset the way a
+same-name re-create resets it (refused while a QEMU still references it); `pull-*.qcow2` temp files
+older than an hour under the state root are deleted. It first takes, exclusively, the provisioning
+lock that every `create` and `clone` holds shared from before its VM dir exists until its record is
+written, so no VM can appear during the sweep, then the lock of every VM present, and refuses to
+run while any of them is held. The netns and TAP collectors are host-global within the `cm` family,
+so they run only for a state root that has held a VM: one with a VM dir under `vms/`, or with the
+`vms/.locks/.provisioned` marker, which `create` and `clone` write the moment they reach network
+provisioning (whatever `--net` mode, so a root of `--net user` VMs counts too) and which every path
+that removes a VM dir (`vm rm`, the same-name re-create, `gc` itself) writes before removing it, so
+the evidence outlives the last VM. Under a root without either (a
+mistyped `--state-dir`, an unset `$COCOON_MACOS_HOME`, a root that only ever pulled images) `gc`
+still removes the root's own stale pull temps but warns and leaves the host's netns and TAPs alone;
+a state root that does not exist at all is refused. A co-hosted cocoon's `gc` never touches the `cm`
+family and this verb never touches cocoon's.
 
 ## What `vm run` does
 

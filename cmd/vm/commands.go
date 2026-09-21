@@ -40,7 +40,7 @@ func Command() *cobra.Command {
 		Args:  cobra.MinimumNArgs(1),
 		RunE:  Stop,
 	}
-	stopCmd.Flags().Bool("force", false, "force stop (SIGKILL right after SIGTERM, no grace window)")
+	stopCmd.Flags().Bool("force", false, "force stop: skip the ACPI power-down and its grace window, SIGTERM then SIGKILL at once")
 
 	listCmd := &cobra.Command{
 		Use:     "list",
@@ -70,7 +70,7 @@ func Command() *cobra.Command {
 		Args:  cobra.MinimumNArgs(1),
 		RunE:  RM,
 	}
-	rmCmd.Flags().Bool("force", false, "force kill (SIGKILL right after SIGTERM, no grace window)")
+	rmCmd.Flags().Bool("force", false, "force kill: skip the ACPI power-down and its grace window, SIGTERM then SIGKILL at once")
 	rmCmd.Flags().String("cni-conf-dir", "", "CNI config dir for a VM created before the record remembered it")
 	rmCmd.Flags().String("cni-bin-dir", "", "CNI plugin dir for a VM created before the record remembered it")
 

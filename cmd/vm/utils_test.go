@@ -1,9 +1,12 @@
 package vm
 
 import (
+	"bufio"
 	"context"
+	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -11,6 +14,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/cocoonstack/cocoon/utils"
 )
 
 func TestStorageFromFlag(t *testing.T) {
@@ -149,9 +154,83 @@ func TestVMDirPrefixSeparatesSiblingNames(t *testing.T) {
 	}
 }
 
+func TestStopInstanceAsksTheGuestToPowerDownFirst(t *testing.T) {
+	dir, err := os.MkdirTemp("", "cm-stop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	ln, err := net.Listen("unix", filepath.Join(dir, monitorSockName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close() //nolint:errcheck
+	got := make(chan string, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()          //nolint:errcheck
+		fmt.Fprint(conn, hmpPrompt) //nolint:errcheck
+		line, _ := bufio.NewReader(conn).ReadString('\n')
+		fmt.Fprint(conn, " "+line+hmpPrompt) //nolint:errcheck
+		got <- strings.TrimSpace(line)
+	}()
+	disk := filepath.Join(dir, "disk.qcow2")
+	pid := spawnFakeQEMU(t, disk)
+	r := &record{Name: "m", PID: pid, Disk: disk}
+
+	const grace = 300 * time.Millisecond
+	start := time.Now()
+	if err := stopInstance(t.Context(), dir, r, grace); err != nil {
+		t.Fatalf("stopInstance: %v", err)
+	}
+	select {
+	case line := <-got:
+		if line != "system_powerdown" {
+			t.Fatalf("monitor received %q, want system_powerdown", line)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("stopInstance never spoke to the monitor")
+	}
+	if waited := time.Since(start); waited < grace || waited > 5*time.Second {
+		t.Errorf("stopInstance took %s, want the %s window for a guest that ignores the power button and then the signal", waited, grace)
+	}
+	if err := utils.WaitFor(t.Context(), 5*time.Second, 20*time.Millisecond, func() (bool, error) {
+		return !utils.IsProcessAlive(pid), nil
+	}); err != nil {
+		t.Errorf("qemu pid %d survived stopInstance", pid)
+	}
+}
+
+func TestStopInstanceSkipsTheMonitorForADeadQEMU(t *testing.T) {
+	dir, err := os.MkdirTemp("", "cm-dead")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	if err := os.WriteFile(filepath.Join(dir, monitorSockName), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	exited := exec.Command("true")
+	if err := exited.Run(); err != nil {
+		t.Fatal(err)
+	}
+	r := &record{Name: "m", PID: exited.Process.Pid, Disk: filepath.Join(dir, "disk.qcow2")}
+
+	start := time.Now()
+	if err := stopInstance(t.Context(), dir, r, stopGracePeriod); err != nil {
+		t.Fatalf("stopInstance: %v", err)
+	}
+	if waited := time.Since(start); waited > time.Second {
+		t.Errorf("stopInstance took %s dialing a monitor nobody serves", waited)
+	}
+}
+
 func TestReadUntilWaitsForTheFullPrompt(t *testing.T) {
 	out, ok := hmpTranscript(" set_pass", "word vnc (qemu)\r\n", "Error: No VNC display is present\r\n", "(qemu) ")
-	if !ok || !hmpReplied(out) {
+	if !ok || !hmpReplied(out, "set_password ") {
 		t.Fatalf("readUntil = (%q, %v), want the rejection after the echoed prompt-shaped password", out, ok)
 	}
 	if out, ok := hmpTranscript(" set_password vnc abcd\r\n"); ok {
@@ -173,7 +252,7 @@ func TestHMPRepliedFlagsAnyMessage(t *testing.T) {
 		{"readline redraw then rejection", "s\x1b[K\x1b[Dset_password vnc \"abc\r\nset_password: string expected\r\n(qemu) ", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := hmpReplied(tc.out); got != tc.want {
+			if got := hmpReplied(tc.out, "set_password "); got != tc.want {
 				t.Errorf("hmpReplied = %v, want %v", got, tc.want)
 			}
 		})

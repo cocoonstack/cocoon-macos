@@ -238,7 +238,7 @@ func launch(cmd *cobra.Command, dir string, r *record) error {
 		Hugepages:    r.Hugepages,
 		ExitOnReboot: r.ExitOnReboot,
 		DataDisks:    r.DataDisks,
-		MonSock:      filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
+		MonSock:      filepath.Join(dir, monitorSockName), QMPSock: filepath.Join(dir, "qmp.sock"),
 	}
 	// CNI: a 127.0.0.1 VNC inside the netns is unreachable; use a unix socket fronted by startVNCProxy
 	if r.Netns != "" && r.VNCDisp >= 0 {

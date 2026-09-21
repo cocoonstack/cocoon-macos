@@ -113,6 +113,9 @@ func RM(cmd *cobra.Command, args []string) error {
 		} else if cleanupErr := reapStrayHelpers(ctx, dir); cleanupErr != nil {
 			return cleanupErr
 		}
+		if err := markProvisioned(filepath.Dir(dir)); err != nil {
+			return err
+		}
 		if err := os.RemoveAll(dir); err != nil {
 			return fmt.Errorf("remove vm dir: %w", err)
 		}
@@ -132,8 +135,11 @@ func createVM(cmd *cobra.Command, image string, start bool) error {
 	}
 	ctx := cliutil.CommandContext(cmd)
 	return withVMLock(ctx, dir, func() error {
-		r, err := create(cmd, image, name)
-		if err != nil {
+		var r *record
+		if err := withProvisionLock(ctx, cmd, func() (err error) {
+			r, err = create(cmd, image, name)
+			return err
+		}); err != nil {
 			return err
 		}
 		if !start {

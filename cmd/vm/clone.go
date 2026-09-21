@@ -38,7 +38,7 @@ func Clone(cmd *cobra.Command, args []string) error {
 		if running {
 			return fmt.Errorf("vm %q is running; stop it before cloning", src)
 		}
-		return clone(cmd, srcRec, name)
+		return withProvisionLock(cliutil.CommandContext(cmd), cmd, func() error { return clone(cmd, srcRec, name) })
 	})
 }
 

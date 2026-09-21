@@ -48,7 +48,7 @@ func saveRec(dir string, r *record) error {
 
 // lock lives outside the VM dir so rm can't unlink the inode a waiter still holds and split mutual exclusion.
 func withVMLock(ctx context.Context, dir string, fn func() error) error {
-	lockPath := filepath.Join(filepath.Dir(dir), ".locks", filepath.Base(dir)+".lock")
+	lockPath := vmLockPath(dir)
 	if err := utils.EnsureDirs(filepath.Dir(lockPath)); err != nil {
 		return fmt.Errorf("create vm lock dir: %w", err)
 	}
@@ -58,6 +58,10 @@ func withVMLock(ctx context.Context, dir string, fn func() error) error {
 	}
 	defer func() { _ = l.Unlock(context.WithoutCancel(ctx)) }()
 	return fn()
+}
+
+func vmLockPath(dir string) string {
+	return filepath.Join(filepath.Dir(dir), ".locks", filepath.Base(dir)+".lock")
 }
 
 func forEachVMDir(cmd *cobra.Command, args []string, fn func(ctx context.Context, name, dir string) error) error {
@@ -189,6 +193,9 @@ func resetIncompleteVMDir(ctx context.Context, dir string) error {
 	if err := procutil.TerminateByCmdline(ctx, "qemu-nbd", vmDirPrefix(dir), time.Second); err != nil {
 		return fmt.Errorf("cleanup stale qemu-nbd for %s: %w", dir, err)
 	}
+	if err := markProvisioned(filepath.Dir(dir)); err != nil {
+		return err
+	}
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("remove incomplete vm dir %s: %w", dir, err)
 	}
@@ -219,6 +226,9 @@ func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err erro
 
 // applyNet provisions networking and records it; a TAP is "owned" (torn down on rm) only when auto-created, never when the user passed --tap.
 func applyNet(cmd *cobra.Command, r *record) error {
+	if err := markProvisioned(home.VMsDir(cmd)); err != nil {
+		return err
+	}
 	userTap := r.Tap
 	netTap, netns, mac, err := prepareNet(cmd, r)
 	if err != nil {

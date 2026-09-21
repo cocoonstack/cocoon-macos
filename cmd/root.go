@@ -45,6 +45,7 @@ func run(ctx context.Context) error {
 	root.SetVersionTemplate("{{.Version}}")
 	root.PersistentFlags().String("state-dir", "", "state root (default $COCOON_MACOS_HOME or "+home.Default+")")
 	root.AddCommand(vm.Command())
+	root.AddCommand(vm.GCCommand())
 	root.AddCommand(image.Command())
 	return root.ExecuteContext(ctx)
 }

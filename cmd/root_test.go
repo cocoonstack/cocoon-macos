@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"cmp"
 	"path/filepath"
 	"testing"
 
@@ -18,9 +19,7 @@ func TestResolvePaths(t *testing.T) {
 		if err := resolvePaths(cmd, nil); err != nil {
 			t.Fatal(err)
 		}
-		if state == "" {
-			state = "environment"
-		}
+		state = cmp.Or(state, "environment")
 		for name, path := range map[string]string{"state-dir": state, "cni-conf-dir": "config"} {
 			want, err := filepath.Abs(path)
 			if err != nil {

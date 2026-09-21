@@ -29,7 +29,9 @@ cocoon-macos vm clone m1 -n m2 --ssh-port 2223 --random-smbios
 ```
 
 A clone bakes a fresh copy-on-write overlay on the **shared base** (never on SRC's per-VM overlay,
-which would break on `vm rm m1`). It cold-boots a **fresh Apple identity** when `--random-smbios`
+which would break on `vm rm m1`), and that base is the exact blob SRC was built from, by its
+recorded digest; only if that blob has left the store does the clone fall back to whatever SRC's
+image ref resolves to now, with a warning. It cold-boots a **fresh Apple identity** when `--random-smbios`
 is given to the clone (or inherited automatically when SRC already carries one) — without it, the
 clone shares SRC's serial. With a fresh identity, `user`, `tap`, and `bridge` use its ROM MAC;
 `cni` always uses the provider MAC. Without one, auto-created `tap`/`bridge` use a provider MAC,

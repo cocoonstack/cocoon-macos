@@ -18,7 +18,7 @@ sudo install -m 755 cocoon-macos /usr/local/bin/cocoon-macos
 
 Run once per host. `doctor.sh`:
 
-1. Checks `/dev/kvm` and installs any missing dependencies (`qemu`, OVMF, `gdisk`, `dosfstools`),
+1. Checks `/dev/kvm` and installs any missing dependencies (`qemu`, OVMF, `gdisk`, `dosfstools`, `curl`),
 2. Loads the `nbd` kernel module,
 3. Provisions the **shared firmware** into `<state-dir>/firmware` — it downloads the LongQT OpenCore
    release and bakes a GPT/ESP `OpenCore.qcow2` plus the 4 MB OVMF `CODE`/`VARS`. Every VM reuses this

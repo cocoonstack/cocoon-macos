@@ -21,7 +21,7 @@ Every VM boots the same way on Intel and AMD:
   reliably headlessly — OpenCanopy cancels its `Timeout` countdown on stray USB-enumeration input
   and then waits forever). The default `vm create` / `vm run` path leaves `config.plist` untouched
   (`doctor.sh` copies the stock LongQT EFI as-is), so this picker suppression only happens with
-  `--random-smbios`.
+  `--random-smbios` or on a clone of a VM that already carries an identity.
 - **AMD:** `kvm.ignore_msrs=1` is set host-wide (macOS reads MSRs an AMD host lacks).
 
 ## GUI renders; Setup-Assistant skip is WIP

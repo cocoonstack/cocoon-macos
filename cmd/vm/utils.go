@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -18,7 +17,7 @@ import (
 	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon-macos/internal/procutil"
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
-	"github.com/cocoonstack/cocoon/images"
+	"github.com/cocoonstack/cocoon/images/cloudimg"
 	"github.com/cocoonstack/cocoon/lock/flock"
 	"github.com/cocoonstack/cocoon/types"
 	"github.com/cocoonstack/cocoon/utils"
@@ -38,7 +37,6 @@ func loadRec(dir string) (*record, error) {
 	return r, nil
 }
 
-// saveRec writes vm.json atomically (temp + fsync + rename) so a crash can't truncate it.
 func saveRec(dir string, r *record) error {
 	if err := utils.AtomicWriteJSON(filepath.Join(dir, "vm.json"), r, utils.Sync); err != nil {
 		return fmt.Errorf("write vm record: %w", err)
@@ -78,18 +76,15 @@ func forEachVMDir(cmd *cobra.Command, args []string, fn func(ctx context.Context
 	return nil
 }
 
-func withVMLocks(ctx context.Context, dirs []string, fn func() error) error {
-	dirs = slices.Clone(dirs)
-	slices.Sort(dirs)
-	dirs = slices.Compact(dirs)
-	var lockNext func(int) error
-	lockNext = func(i int) error {
-		if i == len(dirs) {
-			return fn()
-		}
-		return withVMLock(ctx, dirs[i], func() error { return lockNext(i + 1) })
+// withVMLocks takes both locks in path order, so two clones crossing the same pair never deadlock.
+func withVMLocks(ctx context.Context, a, b string, fn func() error) error {
+	if a == b {
+		return withVMLock(ctx, a, fn)
 	}
-	return lockNext(0)
+	if a > b {
+		a, b = b, a
+	}
+	return withVMLock(ctx, a, func() error { return withVMLock(ctx, b, fn) })
 }
 
 // bakeOverlay creates a per-VM CoW qcow2 overlay on the immutable base (which stays read-only).
@@ -177,7 +172,6 @@ func scaffoldVM(cmd *cobra.Command, name, image, varsSrc string) (dir, overlay, 
 	return dir, overlay, ovmfVars, digest, nil
 }
 
-// remove pre-commit VM state; refuses a dir a live qemu still references.
 func resetIncompleteVMDir(ctx context.Context, dir string) error {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return nil
@@ -228,7 +222,6 @@ func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err erro
 	return provisionNet(cmd, r)
 }
 
-// applyNet provisions networking and records it; a TAP is "owned" (torn down on rm) only when auto-created, never when the user passed --tap.
 func applyNet(cmd *cobra.Command, r *record) error {
 	if err := markProvisioned(home.VMsDir(cmd)); err != nil {
 		return err
@@ -249,8 +242,11 @@ func isRunning(r *record) bool {
 	return utils.VerifyProcessCmdline(r.PID, qemuBinary, qemuPIDPath(r.Disk))
 }
 
-// adopt a qemu that daemonized before its pid was saved; >1 match is corruption, not a guess.
-func adoptRunningQEMU(r *record) (bool, error) {
+// reconcileRunningQEMU adopts a qemu that daemonized before its pid was saved; >1 match is corruption, not a guess.
+func reconcileRunningQEMU(dir string, r *record) (bool, error) {
+	if isRunning(r) {
+		return true, nil
+	}
 	pids, err := utils.FindVMMByCmdline(qemuBinary, qemuPIDPath(r.Disk))
 	if err != nil {
 		return false, fmt.Errorf("scan qemu process for %s: %w", r.Disk, err)
@@ -260,19 +256,8 @@ func adoptRunningQEMU(r *record) (bool, error) {
 		return false, nil
 	case 1:
 		r.PID = pids[0]
-		return true, nil
 	default:
 		return false, fmt.Errorf("multiple qemu processes use disk %s: %v", r.Disk, pids)
-	}
-}
-
-func reconcileRunningQEMU(dir string, r *record) (bool, error) {
-	if isRunning(r) {
-		return true, nil
-	}
-	running, err := adoptRunningQEMU(r)
-	if err != nil || !running {
-		return running, err
 	}
 	if err := saveRec(dir, r); err != nil {
 		return false, err
@@ -280,7 +265,6 @@ func reconcileRunningQEMU(dir string, r *record) (bool, error) {
 	return true, nil
 }
 
-// terminate stops the VM's qemu, verifying the cmdline before signaling; grace=0 sends SIGKILL right after the SIGTERM.
 func terminate(ctx context.Context, r *record, grace time.Duration) error {
 	if r.PID <= 0 {
 		return nil
@@ -316,33 +300,28 @@ func isHostAMD() bool {
 	return err == nil && strings.Contains(string(b), "AuthenticAMD")
 }
 
-// resolveBase returns the immutable base qcow2 (+ digest): a direct filesystem path, else an image ref resolved through cocoon's cloudimg store.
+// resolveBase returns the immutable base qcow2 (+ digest): a direct filesystem path, else an image ref resolved to its content-addressed blob in cocoon's cloudimg store.
 func resolveBase(ctx context.Context, cmd *cobra.Command, image, name string) (string, string, error) {
 	if utils.FileExists(image) {
 		return image, "", nil
 	}
-	ensureCloudimgFirmware(cmd)
 	store, err := home.OpenStore(ctx, cmd)
 	if err != nil {
 		return "", "", err
 	}
-	vm := &types.VMConfig{Image: image, Name: name}
-	sc, _, err := store.Config(ctx, vm)
+	img, err := store.Inspect(ctx, image)
 	if err != nil {
-		return "", "", fmt.Errorf("resolve image %q (not a file, not in the store): %w", image, err)
+		return "", "", fmt.Errorf("resolve image %q for vm %s: %w", image, name, err)
 	}
-	return sc[0].Path, vm.ImageDigest, nil
-}
-
-// ensureCloudimgFirmware writes a placeholder CLOUDHV.fd purely to satisfy cloudimg.Config's firmware validation — cocoon-macos boots via OVMF and never reads it.
-func ensureCloudimgFirmware(cmd *cobra.Command) {
-	fw := images.FirmwarePath(home.Dir(cmd))
-	if utils.ValidFile(fw) {
-		return
+	if img == nil {
+		return "", "", fmt.Errorf("resolve image %q for vm %s: not a file, not in the store", image, name)
 	}
-	if err := utils.EnsureDirs(filepath.Dir(fw)); err == nil {
-		_ = os.WriteFile(fw, []byte("placeholder: cocoon-macos boots via OVMF, not CLOUDHV\n"), 0o600)
+	hex, _ := strings.CutPrefix(img.ID, "sha256:")
+	blob := cloudimg.NewConfig(home.Dir(cmd), 0).BlobPath(hex)
+	if !utils.ValidFile(blob) {
+		return "", "", fmt.Errorf("blob %s invalid for vm %s (image %q)", img.ID, name, image)
 	}
+	return blob, img.ID, nil
 }
 
 func resolveFirmware(cmd *cobra.Command) (opencore, code, vars string, err error) {

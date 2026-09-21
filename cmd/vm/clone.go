@@ -30,7 +30,7 @@ func Clone(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return withVMLocks(cliutil.CommandContext(cmd), []string{srcDir, dir}, func() error {
+	return withVMLocks(cliutil.CommandContext(cmd), srcDir, dir, func() error {
 		srcRec, err := loadRec(srcDir)
 		if err != nil {
 			return err

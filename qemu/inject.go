@@ -155,7 +155,6 @@ func isFileHeld(ocPath string) (bool, error) {
 	return len(pids) > 0, err
 }
 
-// cleanupNBDForPath terminates qemu-nbd holders of path; PID identity is verified so a reused PID is never hit.
 func cleanupNBDForPath(ctx context.Context, path string) error {
 	return procutil.TerminateByCmdline(ctx, "qemu-nbd", path, time.Second)
 }

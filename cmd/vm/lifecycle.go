@@ -247,7 +247,7 @@ func launch(cmd *cobra.Command, dir string, r *record) error {
 	spec := qemu.Spec{
 		Disk: r.Disk, OpenCore: r.OpenCore, OVMFCode: r.OVMFCode, OVMFVars: r.OVMFVars,
 		CPUs: r.CPUs, Memory: r.Memory, VNCDisp: r.VNCDisp, SSHPort: r.SSHPort, MAC: r.MAC, VNCPass: r.VNCPass,
-		Tap:          r.Tap, // set for tap/bridge/cni (a real host TAP); empty => user-mode SLIRP
+		Tap:          r.Tap,
 		Hugepages:    r.Hugepages,
 		ExitOnReboot: r.ExitOnReboot,
 		DataDisks:    r.DataDisks,

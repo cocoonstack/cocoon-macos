@@ -22,24 +22,29 @@ go build -o cocoon-macos .
 sudo scripts/doctor.sh
 
 # Pull the golden image and run a VM (x86 Linux + /dev/kvm)
-cocoon-macos image pull ghcr.io/cocoonstack/cocoon-macos/tahoe:26
-cocoon-macos vm run ghcr.io/cocoonstack/cocoon-macos/tahoe:26 \
+sudo ./cocoon-macos image pull ghcr.io/cocoonstack/cocoon-macos/tahoe:26
+sudo ./cocoon-macos vm run ghcr.io/cocoonstack/cocoon-macos/tahoe:26 \
   --name m1 --cpus 4 --memory 8192 --ssh-port 2222 --vnc 1 --random-smbios
 
 # Interact
 ssh -p 2222 cocoon@localhost      # password: cocoon
-cocoon-macos vm console m1        # prints the VNC address + ssh command
+sudo ./cocoon-macos vm console m1        # prints the VNC address + ssh command
 
 # Snapshot and clone
-cocoon-macos vm stop m1
-cocoon-macos vm snapshot m1 --tag clean
-cocoon-macos vm clone m1 -n m2 --ssh-port 2223 --random-smbios
+sudo ./cocoon-macos vm stop m1
+sudo ./cocoon-macos vm snapshot m1 --tag clean
+sudo ./cocoon-macos vm clone m1 -n m2 --ssh-port 2223 --random-smbios
 
 # Clean up
-cocoon-macos vm rm m1 m2
+sudo ./cocoon-macos vm rm m1 m2
 ```
 
-Full walkthroughs: [Installation](docs/install.md) · [CLI reference](docs/cli.md) · [Images](docs/images.md) · [VM boot & firmware](docs/vm.md) · [Networking & VNC](docs/networking.md) · [Snapshots & clone](docs/snapshots.md) · [CI image pipeline](docs/image-pipeline.md) · [E2E regression](docs/e2e.md) · [Known issues](docs/known-issues.md) · [Roadmap](docs/roadmap.md)
+## Related projects
+
+| Project | Role |
+|---|---|
+| [cocoon](https://github.com/cocoonstack/cocoon) | MicroVM engine; cocoon-macos imports its `cloudimg` store and `network` plane |
+| [vk-cocoon](https://github.com/cocoonstack/vk-cocoon) | Virtual kubelet provider; dispatches `os=macos` pods to this binary |
 
 ## Development
 
@@ -50,13 +55,6 @@ make lint     # Run golangci-lint (GOOS=linux + darwin)
 make fmt      # Format code with gofumpt + goimports
 make all      # Full pipeline: deps + fmt + lint + test + build
 ```
-
-## Related projects
-
-| Project | Role |
-|---|---|
-| [cocoon](https://github.com/cocoonstack/cocoon) | MicroVM engine; cocoon-macos imports its `cloudimg` store and `network` plane |
-| [vk-cocoon](https://github.com/cocoonstack/vk-cocoon) | Virtual kubelet provider; dispatches `os=macos` pods to this binary |
 
 ## License
 

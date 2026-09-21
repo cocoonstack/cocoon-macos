@@ -1,14 +1,18 @@
 package vm
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
 
 	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
+	"github.com/cocoonstack/cocoon/images/cloudimg"
 	"github.com/cocoonstack/cocoon/utils"
 )
 
@@ -18,7 +22,10 @@ func Clone(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	name := requestedVMName(cmd, src+"-clone-"+time.Now().Format("150405"))
+	name, err := requestedVMName(cmd, src+"-clone-"+time.Now().Format("150405"))
+	if err != nil {
+		return err
+	}
 	dir, err := home.VMDir(cmd, name)
 	if err != nil {
 		return err
@@ -35,7 +42,7 @@ func Clone(cmd *cobra.Command, args []string) error {
 		if running {
 			return fmt.Errorf("vm %q is running; stop it before cloning", src)
 		}
-		return clone(cmd, srcRec, name)
+		return withProvisionLock(cliutil.CommandContext(cmd), cmd, func() error { return clone(cmd, srcRec, name) })
 	})
 }
 
@@ -76,7 +83,7 @@ func clone(cmd *cobra.Command, srcRec *record, name string) (retErr error) {
 		}
 	}
 	ctx := cliutil.CommandContext(cmd)
-	dir, overlay, ovmfVars, digest, err := scaffoldVM(cmd, name, srcRec.Image, srcRec.OVMFVars)
+	dir, overlay, ovmfVars, digest, err := scaffoldVM(cmd, name, cloneImageBase(cmd, srcRec), srcRec.OVMFVars)
 	if err != nil {
 		return err
 	}
@@ -100,7 +107,7 @@ func clone(cmd *cobra.Command, srcRec *record, name string) (retErr error) {
 	}
 	ssh, _ := cmd.Flags().GetInt("ssh-port")
 	r = &record{
-		Name: name, Image: srcRec.Image, ImageDigest: digest, Disk: overlay,
+		Name: name, Image: srcRec.Image, ImageDigest: cmp.Or(digest, srcRec.ImageDigest), Disk: overlay,
 		OVMFCode: srcRec.OVMFCode, OVMFVars: ovmfVars, CPUs: cpus, Memory: mem, Storage: storage,
 		Hugepages:    inherit(cmd, "hugepages", srcRec.Hugepages, cmd.Flags().GetBool),
 		ExitOnReboot: inherit(cmd, "exit-on-reboot", srcRec.ExitOnReboot, cmd.Flags().GetBool),
@@ -135,6 +142,16 @@ func clone(cmd *cobra.Command, srcRec *record, name string) (retErr error) {
 	}
 	fmt.Println(name)
 	return nil
+}
+
+func cloneImageBase(cmd *cobra.Command, src *record) string {
+	if hex, ok := strings.CutPrefix(src.ImageDigest, "sha256:"); ok {
+		if blob := cloudimg.NewConfig(home.Dir(cmd), 0).BlobPath(hex); utils.FileExists(blob) {
+			return blob
+		}
+		log.WithFunc("cmd.vm.cloneImageBase").Warnf(cliutil.CommandContext(cmd), "base %s of %s is no longer in the store; cloning on what %s resolves to now", src.ImageDigest, src.Name, src.Image)
+	}
+	return src.Image
 }
 
 // cloneOpenCoreBase returns the immutable base a clone overlays — never SRC's per-VM overlay, which would break on `vm rm SRC`.

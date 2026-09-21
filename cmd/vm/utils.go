@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/projecteru2/core/log"
 	"github.com/spf13/cobra"
 
 	"github.com/cocoonstack/cocoon-macos/home"
@@ -26,6 +27,7 @@ import (
 const (
 	vmCleanupTimeout = 30 * time.Second
 	hmpPrompt        = "(qemu) "
+	monitorSockName  = "monitor.sock"
 )
 
 func loadRec(dir string) (*record, error) {
@@ -46,7 +48,7 @@ func saveRec(dir string, r *record) error {
 
 // lock lives outside the VM dir so rm can't unlink the inode a waiter still holds and split mutual exclusion.
 func withVMLock(ctx context.Context, dir string, fn func() error) error {
-	lockPath := filepath.Join(filepath.Dir(dir), ".locks", filepath.Base(dir)+".lock")
+	lockPath := vmLockPath(dir)
 	if err := utils.EnsureDirs(filepath.Dir(lockPath)); err != nil {
 		return fmt.Errorf("create vm lock dir: %w", err)
 	}
@@ -56,6 +58,10 @@ func withVMLock(ctx context.Context, dir string, fn func() error) error {
 	}
 	defer func() { _ = l.Unlock(context.WithoutCancel(ctx)) }()
 	return fn()
+}
+
+func vmLockPath(dir string) string {
+	return filepath.Join(filepath.Dir(dir), ".locks", filepath.Base(dir)+".lock")
 }
 
 func forEachVMDir(cmd *cobra.Command, args []string, fn func(ctx context.Context, name, dir string) error) error {
@@ -133,6 +139,10 @@ func scaffoldVM(cmd *cobra.Command, name, image, varsSrc string) (dir, overlay, 
 	if err != nil {
 		return "", "", "", "", err
 	}
+	monitor := filepath.Join(dir, monitorSockName)
+	if len(monitor) > 107 {
+		return "", "", "", "", fmt.Errorf("monitor socket path is %d bytes; shorten --state-dir or --name to fit Linux's 107-byte limit", len(monitor))
+	}
 	if _, statErr := os.Stat(filepath.Join(dir, "vm.json")); statErr == nil {
 		return "", "", "", "", fmt.Errorf("vm %q already exists; rm it first or pick another --name", name)
 	} else if !os.IsNotExist(statErr) {
@@ -187,6 +197,9 @@ func resetIncompleteVMDir(ctx context.Context, dir string) error {
 	if err := procutil.TerminateByCmdline(ctx, "qemu-nbd", vmDirPrefix(dir), time.Second); err != nil {
 		return fmt.Errorf("cleanup stale qemu-nbd for %s: %w", dir, err)
 	}
+	if err := markProvisioned(filepath.Dir(dir)); err != nil {
+		return err
+	}
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("remove incomplete vm dir %s: %w", dir, err)
 	}
@@ -217,6 +230,9 @@ func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err erro
 
 // applyNet provisions networking and records it; a TAP is "owned" (torn down on rm) only when auto-created, never when the user passed --tap.
 func applyNet(cmd *cobra.Command, r *record) error {
+	if err := markProvisioned(home.VMsDir(cmd)); err != nil {
+		return err
+	}
 	userTap := r.Tap
 	netTap, netns, mac, err := prepareNet(cmd, r)
 	if err != nil {
@@ -264,7 +280,7 @@ func reconcileRunningQEMU(dir string, r *record) (bool, error) {
 	return true, nil
 }
 
-// terminate stops the VM's qemu, verifying the cmdline before signaling; grace=0 means immediate SIGKILL.
+// terminate stops the VM's qemu, verifying the cmdline before signaling; grace=0 sends SIGKILL right after the SIGTERM.
 func terminate(ctx context.Context, r *record, grace time.Duration) error {
 	if r.PID <= 0 {
 		return nil
@@ -280,6 +296,9 @@ func qemuPIDPath(disk string) string {
 }
 
 func stopInstance(ctx context.Context, dir string, r *record, grace time.Duration) error {
+	if grace > 0 && isRunning(r) && powerDown(ctx, filepath.Join(dir, monitorSockName), r, grace) {
+		grace = 0
+	}
 	err := terminate(ctx, r, grace)
 	stopVNCProxy(ctx, dir)
 	return err
@@ -331,16 +350,49 @@ func resolveFirmware(cmd *cobra.Command) (opencore, code, vars string, err error
 	opencore = flagOr(cmd, "opencore", filepath.Join(fw, "OpenCore.qcow2"))
 	code = flagOr(cmd, "ovmf-code", filepath.Join(fw, "OVMF_CODE.fd"))
 	vars = flagOr(cmd, "ovmf-vars", filepath.Join(fw, "OVMF_VARS.fd"))
-	for _, p := range []string{opencore, code, vars} {
-		if !utils.ValidFile(p) {
-			return "", "", "", fmt.Errorf("firmware not found: %s — run scripts/doctor.sh to provision it (or pass --opencore/--ovmf-code/--ovmf-vars)", p)
+	for _, p := range []*string{&opencore, &code, &vars} {
+		if !utils.ValidFile(*p) {
+			return "", "", "", fmt.Errorf("firmware not found: %s — run scripts/doctor.sh to provision it (or pass --opencore/--ovmf-code/--ovmf-vars)", *p)
+		}
+		if *p, err = filepath.Abs(*p); err != nil {
+			return "", "", "", fmt.Errorf("resolve firmware path: %w", err)
 		}
 	}
 	return opencore, code, vars, nil
 }
 
+// powerDown asks the guest to shut down over the monitor and waits up to grace for qemu to exit; false means the request never reached qemu, so the caller keeps its grace for SIGTERM.
+func powerDown(ctx context.Context, monSock string, r *record, grace time.Duration) bool {
+	logger := log.WithFunc("cmd.vm.powerDown")
+	out, err := hmpCommand(ctx, monSock, "system_powerdown")
+	if err == nil && hmpReplied(out, "system_powerdown") {
+		err = fmt.Errorf("qemu rejected system_powerdown: %s", strings.TrimSpace(out))
+	}
+	if err != nil {
+		logger.Warnf(ctx, "acpi power-down for %s: %v", r.Name, err)
+		return false
+	}
+	if err := utils.WaitFor(ctx, grace, 200*time.Millisecond, func() (bool, error) { return !isRunning(r), nil }); err != nil {
+		logger.Infof(ctx, "guest %s did not halt within %s; signaling qemu", r.Name, grace)
+	}
+	return true
+}
+
 // setVNCPassword applies the VNC password over the HMP monitor (QEMU was started with password=on).
 func setVNCPassword(ctx context.Context, monSock, pw string) error {
+	out, err := hmpCommand(ctx, monSock, "set_password vnc "+pw)
+	if err != nil {
+		return err
+	}
+	if hmpReplied(out, "set_password ") {
+		// HMP reports failure only by printing; out echoes the typed password, so never surface it
+		return errors.New("qemu rejected set_password (vnc display not active?)")
+	}
+	return nil
+}
+
+// hmpCommand runs one HMP line and returns everything the monitor printed up to its next prompt.
+func hmpCommand(ctx context.Context, monSock, line string) (string, error) {
 	var conn net.Conn
 	var dialErr error
 	// the monitor socket appears asynchronously after -daemonize
@@ -348,38 +400,36 @@ func setVNCPassword(ctx context.Context, monSock, pw string) error {
 		conn, dialErr = net.Dial("unix", monSock)
 		return dialErr == nil, nil
 	}); err != nil {
-		return fmt.Errorf("dial monitor: %w", cmp.Or(dialErr, err))
+		return "", fmt.Errorf("dial monitor: %w", cmp.Or(dialErr, err))
 	}
 	defer func() { _ = conn.Close() }()
-	// the monitor discards input until its first prompt, so an early set_password is silently lost
+	// the monitor discards input until its first prompt, so an early command is silently lost
 	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	if _, ok := readUntil(conn, hmpPrompt); !ok {
-		return errors.New("monitor prompt not seen")
+		return "", errors.New("monitor prompt not seen")
 	}
-	if _, err := fmt.Fprintf(conn, "set_password vnc %s\n", pw); err != nil {
-		return fmt.Errorf("send set_password: %w", err)
+	verb, _, _ := strings.Cut(line, " ")
+	if _, err := fmt.Fprintf(conn, "%s\n", line); err != nil {
+		return "", fmt.Errorf("send %s: %w", verb, err)
 	}
 	// wait for the next prompt so QEMU has executed the line before we close (HMP echoes char-by-char)
 	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	out, ok := readUntil(conn, hmpPrompt)
 	if !ok {
-		return errors.New("monitor closed before answering set_password")
+		return "", fmt.Errorf("monitor closed before answering %s", verb)
 	}
-	if hmpReplied(out) {
-		// HMP reports failure only by printing; out echoes the typed password, so never surface it
-		return errors.New("qemu rejected set_password (vnc display not active?)")
-	}
-	return nil
+	return out, nil
 }
 
-func hmpReplied(out string) bool {
+// hmpReplied reports whether the monitor printed anything besides echoing the command whose text contains echo.
+func hmpReplied(out, echo string) bool {
 	echoed := false
 	for line := range strings.SplitSeq(out, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, strings.TrimSpace(hmpPrompt)) {
 			continue
 		}
-		if !echoed && strings.Contains(line, "set_password ") {
+		if !echoed && strings.Contains(line, echo) {
 			echoed = true
 			continue
 		}

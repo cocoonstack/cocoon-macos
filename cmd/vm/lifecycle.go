@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -19,6 +20,8 @@ import (
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/utils"
 )
+
+var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$`)
 
 func Create(cmd *cobra.Command, args []string) error {
 	return createVM(cmd, args[0], false)
@@ -51,6 +54,7 @@ func Start(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("vnc") || cmd.Flags().Changed("vnc-password") {
 				ignored = "; supplied VNC settings ignored because live QEMU cannot be retargeted"
 			}
+			toggleNet(cmd, r, true)
 			fmt.Printf("%s (pid %d, already running%s)\n", n, r.PID, ignored)
 			return nil
 		}
@@ -110,6 +114,9 @@ func RM(cmd *cobra.Command, args []string) error {
 		} else if cleanupErr := reapStrayHelpers(ctx, dir); cleanupErr != nil {
 			return cleanupErr
 		}
+		if err := markProvisioned(filepath.Dir(dir)); err != nil {
+			return err
+		}
 		if err := os.RemoveAll(dir); err != nil {
 			return fmt.Errorf("remove vm dir: %w", err)
 		}
@@ -119,15 +126,21 @@ func RM(cmd *cobra.Command, args []string) error {
 }
 
 func createVM(cmd *cobra.Command, image string, start bool) error {
-	name := requestedVMName(cmd, "macos-"+time.Now().Format("20060102-150405"))
+	name, err := requestedVMName(cmd, "macos-"+time.Now().Format("20060102-150405"))
+	if err != nil {
+		return err
+	}
 	dir, err := home.VMDir(cmd, name)
 	if err != nil {
 		return err
 	}
 	ctx := cliutil.CommandContext(cmd)
 	return withVMLock(ctx, dir, func() error {
-		r, err := create(cmd, image, name)
-		if err != nil {
+		var r *record
+		if err := withProvisionLock(ctx, cmd, func() (err error) {
+			r, err = create(cmd, image, name)
+			return err
+		}); err != nil {
 			return err
 		}
 		if !start {
@@ -143,6 +156,12 @@ func createVM(cmd *cobra.Command, image string, start bool) error {
 }
 
 func create(cmd *cobra.Command, image, name string) (r *record, retErr error) {
+	if utils.FileExists(image) {
+		image, retErr = filepath.Abs(image)
+		if retErr != nil {
+			return nil, fmt.Errorf("resolve image path: %w", retErr)
+		}
+	}
 	rawDisks, _ := cmd.Flags().GetStringArray("data-disk")
 	diskSpecs, err := parseDataDisks(rawDisks, nil) // fail fast before any scaffolding
 	if err != nil {
@@ -232,7 +251,7 @@ func launch(cmd *cobra.Command, dir string, r *record) error {
 		Hugepages:    r.Hugepages,
 		ExitOnReboot: r.ExitOnReboot,
 		DataDisks:    r.DataDisks,
-		MonSock:      filepath.Join(dir, "monitor.sock"), QMPSock: filepath.Join(dir, "qmp.sock"),
+		MonSock:      filepath.Join(dir, monitorSockName), QMPSock: filepath.Join(dir, "qmp.sock"),
 	}
 	// CNI: a 127.0.0.1 VNC inside the netns is unreachable; use a unix socket fronted by startVNCProxy
 	if r.Netns != "" && r.VNCDisp >= 0 {
@@ -277,9 +296,16 @@ func launch(cmd *cobra.Command, dir string, r *record) error {
 	return saveRec(dir, r)
 }
 
-func requestedVMName(cmd *cobra.Command, fallback string) string {
-	name, _ := cmd.Flags().GetString("name")
-	return cmp.Or(name, fallback)
+func requestedVMName(cmd *cobra.Command, fallback string) (string, error) {
+	flag, _ := cmd.Flags().GetString("name")
+	name := cmp.Or(flag, fallback)
+	if !validName.MatchString(name) {
+		if flag == "" {
+			return "", fmt.Errorf("generated vm name %q is invalid (max 63 chars): pass --name", name)
+		}
+		return "", fmt.Errorf("invalid vm name %q: must match %s (max 63 chars; the name is a path component of every qemu socket)", name, validName.String())
+	}
+	return name, nil
 }
 
 func validateMacOSCPUs(cpus int) error {

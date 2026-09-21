@@ -5,7 +5,7 @@
 ```bash
 cocoon-macos vm stop m1
 cocoon-macos vm snapshot m1 --tag clean
-cocoon-macos vm restore  m1 --tag clean   # --force to stop+restore+relaunch a running VM
+cocoon-macos vm restore  m1 --tag clean   # --force: power down, restore, relaunch a running VM
 ```
 
 `--force` on a running VM keeps its VNC display across the relaunch. A display
@@ -15,6 +15,11 @@ and `start --vnc N --vnc-password`; without it the restore is refused before
 any disk is touched. VMs launched by a cocoon-macos older than this rule with a
 passworded non-CNI display are not recognised as password-gated until their
 next stop or start.
+
+A forced restore quiesces CNI forwarding after stopping QEMU and restores forwarding only after
+the relaunch succeeds. An apply failure leaves the VM stopped; a relaunch error leaves forwarding
+quiesced. After resolving the failure, retry restore or use `vm start`, which also restores forwarding
+when it adopts an already-running QEMU after a failed record write.
 
 Snapshots are **offline qcow2-internal** (`qemu-img snapshot`, VM stopped) and cover the system disk,
 every data disk, and `OVMF_VARS` when it is qcow2 (a raw `.fd` NVRAM has no internal-snapshot
@@ -29,7 +34,9 @@ cocoon-macos vm clone m1 -n m2 --ssh-port 2223 --random-smbios
 ```
 
 A clone bakes a fresh copy-on-write overlay on the **shared base** (never on SRC's per-VM overlay,
-which would break on `vm rm m1`). It cold-boots a **fresh Apple identity** when `--random-smbios`
+which would break on `vm rm m1`), and that base is the exact blob SRC was built from, by its
+recorded digest; only if that blob has left the store does the clone fall back to whatever SRC's
+image ref resolves to now, with a warning. It cold-boots a **fresh Apple identity** when `--random-smbios`
 is given to the clone (or inherited automatically when SRC already carries one) — without it, the
 clone shares SRC's serial. With a fresh identity, `user`, `tap`, and `bridge` use its ROM MAC;
 `cni` always uses the provider MAC. Without one, auto-created `tap`/`bridge` use a provider MAC,

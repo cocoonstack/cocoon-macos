@@ -269,23 +269,21 @@ func patchPlist(path string, sm *SMBIOS) error {
 	if _, perr := plist.Unmarshal(b, &cfg); perr != nil {
 		return fmt.Errorf("parse config.plist: %w", perr)
 	}
-	if sm != nil {
-		rom, derr := hex.DecodeString(sm.ROM)
-		if derr != nil {
-			return fmt.Errorf("decode ROM: %w", derr)
-		}
-		pi := ensureSubMap(cfg, "PlatformInfo")
-		pi["Automatic"] = true
-		pi["UpdateSMBIOS"] = true
-		pi["UpdateNVRAM"] = true
-		g := ensureSubMap(pi, "Generic")
-		g["SystemProductName"] = sm.Model
-		g["SystemSerialNumber"] = sm.Serial
-		g["MLB"] = sm.MLB
-		g["SystemUUID"] = sm.UUID
-		g["ROM"] = rom
-		g["SpoofVendor"] = true
+	rom, derr := hex.DecodeString(sm.ROM)
+	if derr != nil {
+		return fmt.Errorf("decode ROM: %w", derr)
 	}
+	pi := ensureSubMap(cfg, "PlatformInfo")
+	pi["Automatic"] = true
+	pi["UpdateSMBIOS"] = true
+	pi["UpdateNVRAM"] = true
+	g := ensureSubMap(pi, "Generic")
+	g["SystemProductName"] = sm.Model
+	g["SystemSerialNumber"] = sm.Serial
+	g["MLB"] = sm.MLB
+	g["SystemUUID"] = sm.UUID
+	g["ROM"] = rom
+	g["SpoofVendor"] = true
 	// ShowPicker=false: a visible picker can't be driven headlessly — OpenCanopy cancels its Timeout on stray USB-enumeration input and waits forever
 	boot := ensureSubMap(ensureSubMap(cfg, "Misc"), "Boot")
 	boot["ShowPicker"] = false

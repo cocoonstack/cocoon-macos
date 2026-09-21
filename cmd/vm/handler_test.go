@@ -2,6 +2,7 @@ package vm
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -9,6 +10,10 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/cocoonstack/cocoon-macos/home"
+	"github.com/cocoonstack/cocoon/images/cloudimg"
+	"github.com/cocoonstack/cocoon/progress"
 )
 
 func TestValidateMacOSCPUs(t *testing.T) {
@@ -130,6 +135,64 @@ func TestStartAdoptsQEMUWhenRecordPIDWasNotCommitted(t *testing.T) {
 	}
 	if got.PID != pid {
 		t.Fatalf("adopted PID = %d, want %d", got.PID, pid)
+	}
+}
+
+func TestCloneImageBaseDerivesTheBlobPath(t *testing.T) {
+	cmd := newLifecycleTestCommand(t, t.TempDir())
+	hex := strings.Repeat("a", 64)
+	blob := cloudimg.NewConfig(home.Dir(cmd), 0).BlobPath(hex)
+	src := &record{Name: "src", Image: "img", ImageDigest: "sha256:" + hex}
+	if got := cloneImageBase(cmd, src); got != "img" {
+		t.Fatalf("cloneImageBase before the blob exists = %q, want the ref", got)
+	}
+	if err := os.MkdirAll(filepath.Dir(blob), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(blob, []byte("base"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := cloneImageBase(cmd, src); got != blob {
+		t.Fatalf("cloneImageBase = %q, want the digest's blob %q", got, blob)
+	}
+}
+
+func TestCloneImageBaseIsTheBlobTheSourceWasBuiltOn(t *testing.T) {
+	if _, err := exec.LookPath("qemu-img"); err != nil {
+		t.Skip("the store's import inspects the file with qemu-img")
+	}
+	cmd := newLifecycleTestCommand(t, t.TempDir())
+	ctx := t.Context()
+	store, err := home.OpenStore(ctx, cmd)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	importAs := func(content string) {
+		p := filepath.Join(t.TempDir(), content+".raw")
+		if err := os.WriteFile(p, []byte(strings.Repeat(content, 1024)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Import(ctx, "img", progress.Nop, p); err != nil {
+			t.Fatalf("import %s: %v", content, err)
+		}
+	}
+	importAs("first")
+	firstBase, firstDigest, err := resolveBase(ctx, cmd, "img", "n")
+	if err != nil || firstDigest == "" {
+		t.Fatalf("resolveBase(img) = %q, %q, %v", firstBase, firstDigest, err)
+	}
+	importAs("second")
+
+	src := &record{Name: "src", Image: "img", ImageDigest: firstDigest}
+	if got := cloneImageBase(cmd, src); got != firstBase {
+		t.Fatalf("cloneImageBase after a re-pull of the same ref = %q, want the source's blob %q", got, firstBase)
+	}
+	gone := &record{Name: "src", Image: "img", ImageDigest: "sha256:" + strings.Repeat("0", 64)}
+	if got := cloneImageBase(cmd, gone); got != "img" {
+		t.Errorf("cloneImageBase with the blob gone = %q, want the ref", got)
+	}
+	if got := cloneImageBase(cmd, &record{Image: "/images/base.qcow2"}); got != "/images/base.qcow2" {
+		t.Errorf("cloneImageBase without a digest = %q, want the ref", got)
 	}
 }
 

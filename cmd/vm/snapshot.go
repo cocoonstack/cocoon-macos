@@ -82,6 +82,7 @@ func Restore(cmd *cobra.Command, args []string) error {
 			if err := stopInstance(ctx, dir, r, stopGracePeriod); err != nil {
 				return err
 			}
+			toggleNet(cmd, r, false)
 			r.PID = 0
 			if err := saveRec(dir, r); err != nil {
 				return err
@@ -111,7 +112,11 @@ func Restore(cmd *cobra.Command, args []string) error {
 			}
 		}
 		if wasRunning {
-			return launch(cmd, dir, r)
+			if err := launch(cmd, dir, r); err != nil {
+				return err
+			}
+			toggleNet(cmd, r, true)
+			return nil
 		}
 		return saveRec(dir, r)
 	}); err != nil {

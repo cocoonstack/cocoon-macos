@@ -34,6 +34,14 @@ Shown for `tahoe:26`; the actual `repo:tag` follows `macos`.
 | `slim` | Pull `<repo>:<tag>` → boot → reclaim stale clusters → re-push `<repo>:<tag>` (smaller). |
 | `verify` | Pull `<repo>:<tag>` → boot → confirm login + SSH (`cocoon@localhost`). |
 
+Install refuses to capture unless Setup Assistant is detected before the timeout. Image pulls
+require the exact manifest size, no unfinished aria2 session, a matching SHA-256 digest, and a
+successful qcow2 check. Failed pushes and unsuccessful SSH verification return a nonzero status.
+
+Provisioning stops on required file or user-creation failures before emitting `PROVISION DONE`.
+CI fetches that script from the workflow commit. First-boot SSH setup keeps its launch daemon on
+failure so the next boot can retry. The GUI Setup-Assistant limitation remains unchanged.
+
 ## Automation primitives
 
 - **`scripts/qmp-input.py`** — QMP absolute mouse click/move, keyboard type/chord, **Tesseract + PIL

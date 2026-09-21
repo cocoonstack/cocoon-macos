@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"cmp"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,34 @@ import (
 	"github.com/cocoonstack/cocoon-macos/qemu"
 	"github.com/cocoonstack/cocoon/utils"
 )
+
+func TestRequestedVMNameFollowsCocoonsRule(t *testing.T) {
+	for _, tt := range []struct {
+		flag, fallback, want, wantErr string
+	}{
+		{flag: "macos-demo", want: "macos-demo"},
+		{flag: "my.vm_1", want: "my.vm_1"},
+		{fallback: "macos-20260921-153000", want: "macos-20260921-153000"},
+		{flag: "a", want: "a"},
+		{flag: strings.Repeat("n", 63), want: strings.Repeat("n", 63)},
+		{flag: strings.Repeat("n", 64), wantErr: "must match"},
+		{fallback: strings.Repeat("s", 60) + "-clone-153000", wantErr: "pass --name"},
+		{flag: "-demo", wantErr: "must match"},
+		{flag: ".demo", wantErr: "must match"},
+		{flag: "demo one", wantErr: "must match"},
+		{flag: "demo,one", wantErr: "must match"},
+		{flag: "nested/demo", wantErr: "must match"},
+	} {
+		t.Run(cmp.Or(tt.flag, tt.fallback), func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().String("name", tt.flag, "")
+			got, err := requestedVMName(cmd, tt.fallback)
+			if got != tt.want || (tt.wantErr == "") != (err == nil) || (err != nil && !strings.Contains(err.Error(), tt.wantErr)) {
+				t.Fatalf("requestedVMName(%q, %q) = %q, %v; want %q, error containing %q", tt.flag, tt.fallback, got, err, tt.want, tt.wantErr)
+			}
+		})
+	}
+}
 
 func TestSnapshotAdoptsQEMUWhenRecordPIDWasNotCommitted(t *testing.T) {
 	stateDir := t.TempDir()

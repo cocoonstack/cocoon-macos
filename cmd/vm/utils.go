@@ -37,7 +37,6 @@ func loadRec(dir string) (*record, error) {
 	return r, nil
 }
 
-// saveRec writes vm.json atomically (temp + fsync + rename) so a crash can't truncate it.
 func saveRec(dir string, r *record) error {
 	if err := utils.AtomicWriteJSON(filepath.Join(dir, "vm.json"), r, utils.Sync); err != nil {
 		return fmt.Errorf("write vm record: %w", err)
@@ -173,7 +172,6 @@ func scaffoldVM(cmd *cobra.Command, name, image, varsSrc string) (dir, overlay, 
 	return dir, overlay, ovmfVars, digest, nil
 }
 
-// remove pre-commit VM state; refuses a dir a live qemu still references.
 func resetIncompleteVMDir(ctx context.Context, dir string) error {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return nil
@@ -224,7 +222,6 @@ func prepareNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err erro
 	return provisionNet(cmd, r)
 }
 
-// applyNet provisions networking and records it; a TAP is "owned" (torn down on rm) only when auto-created, never when the user passed --tap.
 func applyNet(cmd *cobra.Command, r *record) error {
 	if err := markProvisioned(home.VMsDir(cmd)); err != nil {
 		return err
@@ -268,7 +265,6 @@ func reconcileRunningQEMU(dir string, r *record) (bool, error) {
 	return true, nil
 }
 
-// terminate stops the VM's qemu, verifying the cmdline before signaling; grace=0 sends SIGKILL right after the SIGTERM.
 func terminate(ctx context.Context, r *record, grace time.Duration) error {
 	if r.PID <= 0 {
 		return nil

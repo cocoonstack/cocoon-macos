@@ -92,7 +92,6 @@ func provisionNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err er
 	return cfgs[0].TAP, nsPath, mac, nil
 }
 
-// teardownNet removes an auto-created TAP/netns and never touches a user-supplied --tap.
 func teardownNet(ctx context.Context, cmd *cobra.Command, r *record) error {
 	if !r.TapOwned {
 		return nil

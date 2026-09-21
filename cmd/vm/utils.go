@@ -264,7 +264,7 @@ func reconcileRunningQEMU(dir string, r *record) (bool, error) {
 	return true, nil
 }
 
-// terminate stops the VM's qemu, verifying the cmdline before signaling; grace=0 means immediate SIGKILL.
+// terminate stops the VM's qemu, verifying the cmdline before signaling; grace=0 sends SIGKILL right after the SIGTERM.
 func terminate(ctx context.Context, r *record, grace time.Duration) error {
 	if r.PID <= 0 {
 		return nil

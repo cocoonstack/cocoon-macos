@@ -36,8 +36,9 @@ cocoon-macos vm rm m1
   boot; `start` boots a created/stopped VM.
 - `run` is atomic: if the boot fails it removes everything it just created (no half-made VM left
   behind).
-- `vm stop` / `vm rm` give QEMU a 10 s ACPI-shutdown grace window before killing it; `--force` skips
-  that window for an immediate SIGKILL.
+- `vm stop` / `vm rm` send QEMU SIGTERM (QEMU exits at once; the guest gets no ACPI power-button
+  event and no chance to flush) and SIGKILL it if it has not exited after 10 s; `--force` drops
+  the 10 s window, so SIGKILL follows the SIGTERM at once.
 - `--storage` expands the new VM's qcow2 system disk before boot. It accepts values such as `100Gi`
   or a byte count, never shrinks an image, and is inherited by `clone` unless explicitly overridden.
 

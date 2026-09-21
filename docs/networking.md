@@ -19,9 +19,10 @@ Auto-creation (`tap` without `--tap`, `bridge`, `cni`) is Linux-only (needs `CAP
 In `cni` mode, the guest NIC uses the MAC CNI assigned to `eth0` because `macspoofchk` allow-lists
 that address; the SMBIOS ROM identity remains unchanged.
 
-Auto-created devices carry cocoon-macos's own host name family (`net_scope` `cm`: TAPs
-`cm<vmid8>-<nic>`, netns `cm-<vmid>`), so a cocoon daemon's GC on the same node never reads a live
-macOS guest's TAP as an orphan (see cocoon's `net_scope` in its networking docs).
+Auto-created devices carry cocoon-macos's own host name family (`net_scope` `cm`: bridge-mode TAPs
+`cm<vmid8>-<nic>`, netns `cm-<vmid>`; a CNI-mode TAP is named `tap<vmid8>-<nic>` inside that netns),
+so a cocoon daemon's GC on the same node never reads a live macOS guest's TAP or netns as an orphan
+(see cocoon's `net_scope` in its networking docs).
 
 ### `--net cni` and TC redirect
 
@@ -48,8 +49,9 @@ QEMU's default MAC, which is not unique across VMs. A source attached to a pre-c
 its TAP on a bridge clones like `bridge`.
 
 `vm stop` leaves an auto-created TAP in place for a fast restart; once QEMU closes it the TAP has
-no carrier and its bridge port forwards nothing, so nothing else needs quiescing. `vm rm` (and a
-failed `create`) deletes it.
+no carrier and its bridge port forwards nothing, so bridge mode has nothing to quiesce. Under `cni`,
+`vm stop` downs the netns `eth0` so the idle TC redirect stops storming softirqs, and `vm start`
+brings it back up. `vm rm` (and a failed `create`) deletes the TAP and the netns.
 
 ## VNC exposure
 

@@ -17,6 +17,7 @@ import (
 	"github.com/cocoonstack/cocoon/cmd/cliutil"
 	"github.com/cocoonstack/cocoon/gc"
 	"github.com/cocoonstack/cocoon/lock/flock"
+	"github.com/cocoonstack/cocoon/network"
 	"github.com/cocoonstack/cocoon/utils"
 )
 
@@ -50,7 +51,7 @@ func GC(cmd *cobra.Command, _ []string) error {
 }
 
 // sweep takes the provisioning lock exclusively and every VM's lock, so a create, clone or rm in flight is never read as residue; a busy lock refuses the run. The cm-family collectors are host-global, so they run only for a root that has owned host devices: a VM dir seen under the lock, or the marker every path that provisions or removes a VM dir persists first. A root without either still sweeps its own temp files.
-func sweep(ctx context.Context, cmd *cobra.Command, registerNet func(*gc.Orchestrator, *cobra.Command) error) error {
+func sweep(ctx context.Context, cmd *cobra.Command, registerNet func(*gc.Orchestrator, *cobra.Command, network.VMInUse) error) error {
 	if _, err := os.Stat(home.Dir(cmd)); err != nil {
 		return fmt.Errorf("no state root at %s: check --state-dir or $COCOON_MACOS_HOME: %w", home.Dir(cmd), err)
 	}
@@ -79,7 +80,7 @@ func sweep(ctx context.Context, cmd *cobra.Command, registerNet func(*gc.Orchest
 	gc.Register(o, vmGCModule(home.Dir(cmd), dirs))
 	if len(dirs) == 0 && !utils.FileExists(filepath.Join(home.VMsDir(cmd), ".locks", provisionedMarker)) {
 		log.WithFunc("cmd.vm.sweep").Warnf(ctx, "no VM dir and no provisioning marker under %s: leaving the host's netns and TAPs alone (check --state-dir or $COCOON_MACOS_HOME; a root from before this build regains them at its next create)", home.Dir(cmd))
-	} else if err := registerNet(o, cmd); err != nil {
+	} else if err := registerNet(o, cmd, vmInUse(dirs)); err != nil {
 		return err
 	}
 	return o.Run(ctx)
@@ -162,6 +163,24 @@ func tryLockVMDirs(ctx context.Context, dirs []string) (func(), error) {
 		held = append(held, l)
 	}
 	return unlock, nil
+}
+
+func vmInUse(dirs []string) network.VMInUse {
+	return func(_ context.Context, vmID string) (bool, error) {
+		for _, dir := range dirs {
+			r, err := loadRec(dir)
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					continue
+				}
+				return false, fmt.Errorf("read vm %s for gc: %w", filepath.Base(dir), err)
+			}
+			if r.VMID == vmID {
+				return isRunning(r), nil
+			}
+		}
+		return false, nil
+	}
 }
 
 func vmGCModule(stateDir string, dirs []string) gc.Module[vmGCSnapshot] {

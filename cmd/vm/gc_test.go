@@ -14,6 +14,7 @@ import (
 	"github.com/cocoonstack/cocoon-macos/home"
 	"github.com/cocoonstack/cocoon/gc"
 	"github.com/cocoonstack/cocoon/lock/flock"
+	"github.com/cocoonstack/cocoon/network"
 )
 
 func TestGCReclaimsStrayDirsAndStalePulls(t *testing.T) {
@@ -186,7 +187,7 @@ func TestGCRefusesUnreadableRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	collected := false
-	err := sweep(t.Context(), cmd, func(o *gc.Orchestrator, _ *cobra.Command) error {
+	err := sweep(t.Context(), cmd, func(o *gc.Orchestrator, _ *cobra.Command, _ network.VMInUse) error {
 		gc.Register(o, gc.Module[struct{}]{
 			Name:   "network",
 			ReadDB: func(context.Context) (struct{}, error) { return struct{}{}, nil },
@@ -208,11 +209,11 @@ func TestGCRefusesUnreadableRecord(t *testing.T) {
 	}
 }
 
-func noNetGC(*gc.Orchestrator, *cobra.Command) error { return nil }
+func noNetGC(*gc.Orchestrator, *cobra.Command, network.VMInUse) error { return nil }
 
 type netGCSpy struct{ calls int }
 
-func (s *netGCSpy) register(*gc.Orchestrator, *cobra.Command) error {
+func (s *netGCSpy) register(*gc.Orchestrator, *cobra.Command, network.VMInUse) error {
 	s.calls++
 	return nil
 }

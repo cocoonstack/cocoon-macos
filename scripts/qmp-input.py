@@ -53,7 +53,7 @@ class QMP:
             self.f = self.s.makefile("rw")
             self.f.readline()  # greeting
             self.cmd("qmp_capabilities")
-        except OSError:
+        except (OSError, RuntimeError):
             self.close()
             raise
 
@@ -71,7 +71,7 @@ class QMP:
             self.f = None
         self.s.close()
 
-    def cmd(self, execute: str, **args: object) -> dict | None:
+    def cmd(self, execute: str, **args: object) -> dict:
         """Send a QMP command and return its response, skipping async events."""
         msg: dict[str, object] = {"execute": execute}
         if args:
@@ -81,9 +81,11 @@ class QMP:
         while True:
             line = self.f.readline()
             if not line:
-                return None
+                raise RuntimeError(f"qmp closed before answering {execute}")
             obj = json.loads(line)
-            if "return" in obj or "error" in obj:
+            if "error" in obj:
+                raise RuntimeError(f"qmp {execute} failed: {obj['error'].get('desc', obj['error'])}")
+            if "return" in obj:
                 return obj
 
     def send_events(self, events: list[dict]) -> None:

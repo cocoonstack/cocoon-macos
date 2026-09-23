@@ -53,8 +53,8 @@ func validateVNCPassword(pw string) error {
 	if len(pw) > 8 {
 		return fmt.Errorf("--vnc-password must be at most 8 bytes, got %d", len(pw))
 	}
-	if strings.ContainsFunc(pw, func(r rune) bool { return unicode.IsControl(r) || unicode.IsSpace(r) }) {
-		return errors.New("--vnc-password must not contain whitespace or control characters")
+	if strings.ContainsFunc(pw, func(r rune) bool { return unicode.IsControl(r) || unicode.IsSpace(r) || r == '"' }) {
+		return errors.New("--vnc-password must not contain whitespace, control characters or double quotes")
 	}
 	return nil
 }

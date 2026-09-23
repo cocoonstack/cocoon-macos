@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cm-smoke.sh — cocoon-macos E2E regression, modeled on cocoonv2's issue28-repro.sh.
+# scripts/e2e.sh — cocoon-macos E2E regression.
 #
 # Two tiers:
 #   [DUMMY]  file-level lifecycle on a tiny throwaway qcow2 — NO macOS boot. Fast, runs on any
@@ -10,10 +10,10 @@
 # Idempotent: cleans state-dir + test bridge + leftover cm* TAPs/netns at start AND end.
 #
 # Usage:
-#   sudo ./cm-smoke.sh                 # [DUMMY] tier only
-#   sudo ./cm-smoke.sh --real          # [DUMMY] then [REAL] boot of tahoe:26
-#   sudo ./cm-smoke.sh --no-net        # skip the root/bridge --net auto-create rows
-#   sudo ./cm-smoke.sh cleanup         # tear down and exit
+#   sudo ./scripts/e2e.sh              # [DUMMY] tier only
+#   sudo ./scripts/e2e.sh --real       # [DUMMY] then [REAL] boot of tahoe:26
+#   sudo ./scripts/e2e.sh --no-net     # skip the root/bridge --net auto-create rows
+#   sudo ./scripts/e2e.sh cleanup      # tear down and exit
 #
 # Env overrides:
 #   CM_BIN        path to the cocoon-macos binary           (default: ./cocoon-macos)

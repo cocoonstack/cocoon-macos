@@ -91,9 +91,9 @@ snapshot and prevents new orphan collection; a read error is not evidence that t
 
 ## What `vm run` does
 
-1. `qemu-img create -b <golden> overlay.qcow2` — instant copy-on-write clone of the golden image.
+1. `qemu-img create -b <golden> disk.qcow2` — instant copy-on-write clone of the golden image.
 2. Copy a per-VM `OVMF_VARS`.
-3. With `--random-smbios`, copy OpenCore per-VM and inject a generated identity into its
+3. With `--random-smbios`, bake a per-VM OpenCore overlay and inject a generated identity into its
    `config.plist` `PlatformInfo/Generic` via a `qemu-nbd` mount — model stays `iMac19,1` (proven to
    boot Tahoe), only serial/MLB/UUID/ROM are randomized. The identity is recorded and shown by
    `vm inspect`.

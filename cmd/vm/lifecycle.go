@@ -39,7 +39,7 @@ func Start(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		// an op that held the lock (export, a racing run) may have restarted qemu; adopt it and only repair a dead vnc proxy
+		// an op that held the lock (a racing run) may have restarted qemu; adopt it and only repair a dead vnc proxy
 		running, err := reconcileRunningQEMU(dir, r)
 		if err != nil {
 			return err

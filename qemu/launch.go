@@ -22,14 +22,14 @@ const (
 // Spec is the per-VM input for launching a macOS guest from a golden qcow2.
 type Spec struct {
 	CPUs         int
-	Memory       string   // MiB, e.g. "8192"
-	VNCDisp      int      // n => host 127.0.0.1:590n; <0 disables
-	VNCSock      string   // when set, bind VNC to this unix socket instead of 127.0.0.1 (CNI: fronted by vncProxy)
-	VNCPass      string   // set via the monitor post-launch (macOS Screen Sharing needs password auth)
-	SSHPort      int      // host port forwarded to guest :22; 0 disables
-	Hugepages    bool     // needs host hugepages reserved; off => default RAM
-	ExitOnReboot bool     // exit QEMU on a guest reboot so an external owner can relaunch it cold
-	DataDisks    []string // extra qcow2 data disks; attached on the AHCI ports MacHDD/OpenCore leave free
+	Memory       string // MiB, e.g. "8192"
+	VNCDisp      int    // n => host 127.0.0.1:590n; <0 disables
+	VNCSock      string // when set, bind VNC to this unix socket instead of 127.0.0.1 (CNI: fronted by vncProxy)
+	VNCPass      string // set via the monitor post-launch (macOS Screen Sharing needs password auth)
+	SSHPort      int    // host port forwarded to guest :22; 0 disables
+	Hugepages    bool   // needs host hugepages reserved; off => default RAM
+	ExitOnReboot bool   // exit QEMU on a guest reboot so an external owner can relaunch it cold
+	DataDisks    []string
 
 	Disk     string
 	OpenCore string

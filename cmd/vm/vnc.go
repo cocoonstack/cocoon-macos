@@ -20,7 +20,6 @@ import (
 	"github.com/cocoonstack/cocoon/utils"
 )
 
-// The proxy fronts a CNI VM's netns-local VNC unix socket on a host TCP port (see qemu.Spec.VNCSock).
 const (
 	vncSockName = "vnc.sock"
 	vncProxyPID = "vnc-proxy.pid"

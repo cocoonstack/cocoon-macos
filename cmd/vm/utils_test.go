@@ -164,17 +164,17 @@ func TestStopInstanceAsksTheGuestToPowerDownFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close() //nolint:errcheck
+	defer ln.Close()
 	got := make(chan string, 1)
 	go func() {
 		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
-		defer conn.Close()          //nolint:errcheck
-		fmt.Fprint(conn, hmpPrompt) //nolint:errcheck
+		defer conn.Close()
+		fmt.Fprint(conn, hmpPrompt)
 		line, _ := bufio.NewReader(conn).ReadString('\n')
-		fmt.Fprint(conn, " "+line+hmpPrompt) //nolint:errcheck
+		fmt.Fprint(conn, " "+line+hmpPrompt)
 		got <- strings.TrimSpace(line)
 	}()
 	disk := filepath.Join(dir, "disk.qcow2")

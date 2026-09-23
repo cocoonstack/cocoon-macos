@@ -169,7 +169,7 @@ func TestGCRefusesABusyVM(t *testing.T) {
 	if err := held.Lock(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	defer held.Unlock(t.Context()) //nolint:errcheck
+	defer held.Unlock(t.Context())
 
 	err := sweep(t.Context(), cmd, noNetGC)
 	if err == nil || !strings.Contains(err.Error(), "busy") {

@@ -352,7 +352,7 @@ func powerDown(ctx context.Context, monSock string, r *record, grace time.Durati
 		return false
 	}
 	if err := utils.WaitFor(ctx, grace, 200*time.Millisecond, func() (bool, error) { return !isRunning(r), nil }); err != nil {
-		logger.Infof(ctx, "guest %s did not halt within %s; signaling qemu", r.Name, grace)
+		logger.Warnf(ctx, "guest %s did not halt within %s; signaling qemu", r.Name, grace)
 	}
 	return true
 }

@@ -29,7 +29,7 @@ type snapshotEntry struct {
 
 // SnapExists reports whether img carries the snapshot tag.
 func SnapExists(ctx context.Context, img, tag string) (bool, error) {
-	out, err := exec.CommandContext(ctx, "qemu-img", "info", "--output=json", img).Output() //nolint:gosec // img is an internal path
+	out, err := exec.CommandContext(ctx, "qemu-img", "info", "--output=json", img).Output()
 	if err != nil {
 		return false, fmt.Errorf("qemu-img info %s: %w", img, err)
 	}

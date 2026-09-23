@@ -71,3 +71,27 @@ func TestRMRetainsStateWhenNetworkTeardownFails(t *testing.T) {
 		t.Errorf("VM state was removed after teardown failure: %v", err)
 	}
 }
+
+func TestStartChecksOwnedNetworkBeforeQEMU(t *testing.T) {
+	stateDir := t.TempDir()
+	cmd := newLifecycleTestCommand(t, stateDir)
+	dir, err := home.VMDir(cmd, "macos-demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r := &record{
+		Name: "macos-demo", VMID: "TESTVMID", Disk: filepath.Join(dir, "disk.qcow2"),
+		NetMode: "invalid", TapOwned: true,
+	}
+	if err := saveRec(dir, r); err != nil {
+		t.Fatal(err)
+	}
+
+	err = Start(cmd, []string{"macos-demo"})
+	if err == nil || !strings.Contains(err.Error(), "recover network: unknown --net mode") {
+		t.Fatalf("Start error = %v, want the network recovery failure before qemu launch", err)
+	}
+}

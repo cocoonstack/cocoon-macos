@@ -11,7 +11,7 @@ func Command() *cobra.Command {
 		Use:   "image",
 		Short: "Manage macOS disk images (reuses cocoon's cloudimg store)",
 		Args:  cobra.NoArgs,
-		RunE:  func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+		RunE:  cliutil.ShowHelp,
 	}
 
 	pull := &cobra.Command{

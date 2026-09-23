@@ -11,7 +11,7 @@ func Command() *cobra.Command {
 		Use:   "vm",
 		Short: "Manage macOS VMs",
 		Args:  cobra.NoArgs,
-		RunE:  func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+		RunE:  cliutil.ShowHelp,
 	}
 
 	createCmd := &cobra.Command{

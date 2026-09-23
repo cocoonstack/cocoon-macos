@@ -5,7 +5,6 @@ package vm
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -77,9 +76,6 @@ func provisionNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err er
 		return "", "", "", fmt.Errorf("prepare network: %w", err)
 	}
 	cfgs, err := provider.Add(ctx, r.VMID, vmCfg, network.AddRange(0, 1)...)
-	if err == nil && len(cfgs) == 0 {
-		err = errors.New("network add returned no NIC")
-	}
 	if err != nil {
 		// Add rolls back only what it created itself; the netns from Prepare is ours to drop
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), vmCleanupTimeout)

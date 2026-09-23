@@ -80,7 +80,7 @@ func sweep(ctx context.Context, cmd *cobra.Command, registerNet func(*gc.Orchest
 	gc.Register(o, vmGCModule(home.Dir(cmd), dirs))
 	if len(dirs) == 0 && !utils.FileExists(filepath.Join(home.VMsDir(cmd), ".locks", provisionedMarker)) {
 		log.WithFunc("cmd.vm.sweep").Warnf(ctx, "no VM dir and no provisioning marker under %s: leaving the host's netns and TAPs alone (check --state-dir or $COCOON_MACOS_HOME; a root from before this build regains them at its next create)", home.Dir(cmd))
-	} else if err := registerNet(o, cmd, vmInUse(dirs)); err != nil {
+	} else if err := registerNet(o, cmd, func(context.Context, string) (bool, error) { return false, nil }); err != nil {
 		return err
 	}
 	return o.Run(ctx)
@@ -163,24 +163,6 @@ func tryLockVMDirs(ctx context.Context, dirs []string) (func(), error) {
 		held = append(held, l)
 	}
 	return unlock, nil
-}
-
-func vmInUse(dirs []string) network.VMInUse {
-	return func(_ context.Context, vmID string) (bool, error) {
-		for _, dir := range dirs {
-			r, err := loadRec(dir)
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					continue
-				}
-				return false, fmt.Errorf("read vm %s for gc: %w", filepath.Base(dir), err)
-			}
-			if r.VMID == vmID {
-				return isRunning(r), nil
-			}
-		}
-		return false, nil
-	}
 }
 
 func vmGCModule(stateDir string, dirs []string) gc.Module[vmGCSnapshot] {

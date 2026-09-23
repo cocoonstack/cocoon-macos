@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"strings"
+	"uuid"
 )
 
 const (
@@ -30,15 +32,11 @@ func RandomSMBIOS() (SMBIOS, error) {
 	if err != nil {
 		return SMBIOS{}, err
 	}
-	uuid, err := randUUID()
-	if err != nil {
-		return SMBIOS{}, err
-	}
 	rom, err := randROM()
 	if err != nil {
 		return SMBIOS{}, err
 	}
-	return SMBIOS{Model: smbiosModel, Serial: serial, MLB: mlb, UUID: uuid, ROM: rom}, nil
+	return SMBIOS{Model: smbiosModel, Serial: serial, MLB: mlb, UUID: strings.ToUpper(uuid.NewV4().String()), ROM: rom}, nil
 }
 
 // MAC returns the ROM formatted as the default guest NIC MAC; CNI supplies its own runtime MAC.
@@ -59,16 +57,6 @@ func randString(n int) (string, error) {
 		b[i] = serialAlphabet[int(c)%len(serialAlphabet)]
 	}
 	return string(b), nil
-}
-
-func randUUID() (string, error) {
-	b, err := randBytes(16)
-	if err != nil {
-		return "", err
-	}
-	b[6] = (b[6] & 0x0f) | 0x40 // version 4
-	b[8] = (b[8] & 0x3f) | 0x80 // variant
-	return fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
 }
 
 func randROM() (string, error) {

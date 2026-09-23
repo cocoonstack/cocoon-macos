@@ -7,7 +7,12 @@ import (
 )
 
 func Command() *cobra.Command {
-	imageCmd := &cobra.Command{Use: "image", Short: "Manage macOS disk images (reuses cocoon's cloudimg store)"} // --state-dir is a root persistent flag
+	imageCmd := &cobra.Command{
+		Use:   "image",
+		Short: "Manage macOS disk images (reuses cocoon's cloudimg store)",
+		Args:  cobra.NoArgs,
+		RunE:  func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+	}
 
 	pull := &cobra.Command{
 		Use:   "pull REF",

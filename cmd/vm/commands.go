@@ -7,7 +7,12 @@ import (
 )
 
 func Command() *cobra.Command {
-	vmCmd := &cobra.Command{Use: "vm", Short: "Manage macOS VMs"} // --state-dir is a root persistent flag
+	vmCmd := &cobra.Command{
+		Use:   "vm",
+		Short: "Manage macOS VMs",
+		Args:  cobra.NoArgs,
+		RunE:  func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+	}
 
 	createCmd := &cobra.Command{
 		Use:   "create [flags] IMAGE",

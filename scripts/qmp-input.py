@@ -5,11 +5,16 @@ Drives the guest via QEMU's QMP socket: absolute mouse clicks (usb-tablet maps
 the 0..32767 range onto the framebuffer) plus key presses and screendumps.
 
 Usage:
-  qmp-input.py SOCK click   PX PY      # single left click at pixel (PX,PY)
-  qmp-input.py SOCK dclick  PX PY      # double click
-  qmp-input.py SOCK move    PX PY      # move pointer only
-  qmp-input.py SOCK key     K [K...]   # send qcode key(s), e.g. ret down spc
-  qmp-input.py SOCK screendump FILE    # write framebuffer ppm
+  qmp-input.py SOCK click      PX PY             # single left click at pixel (PX,PY)
+  qmp-input.py SOCK dclick     PX PY             # double click
+  qmp-input.py SOCK move       PX PY             # move pointer only
+  qmp-input.py SOCK key        K [K...]          # send qcode key(s) one by one, e.g. ret down spc
+  qmp-input.py SOCK chord      K [K...]          # press qcode keys together, e.g. meta_l q
+  qmp-input.py SOCK type       TEXT              # type ASCII text, adding shift where needed
+  qmp-input.py SOCK ocrclick   WORD [YMIN YMAX]  # OCR-locate WORD and click it; exit 3 if not found
+  qmp-input.py SOCK ocrtext    [YMIN [YMAX]]     # print the OCR words between YMIN and YMAX
+  qmp-input.py SOCK agreebtn                     # click the active SLA Agree button; exit 3 if not found
+  qmp-input.py SOCK screendump FILE              # write framebuffer ppm
 Screen size defaults to 1280x800; override with QMP_W / QMP_H env vars.
 """
 from __future__ import annotations
@@ -156,20 +161,15 @@ class QMP:
     def ocrclick(self, word: str, ymin: int = 0, ymax: int = 10 ** 9) -> bool:
         hits = self.ocr_find(word, ymin, ymax)
         if not hits:
-            print("NOTFOUND %s" % word)
+            print(f"NOTFOUND {word}")
             return False
         cx, cy, conf = hits[0]
         self.click(cx, cy)
-        print("CLICK %s (%d,%d) conf=%.0f" % (word, cx, cy, conf))
+        print(f"CLICK {word} ({cx},{cy}) conf={conf:.0f}")
         return True
 
     def agree_button(self) -> tuple[int, int] | None:
-        """Locate the macOS SLA "Agree" button: the one immediately right of a same-row "Disagree".
-
-        This excludes the body-text "...read and agree to the terms..."; when a
-        confirm sheet overlays the license pane, the topmost such pair is the
-        active modal button (background license buttons sit lower, greyed out).
-        """
+        """Locate the SLA "Agree" button: the topmost one right of a same-row "Disagree", else the lowest "Agree"."""
         ag = self.ocr_find("Agree")
         dis = self.ocr_find("Disagree")
         pairs = []
@@ -179,7 +179,7 @@ class QMP:
                     pairs.append((ay, ax))
                     break
         if pairs:
-            pairs.sort()  # smallest y first = topmost active button row
+            pairs.sort()
             return pairs[0][1], pairs[0][0]
         if ag:  # no Disagree paired: take the lowest Agree (plain license button at the bottom)
             lo = max(ag, key=lambda t: t[1])
@@ -237,7 +237,7 @@ def main() -> None:
             btn = q.agree_button()
             if btn:
                 q.click(*btn)
-                print("AGREE (%d,%d)" % btn)
+                print(f"AGREE ({btn[0]},{btn[1]})")
             else:
                 print("NO-AGREE-BUTTON")
                 sys.exit(3)

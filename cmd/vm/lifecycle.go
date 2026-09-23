@@ -238,6 +238,9 @@ func launch(cmd *cobra.Command, dir string, r *record) error {
 	if err := requireCNIVNCPassword(r.Netns != "", r.VNCDisp, r.VNCPass); err != nil {
 		return err
 	}
+	if err := recoverNet(cmd, r); err != nil {
+		return fmt.Errorf("recover network: %w", err)
+	}
 	if isHostAMD() {
 		// macOS reads MSRs an AMD host lacks; without kvm.ignore_msrs KVM injects #GP (best-effort, host-global)
 		if err := os.WriteFile("/sys/module/kvm/parameters/ignore_msrs", []byte("1\n"), 0o600); err != nil {

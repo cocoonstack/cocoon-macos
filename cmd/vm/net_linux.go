@@ -59,6 +59,11 @@ func newProvider(cmd *cobra.Command, r *record) (network.Network, error) {
 	return nil, fmt.Errorf("unknown --net mode %q (want user|tap|cni|bridge)", r.NetMode)
 }
 
+// netVMConfig pins CPU=1 so NetNumQueues yields a single-queue TAP matching QEMU's single-queue -netdev tap,ifname=
+func netVMConfig(r *record) *types.VMConfig {
+	return &types.VMConfig{CPU: 1, Name: r.Name}
+}
+
 // provisionNet auto-creates a TAP via cocoon — the SAME forwarding plane as cocoon's CH/FC VMs.
 func provisionNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err error) {
 	provider, err := newProvider(cmd, r)
@@ -66,8 +71,7 @@ func provisionNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err er
 		return "", "", "", err
 	}
 	ctx := cliutil.CommandContext(cmd)
-	// CPU=1 => NetNumQueues yields a single-queue TAP matching QEMU's single-queue -netdev tap,ifname=
-	vmCfg := &types.VMConfig{CPU: 1, Name: r.Name}
+	vmCfg := netVMConfig(r)
 	nsPath, err := provider.Prepare(ctx, r.VMID, vmCfg)
 	if err != nil {
 		return "", "", "", fmt.Errorf("prepare network: %w", err)
@@ -90,6 +94,34 @@ func provisionNet(cmd *cobra.Command, r *record) (tap, netns, mac string, err er
 		mac = cmp.Or(r.MAC, mac)
 	}
 	return cfgs[0].TAP, nsPath, mac, nil
+}
+
+func recoverNet(cmd *cobra.Command, r *record) error {
+	if !r.TapOwned {
+		return nil
+	}
+	provider, err := newProvider(cmd, r)
+	if err != nil {
+		return err
+	}
+	ctx := cliutil.CommandContext(cmd)
+	expected := []*types.NetworkConfig{{TAP: r.Tap, MAC: r.MAC}}
+	verifyErr := provider.Verify(ctx, r.VMID, expected)
+	if verifyErr == nil {
+		return nil
+	}
+	log.WithFunc("cmd.vm.recoverNet").Warnf(ctx, "rebuild network for %s: %v", r.VMID, verifyErr)
+	vmCfg := netVMConfig(r)
+	nsPath, err := provider.Prepare(ctx, r.VMID, vmCfg)
+	if err != nil {
+		return err
+	}
+	cfgs, err := provider.Add(ctx, r.VMID, vmCfg, network.AddRecover(expected)...)
+	if err != nil {
+		return err
+	}
+	r.Tap, r.Netns = cfgs[0].TAP, nsPath
+	return nil
 }
 
 func teardownNet(ctx context.Context, cmd *cobra.Command, r *record) error {

@@ -33,7 +33,7 @@ type record struct {
 	NetMode      string   `json:"net_mode,omitempty"`
 	Hugepages    bool     `json:"hugepages,omitempty"`
 	ExitOnReboot bool     `json:"exit_on_reboot,omitempty"`
-	DataDisks    []string `json:"data_disks,omitempty"` // created data-disk qcow2 paths, attached on AHCI ports 0,1,3,5
+	DataDisks    []string `json:"data_disks,omitempty"`
 
 	Disk         string       `json:"disk"`
 	OpenCore     string       `json:"opencore"`

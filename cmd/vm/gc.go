@@ -50,7 +50,7 @@ func GC(cmd *cobra.Command, _ []string) error {
 	return sweep(cliutil.CommandContext(cmd), cmd, registerNetGC)
 }
 
-// sweep takes the provisioning lock exclusively and every VM's lock, so a create, clone or rm in flight is never read as residue; a busy lock refuses the run. The cm-family collectors are host-global, so they run only for a root that has owned host devices: a VM dir seen under the lock, or the marker every path that provisions or removes a VM dir persists first. A root without either still sweeps its own temp files.
+// sweep holds the provisioning lock exclusively and every VM lock, so an in-flight create, clone or rm is never read as residue.
 func sweep(ctx context.Context, cmd *cobra.Command, registerNet func(*gc.Orchestrator, *cobra.Command, network.VMInUse) error) error {
 	if _, err := os.Stat(home.Dir(cmd)); err != nil {
 		return fmt.Errorf("no state root at %s: check --state-dir or $COCOON_MACOS_HOME: %w", home.Dir(cmd), err)
@@ -80,13 +80,13 @@ func sweep(ctx context.Context, cmd *cobra.Command, registerNet func(*gc.Orchest
 	gc.Register(o, vmGCModule(home.Dir(cmd), dirs))
 	if len(dirs) == 0 && !utils.FileExists(filepath.Join(home.VMsDir(cmd), ".locks", provisionedMarker)) {
 		log.WithFunc("cmd.vm.sweep").Warnf(ctx, "no VM dir and no provisioning marker under %s: leaving the host's netns and TAPs alone (check --state-dir or $COCOON_MACOS_HOME; a root from before this build regains them at its next create)", home.Dir(cmd))
-	} else if err := registerNet(o, cmd, vmInUse(dirs)); err != nil {
+	} else if err := registerNet(o, cmd, func(context.Context, string) (bool, error) { return false, nil }); err != nil {
 		return err
 	}
 	return o.Run(ctx)
 }
 
-// withProvisionLock shares the gc lock for the span in which a create or clone owns host devices no record names yet; the file is persistent so a waiter never ends up on an unlinked inode.
+// withProvisionLock shares the gc lock for the span in which a create or clone owns host devices no record names yet.
 func withProvisionLock(ctx context.Context, cmd *cobra.Command, fn func() error) error {
 	gl, err := openGCLock(cmd)
 	if err != nil {
@@ -99,13 +99,13 @@ func withProvisionLock(ctx context.Context, cmd *cobra.Command, fn func() error)
 	return fn()
 }
 
-// markProvisioned records that the state root owning vmsDir has held a VM: applyNet writes it right before the first host device, rm and the incomplete-dir reset before they remove a VM dir, so the evidence outlives the dir while a create that failed before provisioning under a mistyped root leaves nothing behind.
+// markProvisioned records that the state root owning vmsDir has held a VM; the marker outlives the last VM dir.
 func markProvisioned(vmsDir string) error {
 	path := filepath.Join(vmsDir, ".locks", provisionedMarker)
 	if err := utils.EnsureDirs(filepath.Dir(path)); err != nil {
 		return fmt.Errorf("create vm lock dir: %w", err)
 	}
-	marker, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // under the state root's own lock dir
+	marker, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("mark state root provisioned: %w", err)
 	}
@@ -163,24 +163,6 @@ func tryLockVMDirs(ctx context.Context, dirs []string) (func(), error) {
 		held = append(held, l)
 	}
 	return unlock, nil
-}
-
-func vmInUse(dirs []string) network.VMInUse {
-	return func(_ context.Context, vmID string) (bool, error) {
-		for _, dir := range dirs {
-			r, err := loadRec(dir)
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					continue
-				}
-				return false, fmt.Errorf("read vm %s for gc: %w", filepath.Base(dir), err)
-			}
-			if r.VMID == vmID {
-				return isRunning(r), nil
-			}
-		}
-		return false, nil
-	}
 }
 
 func vmGCModule(stateDir string, dirs []string) gc.Module[vmGCSnapshot] {

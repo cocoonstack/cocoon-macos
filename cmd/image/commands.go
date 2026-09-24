@@ -7,12 +7,7 @@ import (
 )
 
 func Command() *cobra.Command {
-	imageCmd := &cobra.Command{
-		Use:   "image",
-		Short: "Manage macOS disk images (reuses cocoon's cloudimg store)",
-		Args:  cobra.NoArgs,
-		RunE:  cliutil.ShowHelp,
-	}
+	imageCmd := cliutil.GroupCommand("image", "Manage macOS disk images (reuses cocoon's cloudimg store)")
 
 	pull := &cobra.Command{
 		Use:   "pull REF",

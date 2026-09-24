@@ -50,6 +50,7 @@ func TestValidateVNCPassword(t *testing.T) {
 		{"newline injection rejected", "x\nquit", true},
 		{"carriage return rejected", "x\rset", true},
 		{"tab rejected", "a\tb", true},
+		{"leading quote rejected", "\"abcdef\"", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

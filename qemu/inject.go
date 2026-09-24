@@ -121,10 +121,8 @@ func withNBDLease(ctx context.Context, path string, fn func() error) error {
 // waitForPart blocks until the kernel's async partition scan exposes nbdXp1 for the mount.
 func waitForPart(ctx context.Context, nbd string) error {
 	if err := utils.WaitFor(ctx, 5*time.Second, 100*time.Millisecond, func() (bool, error) {
-		if _, err := os.Stat(nbd + "p1"); err == nil {
-			return true, nil
-		}
-		return false, nil
+		_, err := os.Stat(nbd + "p1")
+		return err == nil, nil
 	}); err != nil {
 		return fmt.Errorf("wait for partition on %s: %w", nbd, err)
 	}

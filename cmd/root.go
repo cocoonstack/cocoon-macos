@@ -79,5 +79,10 @@ func setupLog(ctx context.Context) error {
 	origStdout := os.Stdout
 	os.Stdout = os.Stderr
 	defer func() { os.Stdout = origStdout }()
-	return log.SetupLog(ctx, &types.ServerLogConfig{Level: level}, "")
+	return log.SetupLog(ctx, &types.ServerLogConfig{Level: level, UseJSON: !stderrIsTerminal()}, "")
+}
+
+func stderrIsTerminal() bool {
+	fi, err := os.Stderr.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }

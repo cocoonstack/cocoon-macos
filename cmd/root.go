@@ -1,3 +1,4 @@
+// Package cmd wires cocoon-macos subcommands.
 package cmd
 
 import (

@@ -1,3 +1,4 @@
+// Package procutil terminates VMM processes after verifying their command-line identity.
 package procutil
 
 import (

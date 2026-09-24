@@ -1,3 +1,4 @@
+// Package image defines the cocoon-macos image commands.
 package image
 
 import (

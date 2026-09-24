@@ -7,12 +7,7 @@ import (
 )
 
 func Command() *cobra.Command {
-	vmCmd := &cobra.Command{
-		Use:   "vm",
-		Short: "Manage macOS VMs",
-		Args:  cobra.NoArgs,
-		RunE:  cliutil.ShowHelp,
-	}
+	vmCmd := cliutil.GroupCommand("vm", "Manage macOS VMs")
 
 	createCmd := &cobra.Command{
 		Use:   "create [flags] IMAGE",

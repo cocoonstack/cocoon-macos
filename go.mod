@@ -3,7 +3,7 @@ module github.com/cocoonstack/cocoon-macos
 go 1.27.1
 
 require (
-	github.com/cocoonstack/cocoon v0.6.9-0.20260924025202-dcec1fa3f056
+	github.com/cocoonstack/cocoon v0.6.9-0.20260924075217-2d870775f760
 	github.com/gofrs/flock v0.13.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/projecteru2/core v0.1.5

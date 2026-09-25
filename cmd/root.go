@@ -23,10 +23,11 @@ import (
 // Execute runs the cocoon-macos CLI.
 func Execute() {
 	ctx := context.Background()
-	logger := log.WithFunc("cmd.Execute")
 	if err := setupLog(ctx); err != nil {
-		logger.Fatalf(ctx, err, "setup log")
+		fmt.Fprintf(os.Stderr, "setup log: %v\n", err)
+		os.Exit(1)
 	}
+	logger := log.WithFunc("cmd.Execute")
 	// run() owns the signal context + its deferred cleanup, so os.Exit never strands a pending defer
 	if err := run(ctx); err != nil {
 		logger.Error(ctx, err, "command failed")

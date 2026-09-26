@@ -23,10 +23,11 @@ import (
 // Execute runs the cocoon-macos CLI.
 func Execute() {
 	ctx := context.Background()
-	logger := log.WithFunc("cmd.Execute")
 	if err := setupLog(ctx); err != nil {
-		logger.Fatalf(ctx, err, "setup log")
+		fmt.Fprintf(os.Stderr, "setup log: %v\n", err)
+		os.Exit(1)
 	}
+	logger := log.WithFunc("cmd.Execute")
 	// run() owns the signal context + its deferred cleanup, so os.Exit never strands a pending defer
 	if err := run(ctx); err != nil {
 		logger.Error(ctx, err, "command failed")
@@ -73,12 +74,8 @@ func resolvePaths(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// setupLog swaps stderr in because SetupLog binds whatever os.Stdout is at call time.
 func setupLog(ctx context.Context) error {
 	level := cmp.Or(os.Getenv("COCOON_MACOS_LOG_LEVEL"), "info")
-	origStdout := os.Stdout
-	os.Stdout = os.Stderr
-	defer func() { os.Stdout = origStdout }()
 	return log.SetupLog(ctx, &types.ServerLogConfig{Level: level, UseJSON: !stderrIsTerminal()}, "")
 }
 

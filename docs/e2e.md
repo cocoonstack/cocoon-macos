@@ -36,7 +36,7 @@ Args: `--real` (run `[DUMMY]` then `[REAL]`), `--real-only` (skip straight to `[
 (skip the root/bridge `--net` auto-create rows), `cleanup` (tear down and exit). Env vars beyond
 `CM_BIN` / `CM_HOME` / `CM_OPENCORE` / `CM_OVMF_CODE` / `CM_OVMF_VARS`: `CM_BRIDGE` (test bridge for
 `--net tap|bridge`, default `cmsmoke0`), `CM_TAHOE_REF` (ghcr ref for `[REAL]`), `CM_SSH_PORT` (host
-port forwarded to guest `:22` in `[REAL]`, default `2299`). The `[REAL]` tier also needs `sshpass`.
+port forwarded to guest `:22` in `[REAL]`, default `2299`). The `[REAL]` tier also needs `qemu-system-x86_64`, `socat` and `sshpass`.
 
 The `[DUMMY]` tier is the behavioral gate today's CI structurally can't give (CI is pure `go test` /
 `vet` / build — nothing opens `/dev/kvm` or mutates netlink); it belongs on a privileged self-hosted

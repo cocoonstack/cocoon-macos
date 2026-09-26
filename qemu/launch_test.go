@@ -15,7 +15,7 @@ func TestArgsNetModes(t *testing.T) {
 		want   string
 	}{
 		{"user-mode without ssh-port is bare SLIRP", func(_ *Spec) {}, "user,id=net0"},
-		{"user-mode with ssh-port adds hostfwd", func(s *Spec) { s.SSHPort = 2222 }, "user,id=net0,hostfwd=tcp::2222-:22"},
+		{"user-mode with ssh-port forwards a loopback port", func(s *Spec) { s.SSHPort = 2222 }, "user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22"},
 		{"tap attaches to the pre-created TAP", func(s *Spec) { s.Tap = "tap0" }, "tap,id=net0,ifname=tap0,script=no,downscript=no"},
 	}
 	for _, tt := range tests {

@@ -90,7 +90,7 @@ func (s Spec) Args() []string {
 	case s.Tap != "":
 		a = append(a, "-netdev", "tap,id=net0,ifname="+escapeOptValue(s.Tap)+",script=no,downscript=no")
 	case s.SSHPort > 0:
-		a = append(a, "-netdev", fmt.Sprintf("user,id=net0,hostfwd=tcp::%d-:22", s.SSHPort))
+		a = append(a, "-netdev", fmt.Sprintf("user,id=net0,hostfwd=tcp:127.0.0.1:%d-:22", s.SSHPort))
 	default:
 		a = append(a, "-netdev", "user,id=net0")
 	}

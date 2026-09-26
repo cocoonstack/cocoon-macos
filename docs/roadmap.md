@@ -6,7 +6,7 @@
   yet wire to QEMU; port it the same way as networking (Linux-tagged, reusing cocoon types):
   - **Hardware passthrough (VFIO)** — cocoon's `extend/vfio` (`vfio.Spec`/`Attacher`, BDF/sysfs) and
     `cmd/vm device attach`. Maps to QEMU `-device vfio-pci,host=<BDF>` for GPU/NIC passthrough — the real fix
-    for hardware-accelerated video (see [Boot, Firmware & GUI](vm.md)).
+    for hardware-accelerated video (see [Known Issues](known-issues.md)).
 - **GUI boot-to-desktop** — finish the Setup-Assistant mouse/OCR click-through so `:26` boots straight
   to `cocoon`'s desktop with auto-login (see [Boot, Firmware & GUI](vm.md)).
 

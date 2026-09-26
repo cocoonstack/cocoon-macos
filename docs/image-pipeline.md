@@ -10,8 +10,8 @@ separately on a KVM testbed, keeping image and Go CI apart.
 
 ## `macos` — which OS
 
-`macos` selects the OS to build and where it lands on ghcr (the build script derives
-`MACOS_SHORTNAME` / `GHCR_REPO` / `GHCR_TAG` from it):
+`macos` selects the OS to build and where it lands on ghcr (the workflow derives
+`MACOS_SHORTNAME` / `GHCR_REPO` / `GHCR_TAG` from it, and the build script reads them):
 
 | `macos` | fetch-macOS shortname | ghcr repo:tag |
 |---------|-----------------------|---------------|

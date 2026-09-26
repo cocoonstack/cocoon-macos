@@ -100,4 +100,4 @@ VNC shows a blank white/black screen with just the cursor even though the guest 
 WindowServer is up). It is *not* a GPU/driver problem — a mouse move repaints it. The golden image's
 first-boot daemon runs `pmset -a displaysleep 0 sleep 0 disablesleep 1` system-wide (covering the
 pre-login loginwindow and disabling system sleep too) to keep the framebuffer painted; older images
-need a `setup`-stage rebuild. See also the GPU/video note in [Boot, Firmware & GUI](vm.md).
+need a `setup`-stage rebuild. See also the GPU/video note in [Known Issues](known-issues.md).
